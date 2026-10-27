@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import {
   ClipboardCheck, CheckCircle2, XCircle, AlertCircle, Eye,
   Search, RefreshCw, Filter, FileText, ArrowRight, Shield
 } from 'lucide-react';
 
-export default function OfficerReview({ setActiveTab, setSelectedTracking }) {
+export default function OfficerReview({ setActiveTab, setSelectedTracking, navigateBack }) {
   const { lang, t, user } = useApp();
   const [applications, setApplications] = useState([]);
   const [filter, setFilter] = useState('');
@@ -70,25 +71,25 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking }) {
   };
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-6xl">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider mb-1">
-            <ClipboardCheck className="w-4 h-4" />
-            <span>{lang === 'bn' ? 'ভূমি কর্মকর্তা প্যানেল' : 'Officer Review Dashboard'}</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {lang === 'bn' ? 'ই-নামজারি আবেদন পর্যালোচনা ও সিদ্ধান্ত' : 'Officer Mutation Review & Approval Queue'}
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {lang === 'bn'
-              ? 'সহকারী কমিশনার (ভূমি) / এসি ল্যান্ডের ডিজিটাল নথি পর্যালোচনা, শুনানি নোটিশ ও ডেমো মঞ্জুরি।'
-              : 'Review submitted mutation files, issue correction notices, approve or reject applications.'}
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
+    <div className="gov-container py-6 space-y-6 max-w-6xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'ই-নামজারি আবেদন পর্যালোচনা ও সিদ্ধান্ত' : 'Officer Mutation Review & Approval Queue'}
+        subtitle={
+          lang === 'bn'
+            ? 'সহকারী কমিশনার (ভূমি) / এসি ল্যান্ডের ডিজিটাল নথি পর্যালোচনা, শুনানি নোটিশ ও ডেমো মঞ্জুরি।'
+            : 'Review submitted mutation files, issue correction notices, approve or reject applications.'
+        }
+        icon={ClipboardCheck}
+        badge={lang === 'bn' ? 'কর্মকর্তা প্যানেল' : 'Officer Review'}
+        badgeColor="indigo"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+        actions={
           <button
             onClick={fetchApps}
             className="gov-btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
@@ -96,8 +97,8 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking }) {
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {actionMsg && (
         <div className="p-3.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold flex items-center gap-2 animate-in fade-in">

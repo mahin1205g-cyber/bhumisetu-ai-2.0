@@ -3,10 +3,10 @@ import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import {
   User, Lock, Eye, EyeOff, Shield, ArrowRight, Sparkles, CheckCircle2,
-  Phone, Mail, KeyRound, RefreshCw, Send, ArrowLeft
+  Phone, Mail, KeyRound, RefreshCw, Send, ArrowLeft, Home
 } from 'lucide-react';
 
-export default function Login({ setActiveTab }) {
+export default function Login({ setActiveTab, navigateBack }) {
   const { lang, t, loginUser, switchDemoRole } = useApp();
 
   const [loginMode, setLoginMode] = useState('password'); // 'password' | 'otp'
@@ -110,7 +110,24 @@ export default function Login({ setActiveTab }) {
   };
 
   return (
-    <div className="gov-container py-12 max-w-md mx-auto space-y-6">
+    <div className="gov-container py-8 max-w-md mx-auto space-y-6">
+      {/* Top Back Navigation */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => navigateBack ? navigateBack('home') : setActiveTab('home')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-300 shadow-xs transition"
+          title={lang === 'bn' ? 'মূল পাতায় ফিরে যান' : 'Back to Home'}
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>{lang === 'bn' ? 'মূল পাতায় ফিরে যান' : 'Back to Home'}</span>
+        </button>
+
+        <span className="text-[11px] text-slate-400 font-medium">
+          LandGuard AI • Auth
+        </span>
+      </div>
+
       {/* Page Title */}
       <div className="text-center space-y-2">
         <div className="w-12 h-12 rounded-full bg-[#0b462d] border-2 border-[#c59b27] flex items-center justify-center mx-auto text-[#ffd700] font-bold text-lg shadow">

@@ -6,7 +6,7 @@ import {
   ArrowLeft, Download, ShieldCheck, ExternalLink, Info, QrCode, Cpu, Home
 } from 'lucide-react';
 
-export default function VerificationResult({ result, setActiveTab }) {
+export default function VerificationResult({ result, setActiveTab, navigateBack }) {
   const { lang, t } = useApp();
 
   if (!result) {
@@ -15,7 +15,10 @@ export default function VerificationResult({ result, setActiveTab }) {
         <p className="text-sm text-gray-500">
           {lang === 'bn' ? 'কোনো ফলাফল পাওয়া যায়নি। অনুগ্রহ করে পুনরায় দলিল যাচাই করুন।' : 'No verification result found. Please submit a deed to verify.'}
         </p>
-        <button onClick={() => setActiveTab('deed-verify')} className="gov-btn-primary text-xs">
+        <button
+          onClick={() => navigateBack ? navigateBack('deed-verify') : setActiveTab('deed-verify')}
+          className="gov-btn-primary text-xs"
+        >
           {lang === 'bn' ? 'দলিল যাচাই ফরম' : 'Deed Verification Form'}
         </button>
       </div>
@@ -75,7 +78,7 @@ export default function VerificationResult({ result, setActiveTab }) {
       <div className="flex flex-wrap items-center justify-between gap-3 no-print bg-white dark:bg-gray-800/80 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setActiveTab('deed-verify')}
+            onClick={() => navigateBack ? navigateBack('deed-verify') : setActiveTab('deed-verify')}
             className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
           >
             <ArrowLeft className="w-4 h-4" />

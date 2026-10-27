@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import { Bell, CheckCircle2, Clock, RefreshCw, AlertTriangle, Info } from 'lucide-react';
 
-export default function NotificationsPage() {
+export default function NotificationsPage({ setActiveTab, navigateBack }) {
   const { lang, t, user, notifications, refreshNotifications } = useApp();
 
   const handleMarkRead = async (nid) => {
@@ -14,24 +15,31 @@ export default function NotificationsPage() {
   };
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-4xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4 flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-            <Bell className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-            <span>{lang === 'bn' ? 'বিজ্ঞপ্তি বার্তা' : 'System Alerts'}</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {lang === 'bn' ? 'বিজ্ঞপ্তি ও নোটিফিকেশন কেন্দ্র' : 'Notification Center'}
-          </h1>
-        </div>
-
-        <button onClick={refreshNotifications} className="gov-btn-secondary text-xs py-1.5 px-3">
-          <RefreshCw className="w-3.5 h-3.5" />
-          <span>{lang === 'bn' ? 'হালনাগাদ' : 'Refresh'}</span>
-        </button>
-      </div>
+    <div className="gov-container py-6 space-y-6 max-w-4xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'বিজ্ঞপ্তি ও নোটিফিকেশন কেন্দ্র' : 'Notification Center'}
+        subtitle={
+          lang === 'bn'
+            ? 'আপনার আবেদন, যাচাই রিপোর্ট ও সিস্টেম সতর্কবার্তার হালনাগাদ নোটিফিকেশন।'
+            : 'Real-time updates regarding your land deeds, mutation status, and officer remarks.'
+        }
+        icon={Bell}
+        badge={notifications.filter(n => !n.is_read).length > 0 ? `${notifications.filter(n => !n.is_read).length} Unread` : 'All Caught Up'}
+        badgeColor={notifications.filter(n => !n.is_read).length > 0 ? 'rose' : 'emerald'}
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+        actions={
+          <button onClick={refreshNotifications} className="gov-btn-secondary text-xs py-1.5 px-3">
+            <RefreshCw className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'হালনাগাদ' : 'Refresh'}</span>
+          </button>
+        }
+      />
 
       <div className="gov-card p-4 space-y-3">
         {notifications.length === 0 ? (

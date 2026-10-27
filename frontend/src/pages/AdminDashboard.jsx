@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import { ShieldAlert, RotateCcw, Users, Database, CheckCircle2, RefreshCw, Cpu, Zap, Activity } from 'lucide-react';
 
-export default function AdminDashboard({ onResetSuccess }) {
+export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateBack }) {
   const { lang, t, user } = useApp();
   const [resetting, setResetting] = useState(false);
   const [benchmarking, setBenchmarking] = useState(false);
@@ -57,20 +58,25 @@ export default function AdminDashboard({ onResetSuccess }) {
   };
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-5xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <ShieldAlert className="w-4 h-4 text-amber-600" />
-          <span>{lang === 'bn' ? 'সিস্টেম অ্যাডমিনিস্ট্রেশন' : 'System Administration'}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'সিস্টেম অ্যাডমিনিস্ট্রেটর কন্ট্রোল প্যানেল' : 'Admin Operations & System Health'}
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn' ? 'ডেটাবেজ সিডিং, ডেমো রিসেট, রোল ম্যানেজমেন্ট ও সিস্টেম নির্ভরযোগ্যতা মনিটরিং।' : 'Database seeding, demo resets, role management, and system health.'}
-        </p>
-      </div>
+    <div className="gov-container py-6 space-y-6 max-w-5xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'সিস্টেম অ্যাডমিনিস্ট্রেটর কন্ট্রোল প্যানেল' : 'Admin Operations & System Health'}
+        subtitle={
+          lang === 'bn'
+            ? 'ডেটাবেজ সিডিং, ডেমো রিসেট, রোল ম্যানেজমেন্ট ও সিস্টেম নির্ভরযোগ্যতা মনিটরিং।'
+            : 'Database seeding, demo resets, role management, and system health.'
+        }
+        icon={ShieldAlert}
+        badge={lang === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Operations'}
+        badgeColor="rose"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+      />
 
       {msg && (
         <div className="p-3.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold flex items-center gap-2">

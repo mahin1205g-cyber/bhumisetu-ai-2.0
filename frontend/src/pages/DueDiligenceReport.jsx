@@ -3,10 +3,10 @@ import { useApp } from '../context/AppContext';
 import QRCodeCanvas from '../components/QRCodeCanvas';
 import {
   AlertOctagon, Printer, ArrowLeft, ShieldAlert, CheckCircle2,
-  AlertTriangle, FileText, Info, HelpCircle
+  AlertTriangle, FileText, Info, HelpCircle, Home
 } from 'lucide-react';
 
-export default function DueDiligenceReport({ result, setActiveTab }) {
+export default function DueDiligenceReport({ result, setActiveTab, navigateBack }) {
   const { lang, t } = useApp();
 
   if (!result) {
@@ -15,7 +15,10 @@ export default function DueDiligenceReport({ result, setActiveTab }) {
         <p className="text-sm text-gray-500">
           {lang === 'bn' ? 'কোনো ঝুঁকি রিপোর্ট পাওয়া যায়নি। অনুগ্রহ করে পূর্বে যাচাই সম্পন্ন করুন।' : 'No assessment report found. Please run a due diligence check.'}
         </p>
-        <button onClick={() => setActiveTab('due-diligence')} className="gov-btn-primary text-xs">
+        <button
+          onClick={() => navigateBack ? navigateBack('due-diligence') : setActiveTab('due-diligence')}
+          className="gov-btn-primary text-xs"
+        >
           {lang === 'bn' ? 'যাচাই ফরম খুলুন' : 'Open Due Diligence Form'}
         </button>
       </div>
@@ -88,19 +91,29 @@ export default function DueDiligenceReport({ result, setActiveTab }) {
     <div className="gov-container py-8 space-y-6 max-w-4xl">
       {/* Top Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3 no-print bg-white dark:bg-gray-800/80 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
-        <button
-          onClick={() => setActiveTab('due-diligence')}
-          className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
-        >
-          <ArrowLeft className="w-4 h-4" />
-          <span>{lang === 'bn' ? '← প্রাক-ক্রয় স্বত্ব যাচাই ফরম-এ ফিরে যান' : '← Back to Due Diligence Form'}</span>
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => navigateBack ? navigateBack('due-diligence') : setActiveTab('due-diligence')}
+            className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{lang === 'bn' ? '← প্রাক-ক্রয় স্বত্ব যাচাই ফরম-এ ফিরে যান' : '← Back to Due Diligence Form'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className="gov-btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
+          >
+            <Home className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard'}</span>
+          </button>
+        </div>
 
         <button
           onClick={handlePrint}
           className="gov-btn-gold text-xs py-2 px-4 flex items-center gap-1.5 font-bold shadow"
         >
-          <Printer className="w-4 h-4" />
+          <Printer className="w-3.5 h-3.5" />
           <span>{lang === 'bn' ? 'রিপোর্ট প্রিন্ট / সংরক্ষণ' : 'Print / Download Report'}</span>
         </button>
       </div>

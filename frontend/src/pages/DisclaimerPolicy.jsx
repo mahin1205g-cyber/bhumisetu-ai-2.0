@@ -1,27 +1,31 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import PageHeader from '../components/PageHeader';
 import { Scale, ShieldAlert, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
 
-export default function DisclaimerPolicy() {
+export default function DisclaimerPolicy({ setActiveTab, navigateBack }) {
   const { lang, t } = useApp();
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-4xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <Scale className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-          <span>{lang === 'bn' ? 'আইনি নোটিশ ও নীতিমালা' : 'Legal & Compliance'}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'সেবা নীতিমালা ও আইনি সীমাবদ্ধতা ঘোষণা' : 'Terms of Service & Legal Disclaimer'}
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn'
+    <div className="gov-container py-6 space-y-6 max-w-4xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'সেবা নীতিমালা ও আইনি সীমাবদ্ধতা ঘোষণা' : 'Terms of Service & Legal Disclaimer'}
+        subtitle={
+          lang === 'bn'
             ? 'ডিজিটাল ভূমি রেকর্ড ও ঝুঁকি বিশ্লেষণের নির্দেশিকা ও নীতিমালা।'
-            : 'Operational boundaries, data disclosure, and advisory limitations.'}
-        </p>
-      </div>
+            : 'Operational boundaries, data disclosure, and advisory limitations.'
+        }
+        icon={Scale}
+        badge={lang === 'bn' ? 'আইনি নোটিশ' : 'Legal & Policy'}
+        badgeColor="amber"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+      />
 
       <div className="gov-card p-6 sm:p-8 space-y-6">
         {/* Crucial Banner */}

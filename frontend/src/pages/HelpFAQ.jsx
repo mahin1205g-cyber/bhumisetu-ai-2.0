@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
+import PageHeader from '../components/PageHeader';
 import { HelpCircle, ChevronRight, BookOpen, ShieldCheck, Scale, Cpu } from 'lucide-react';
 
-export default function HelpFAQ() {
+export default function HelpFAQ({ setActiveTab, navigateBack }) {
   const { lang, t } = useApp();
   const [openFaq, setOpenFaq] = useState(null);
 
@@ -31,20 +32,25 @@ export default function HelpFAQ() {
   ];
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-4xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <HelpCircle className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-          <span>{lang === 'bn' ? 'সহায়তা ও নির্দেশিকা' : 'Help & Documentation'}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'ব্যবহারবিধি, প্রশ্নোত্তর ও অ্যালগরিদম পদ্ধতি' : 'Methodology, Terminology & FAQ'}
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn' ? 'ল্যান্ডগার্ড এআই কীভাবে বিশ্লেষণ করে, স্কোরিং নিয়মাবলী ও ভূমি সেবার প্রচলিত পরিভাষা।' : 'Algorithm transparency, scoring logic, and Bangladesh land terms glossary.'}
-        </p>
-      </div>
+    <div className="gov-container py-6 space-y-6 max-w-4xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'ব্যবহারবিধি, প্রশ্নোত্তর ও অ্যালগরিদম পদ্ধতি' : 'Methodology, Terminology & FAQ'}
+        subtitle={
+          lang === 'bn'
+            ? 'ল্যান্ডগার্ড এআই কীভাবে বিশ্লেষণ করে, স্কোরিং নিয়মাবলী ও ভূমি সেবার প্রচলিত পরিভাষা।'
+            : 'Algorithm transparency, scoring logic, and Bangladesh land terms glossary.'
+        }
+        icon={HelpCircle}
+        badge={lang === 'bn' ? 'সহায়তা ও নির্দেশিকা' : 'Help & Docs'}
+        badgeColor="blue"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+      />
 
       <div className="space-y-6">
         {sections.map((s, idx) => {

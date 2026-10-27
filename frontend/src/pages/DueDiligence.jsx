@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import {
   AlertOctagon, Search, ShieldAlert, Sparkles, CheckCircle2,
   AlertTriangle, RefreshCw, ArrowRight, Info
 } from 'lucide-react';
 
-export default function DueDiligence({ setActiveTab, setDueDiligenceResult }) {
+export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navigateBack }) {
   const { lang, t, user } = useApp();
 
   const [form, setForm] = useState({
@@ -145,22 +146,25 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult }) {
   };
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-4xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <AlertOctagon className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-          <span>{lang === 'bn' ? 'প্রাক-ক্রয় স্বত্ব ঝুঁকি নিরূপণ' : 'Pre-Purchase Risk Assessment'}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'জমি কেনার আগে প্রাক-ক্রয় নাগরিক যাচাই ও ঝুঁকি রিপোর্ট' : 'Citizen Due Diligence Pre-Purchase Risk Assessment'}
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn'
+    <div className="gov-container py-6 space-y-6 max-w-4xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'প্রাক-ক্রয় নাগরিক যাচাই ও ঝুঁকি রিপোর্ট' : 'Pre-Purchase Risk Assessment'}
+        subtitle={
+          lang === 'bn'
             ? 'বায়না বা ক্রয়ের চুক্তির আগে বিক্রেতার স্বত্ব, হস্তান্তরের ধারা, মামলার নিষেধাজ্ঞা বা দ্বৈত বিক্রির ঝুঁকি মূল্যায়ন করুন।'
-            : 'Screen land titles for broken ownership chains, duplicate sales, rapid flipping, and litigation warnings.'}
-        </p>
-      </div>
+            : 'Screen land titles for broken ownership chains, duplicate sales, rapid flipping, and litigation warnings.'
+        }
+        icon={AlertOctagon}
+        badge={lang === 'bn' ? 'স্বত্ব ঝুঁকি নিরূপণ' : 'Due Diligence'}
+        badgeColor="amber"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+      />
 
       {/* Preset 1-Click Demo Scenarios */}
       <div className="p-4 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/60 space-y-2">

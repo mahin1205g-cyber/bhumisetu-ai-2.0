@@ -5,10 +5,11 @@ import BhumiSathiLogo from '../components/BhumiSathiLogo';
 import {
   FileCheck2, GitBranchPlus, AlertOctagon, Layers, Clock, ArrowRight,
   TrendingUp, ShieldAlert, CheckCircle, RefreshCw, Eye, Search, Zap,
-  PhoneCall, HelpCircle, Shield, Sparkles, CheckCircle2, ChevronRight
+  PhoneCall, HelpCircle, Shield, Sparkles, CheckCircle2, ChevronRight,
+  ArrowLeft, Home
 } from 'lucide-react';
 
-export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTracking }) {
+export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTracking, navigateBack }) {
   const { lang, t, user } = useApp();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -92,9 +93,36 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
   const totalRiskAlerts = (rStats.high || 0) + (ddStats.high || 0);
 
   return (
-    <div className="gov-container py-6 sm:py-8 space-y-8 max-w-7xl">
+    <div className="gov-container py-6 sm:py-8 space-y-6 max-w-7xl">
+      {/* Top Navigation & Breadcrumbs */}
+      <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 dark:border-slate-800/80">
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigateBack ? navigateBack('home') : setActiveTab('home')}
+            className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-300 shadow-xs transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
+            title={lang === 'bn' ? 'মূল পাতায় ফিরে যান' : 'Go back to Home landing page'}
+          >
+            <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
+            <span>{lang === 'bn' ? 'মূল পাতা' : 'Back to Home'}</span>
+          </button>
+
+          <span className="text-slate-400 text-xs hidden sm:inline">•</span>
+          <span className="text-slate-500 text-xs font-medium hidden sm:inline">
+            {lang === 'bn' ? 'নাগরিক সেবা ড্যাশবোর্ড' : 'Service Workspace'}
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span>{lang === 'bn' ? 'সিস্টেম সক্রিয়' : 'System Online'}</span>
+          </span>
+        </div>
+      </div>
+
       {/* 1. Welcoming Hero Banner & Personalized Greeting */}
-      <div className="gov-card p-6 bg-gradient-to-r from-[#131921] via-[#1a2636] to-[#0b462d] text-white border-0 shadow-lg relative overflow-hidden">
+      <div className="gov-card p-6 bg-gradient-to-r from-[#0d1e18] via-[#0b2b1e] to-[#071912] text-white border border-emerald-500/20 shadow-lg relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-start sm:items-center gap-4">
             <BhumiSathiLogo size={56} className="w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 animate-float drop-shadow-xl" />

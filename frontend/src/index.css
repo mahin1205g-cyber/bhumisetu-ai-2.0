@@ -1,7 +1,8 @@
 /* =====================================================================
-   BhumiSathi (ভূমিসাথী) — Modern High-Performance Portal Theme
-   3D Text Typography, Hardware-Accelerated 60FPS Micro-Animations,
-   High-Contrast Navy Headers, Warm Amber Accents, and Crash-Proof Scalability.
+   BhumiSetu (ভূমি সেতু) — Government-Grade Land Technology Platform
+   Design System Inspired by Apple, Google, Stripe, and Linear.
+   Deep Navy / Forest Green, Warm Neutral Surfaces, Refined Emerald Accents,
+   and Accessible Hardware-Accelerated Micro-Interactions.
    ===================================================================== */
 
 @tailwind base;
@@ -13,49 +14,75 @@
   --bg-card: #ffffff;
   --bg-card-hover: #f1f5f9;
   --text-main: #0f172a;
-  --text-muted: #475569;
+  --text-muted: #64748b;
   --border: #e2e8f0;
-  --brand: #0b462d;
-  --brand-light: #15803d;
+  --border-light: #f1f5f9;
+  
+  /* Brand Palette: Deep Forest Navy & Emerald */
+  --brand: #083321;
+  --brand-light: #0d4a32;
   --brand-surface: #ecfdf5;
-  --nav-dark: #131921;
-  --nav-sub: #232f3e;
+  --brand-accent: #10b981;
+  --brand-teal: #0d9488;
+  
+  /* Neutral Navigation Dark */
+  --nav-dark: #0a131a;
+  --nav-sub: #13222e;
+  
+  /* Refined Accents */
   --gold: #d97706;
-  --gold-accent: #febd69;
+  --gold-accent: #f59e0b;
   --gold-surface: #fffbeb;
   --danger: #dc2626;
   --danger-surface: #fef2f2;
   --warning: #d97706;
   --warning-surface: #fffbeb;
-  --success: #16a34a;
+  --success: #059669;
   --success-surface: #f0fdf4;
   --info: #2563eb;
   --info-surface: #eff6ff;
+  
+  /* Shadows */
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.08), 0 1px 2px -1px rgba(0, 0, 0, 0.08);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.07), 0 2px 4px -2px rgba(0, 0, 0, 0.07);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -4px rgba(0, 0, 0, 0.05);
 }
 
 html.dark {
-  --bg: #0b1118;
-  --bg-card: #131c27;
-  --bg-card-hover: #1a2736;
-  --text-main: #f1f5f9;
+  --bg: #090e14;
+  --bg-card: #101722;
+  --bg-card-hover: #182230;
+  --text-main: #f8fafc;
   --text-muted: #94a3b8;
-  --border: #223246;
-  --brand: #22c55e;
-  --brand-light: #4ade80;
-  --brand-surface: #0e271a;
-  --nav-dark: #0a0e14;
-  --nav-sub: #131c26;
+  --border: #1e293b;
+  --border-light: #16202e;
+  
+  --brand: #10b981;
+  --brand-light: #34d399;
+  --brand-surface: #062e1e;
+  --brand-accent: #10b981;
+  --brand-teal: #14b8a6;
+  
+  --nav-dark: #05080c;
+  --nav-sub: #0a1017;
+  
   --gold: #f59e0b;
-  --gold-accent: #f59e0b;
-  --gold-surface: #261f0b;
+  --gold-accent: #fbbf24;
+  --gold-surface: #2b1f0b;
   --danger: #ef4444;
   --danger-surface: #361414;
   --warning: #f59e0b;
   --warning-surface: #2b1f0b;
-  --success: #22c55e;
-  --success-surface: #0f2c18;
+  --success: #10b981;
+  --success-surface: #0b2e1b;
   --info: #3b82f6;
   --info-surface: #10243d;
+  
+  --shadow-xs: 0 1px 2px 0 rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 1px 3px 0 rgba(0, 0, 0, 0.4), 0 1px 2px -1px rgba(0, 0, 0, 0.4);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.45), 0 2px 4px -2px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -4px rgba(0, 0, 0, 0.4);
 }
 
 * {
@@ -69,309 +96,46 @@ body {
   font-family: 'Hind Siliguri', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* =====================================================================
-   CLEAN & CRISP TYPOGRAPHY (Optimized for High Legibility on Bengali Script)
+   SMOOTH & SUBTLE MOTION UTILITIES
    ===================================================================== */
 
-.text-3d-gold {
-  color: #febd69;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
-}
-
-.text-3d-emerald {
-  color: #10b981;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
-}
-
-.text-3d-white {
-  color: #ffffff;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
-}
-
-.text-3d-brand {
-  color: #ffffff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-}
-
-/* =====================================================================
-   SMOOTH HARDWARE-ACCELERATED 60FPS ANIMATIONS (ZERO BROWSER LAG)
-   ===================================================================== */
-
-@keyframes floatGentle {
-  0%, 100% {
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    transform: translate3d(0, -6px, 0);
-  }
-}
-
-@keyframes floatGentleSlow {
-  0%, 100% {
-    transform: translate3d(0, 0, 0);
-  }
-  50% {
-    transform: translate3d(0, -10px, 0);
-  }
-}
-
-@keyframes heroGlowOrb {
-  0%, 100% {
-    opacity: 0.35;
-    transform: scale(1) translate3d(0, 0, 0);
-  }
-  50% {
-    opacity: 0.65;
-    transform: scale(1.15) translate3d(8px, -8px, 0);
-  }
-}
-
-@keyframes pulseGlow {
-  0%, 100% {
-    box-shadow: 0 0 6px rgba(254, 189, 105, 0.15);
-  }
-  50% {
-    box-shadow: 0 0 12px rgba(254, 189, 105, 0.25);
-  }
-}
-
-@keyframes fadeInSlideUp {
+@keyframes fadeInPage {
   from {
     opacity: 0;
-    transform: translate3d(0, 20px, 0);
+    transform: translateY(4px);
   }
   to {
     opacity: 1;
-    transform: translate3d(0, 0, 0);
+    transform: translateY(0);
   }
 }
 
-@keyframes shimmerEffect {
-  0% {
-    background-position: -200% 0;
-  }
-  100% {
-    background-position: 200% 0;
-  }
-}
-
-@keyframes buttonShine {
-  0% {
-    left: -100%;
-  }
-  100% {
-    left: 200%;
-  }
-}
-
-.animate-float {
-  animation: floatGentle 4s ease-in-out infinite;
-  will-change: transform;
-}
-
-.animate-float-slow {
-  animation: floatGentleSlow 6s ease-in-out infinite;
-  will-change: transform;
-}
-
-.animate-glow {
-  animation: pulseGlow 2.5s ease-in-out infinite;
-}
-
-.animate-fade-up {
-  animation: fadeInSlideUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+.animate-page-enter {
+  animation: fadeInPage 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: opacity, transform;
 }
 
-.hero-glow-orb {
-  animation: heroGlowOrb 7s ease-in-out infinite;
-  will-change: transform, opacity;
+@keyframes pulseGlowSubtle {
+  0%, 100% {
+    opacity: 0.6;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+.animate-pulse-subtle {
+  animation: pulseGlowSubtle 3s ease-in-out infinite;
 }
 
 /* =====================================================================
-   PREMIUM 3D CARDS & INTERACTIVE BOXES (Screenshots 4 & 5)
+   PREMIUM GOVERNMENT CARDS & INTERACTIVE SURFACES
    ===================================================================== */
 
-/* Ultra-Premium 3D Feature Card */
-.card-3d-premium {
-  position: relative;
-  background: var(--bg-card);
-  border-radius: 1.25rem;
-  border: 1px solid rgba(226, 232, 240, 0.85);
-  box-shadow: 
-    0 10px 25px -5px rgba(0, 0, 0, 0.05),
-    0 20px 30px -10px rgba(11, 70, 45, 0.06),
-    inset 0 1px 1px rgba(255, 255, 255, 0.9);
-  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform, box-shadow;
-  transform: translateZ(0);
-}
-
-html.dark .card-3d-premium {
-  background: linear-gradient(145deg, #131c24 0%, #0d151c 100%);
-  border-color: rgba(34, 197, 94, 0.18);
-  box-shadow: 
-    0 10px 30px -5px rgba(0, 0, 0, 0.4),
-    0 20px 30px -10px rgba(16, 185, 129, 0.1),
-    inset 0 1px 1px rgba(255, 255, 255, 0.05);
-}
-
-.card-3d-premium:hover {
-  transform: translateY(-8px) scale(1.018);
-  box-shadow: 
-    0 25px 45px -10px rgba(11, 70, 45, 0.18),
-    0 15px 25px -5px rgba(0, 0, 0, 0.08),
-    inset 0 1px 2px rgba(255, 255, 255, 1);
-  border-color: #10b981;
-}
-
-html.dark .card-3d-premium:hover {
-  border-color: #22c55e;
-  box-shadow: 
-    0 25px 50px -10px rgba(34, 197, 94, 0.22),
-    0 15px 25px -5px rgba(0, 0, 0, 0.5),
-    inset 0 1px 1px rgba(255, 255, 255, 0.1);
-}
-
-/* 3D Elevated Icon Box */
-.icon-box-3d {
-  position: relative;
-  border-radius: 1rem;
-  box-shadow: 
-    0 8px 18px -4px rgba(11, 70, 45, 0.15),
-    inset 0 2px 4px rgba(255, 255, 255, 0.8),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.08);
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.card-3d-premium:hover .icon-box-3d {
-  transform: translateY(-3px) scale(1.08);
-  box-shadow: 
-    0 12px 24px -4px rgba(11, 70, 45, 0.25),
-    inset 0 2px 4px rgba(255, 255, 255, 1);
-}
-
-/* 3D Pressable Solid Buttons */
-.btn-3d-press {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  border-radius: 0.75rem;
-  cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  transform: translateZ(0);
-}
-
-.btn-3d-gold {
-  background: linear-gradient(180deg, #ffc83b 0%, #f3a847 100%);
-  color: #111827;
-  border: 1px solid #d97706;
-  box-shadow: 
-    0 4px 0 #b45309,
-    0 8px 20px rgba(245, 158, 11, 0.35);
-}
-
-.btn-3d-gold:hover {
-  background: linear-gradient(180deg, #ffd700 0%, #f59e0b 100%);
-  transform: translateY(-2px);
-  box-shadow: 
-    0 6px 0 #b45309,
-    0 12px 24px rgba(245, 158, 11, 0.45);
-}
-
-.btn-3d-gold:active {
-  transform: translateY(3px);
-  box-shadow: 
-    0 1px 0 #b45309,
-    0 4px 8px rgba(245, 158, 11, 0.2);
-}
-
-.btn-3d-dark {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
-  color: #ffffff;
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(8px);
-  box-shadow: 
-    0 4px 0 rgba(0, 0, 0, 0.35),
-    0 8px 16px rgba(0, 0, 0, 0.25);
-}
-
-.btn-3d-dark:hover {
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.25) 0%, rgba(255, 255, 255, 0.12) 100%);
-  transform: translateY(-2px);
-  box-shadow: 
-    0 6px 0 rgba(0, 0, 0, 0.4),
-    0 12px 20px rgba(0, 0, 0, 0.3);
-}
-
-.btn-3d-dark:active {
-  transform: translateY(3px);
-  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.4);
-}
-
-/* 3D Step Process Boxes */
-.step-3d-card {
-  position: relative;
-  background: var(--bg-card);
-  border-radius: 1rem;
-  border: 1px solid rgba(226, 232, 240, 0.85);
-  box-shadow: 
-    0 8px 20px -4px rgba(0, 0, 0, 0.05),
-    0 3px 6px -2px rgba(0, 0, 0, 0.03),
-    inset 0 1px 0 rgba(255, 255, 255, 0.9);
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-  will-change: transform, box-shadow;
-}
-
-html.dark .step-3d-card {
-  background: #111a15;
-  border-color: rgba(34, 197, 94, 0.15);
-  box-shadow: 
-    0 8px 20px -4px rgba(0, 0, 0, 0.4),
-    inset 0 1px 0 rgba(255, 255, 255, 0.05);
-}
-
-.step-3d-card:hover {
-  transform: translateY(-6px) scale(1.02);
-  border-color: #10b981;
-  box-shadow: 
-    0 16px 30px -6px rgba(11, 70, 45, 0.16),
-    inset 0 1px 1px rgba(255, 255, 255, 1);
-}
-
-html.dark .step-3d-card:hover {
-  border-color: #22c55e;
-  box-shadow: 0 16px 32px -6px rgba(34, 197, 94, 0.22);
-}
-
-/* 3D Spherical Number Badge */
-.step-3d-sphere {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: 9999px;
-  background: radial-gradient(circle at 35% 30%, #16a34a 0%, #0b462d 55%, #052618 100%);
-  color: #ffd700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 900;
-  font-size: 0.95rem;
-  box-shadow: 
-    inset 0 2px 4px rgba(255, 255, 255, 0.6),
-    inset 0 -2px 4px rgba(0, 0, 0, 0.7),
-    0 6px 14px rgba(11, 70, 45, 0.35);
-  transition: transform 0.3s ease;
-}
-
-.step-3d-card:hover .step-3d-sphere {
-  transform: scale(1.12) rotate(5deg);
-}
-
-/* Layout helpers */
 .gov-container {
   max-width: 1280px;
   margin-left: auto;
@@ -380,129 +144,239 @@ html.dark .step-3d-card:hover {
   padding-right: 1rem;
 }
 
+@media (min-width: 640px) {
+  .gov-container {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+/* Modern Card: Clean, subtle 1px border with soft elevation */
 .gov-card {
   background-color: var(--bg-card);
   border: 1px solid var(--border);
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px -1px rgba(0, 0, 0, 0.05);
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 0.875rem;
+  box-shadow: var(--shadow-sm);
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, transform 0.18s ease;
 }
 
 .gov-card:hover {
   border-color: #cbd5e1;
-  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.08);
+  box-shadow: var(--shadow-md);
 }
 
 html.dark .gov-card:hover {
-  border-color: #3b506b;
-  box-shadow: 0 4px 12px 0 rgba(0, 0, 0, 0.35);
+  border-color: #334155;
+  box-shadow: 0 6px 20px -2px rgba(0, 0, 0, 0.45);
 }
 
-.gov-btn-primary {
-  background-color: #0b462d;
+/* Stripe/Linear-Style Premium Feature Card */
+.card-premium, .card-3d-premium {
+  position: relative;
+  background-color: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 1rem;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.card-premium:hover, .card-3d-premium:hover {
+  transform: translateY(-2px);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: 0 12px 28px -6px rgba(11, 70, 45, 0.1), var(--shadow-md);
+}
+
+html.dark .card-premium:hover, html.dark .card-3d-premium:hover {
+  border-color: rgba(16, 185, 129, 0.35);
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.6);
+}
+
+/* 3D step card backwards compatibility */
+.step-3d-card {
+  position: relative;
+  background: var(--bg-card);
+  border-radius: 0.875rem;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.step-3d-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(16, 185, 129, 0.4);
+  box-shadow: var(--shadow-md);
+}
+
+.step-3d-sphere {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 9999px;
+  background: linear-gradient(135deg, #10b981 0%, #064e3b 100%);
   color: #ffffff;
-  padding: 0.6rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.875rem;
+  box-shadow: 0 2px 6px rgba(16, 185, 129, 0.25);
+}
+
+/* =====================================================================
+   PREMIUM BUTTONS & FORM CONTROLS
+   ===================================================================== */
+
+/* Primary Button: Deep forest green with subtle highlight */
+.gov-btn-primary, .btn-3d-dark {
+  background-color: #083321;
+  color: #ffffff;
+  padding: 0.55rem 1.15rem;
   border-radius: 0.5rem;
+  font-size: 0.875rem;
   font-weight: 600;
-  border: 1px solid #083321;
+  border: 1px solid rgba(255, 255, 255, 0.12);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.15);
   transition: all 0.15s ease;
+  user-select: none;
 }
 
-.gov-btn-primary:hover {
-  background-color: #12583a;
-  transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(11, 70, 45, 0.25);
+.gov-btn-primary:hover, .btn-3d-dark:hover {
+  background-color: #0c422c;
+  box-shadow: 0 3px 8px rgba(8, 51, 33, 0.25);
+  transform: translateY(-0.5px);
+}
+
+.gov-btn-primary:active, .btn-3d-dark:active {
+  transform: translateY(0.5px);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
 }
 
 html.dark .gov-btn-primary {
-  background-color: #166534;
-  border-color: #22c55e;
-}
-html.dark .gov-btn-primary:hover {
-  background-color: #15803d;
+  background-color: #0f766e;
+  border-color: rgba(255, 255, 255, 0.15);
 }
 
+html.dark .gov-btn-primary:hover {
+  background-color: #14b8a6;
+  color: #042f2e;
+}
+
+/* Secondary Button: Subtle neutral with clean border */
 .gov-btn-secondary {
   background-color: var(--bg-card);
   color: var(--text-main);
   border: 1px solid var(--border);
-  padding: 0.6rem 1.25rem;
+  padding: 0.55rem 1.15rem;
   border-radius: 0.5rem;
+  font-size: 0.875rem;
   font-weight: 500;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
+  box-shadow: var(--shadow-xs);
   transition: all 0.15s ease;
+  user-select: none;
 }
 
 .gov-btn-secondary:hover {
   background-color: var(--bg-card-hover);
-  border-color: var(--text-muted);
+  border-color: #cbd5e1;
 }
 
-.gov-btn-gold {
-  background-color: #febd69;
-  color: #111827;
-  border: 1px solid #f3a847;
-  padding: 0.6rem 1.25rem;
+html.dark .gov-btn-secondary:hover {
+  border-color: #334155;
+}
+
+/* Amber / Gold Highlight Button */
+.gov-btn-gold, .btn-3d-gold {
+  background-color: #d97706;
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 0.55rem 1.15rem;
   border-radius: 0.5rem;
-  font-weight: 700;
+  font-size: 0.875rem;
+  font-weight: 600;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.45rem;
+  box-shadow: 0 1px 2px rgba(217, 119, 6, 0.2);
   transition: all 0.15s ease;
-}
-.gov-btn-gold:hover {
-  background-color: #f3a847;
-  box-shadow: 0 2px 8px rgba(243, 168, 71, 0.4);
-  transform: translateY(-1px);
+  user-select: none;
 }
 
+.gov-btn-gold:hover, .btn-3d-gold:hover {
+  background-color: #b45309;
+  box-shadow: 0 3px 8px rgba(217, 119, 6, 0.3);
+  transform: translateY(-0.5px);
+}
+
+/* Inputs & Form Controls */
 .gov-input, .gov-select {
   width: 100%;
-  padding: 0.65rem 0.85rem;
+  padding: 0.6rem 0.85rem;
   background-color: var(--bg-card);
   color: var(--text-main);
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   font-family: inherit;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   outline: none;
+  box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.03);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
 .gov-input:focus, .gov-select:focus {
-  border-color: #f59e0b;
-  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.2);
+  border-color: #10b981;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.18);
 }
 
 html.dark .gov-input:focus, html.dark .gov-select:focus {
-  border-color: #febd69;
-  box-shadow: 0 0 0 3px rgba(254, 189, 105, 0.2);
+  border-color: #34d399;
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.25);
 }
 
-/* Amazon style Drawer scrollbar */
+/* Typography Helpers */
+.text-3d-gold {
+  color: #d97706;
+  font-weight: 700;
+}
+
+.text-3d-emerald {
+  color: #059669;
+  font-weight: 700;
+}
+
+.text-3d-white {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+.text-3d-brand {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Drawer Scrollbar */
 .drawer-scrollbar::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 .drawer-scrollbar::-webkit-scrollbar-track {
   background: transparent;
 }
 .drawer-scrollbar::-webkit-scrollbar-thumb {
-  background-color: rgba(156, 163, 175, 0.4);
-  border-radius: 3px;
+  background-color: rgba(148, 163, 184, 0.3);
+  border-radius: 4px;
 }
 .drawer-scrollbar::-webkit-scrollbar-thumb:hover {
-  background-color: rgba(156, 163, 175, 0.7);
+  background-color: rgba(148, 163, 184, 0.6);
 }
 
-/* Print styles for reports */
+/* Print Styles */
 @media print {
   body {
     background: #ffffff !important;
@@ -512,10 +386,22 @@ html.dark .gov-input:focus, html.dark .gov-select:focus {
     display: none !important;
   }
   .printable-area {
-    border: 2px solid #0b462d !important;
+    border: 2px solid #083321 !important;
     padding: 24px !important;
     margin: 0 !important;
     box-shadow: none !important;
     width: 100% !important;
+  }
+}
+
+/* =====================================================================
+   GLOBAL ACCESSIBILITY: PREFERS REDUCED MOTION SUPPORT
+   ===================================================================== */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }

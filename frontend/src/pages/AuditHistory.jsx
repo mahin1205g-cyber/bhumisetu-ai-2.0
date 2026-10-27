@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import { History, Search, RefreshCw, Shield, User, Clock } from 'lucide-react';
 
-export default function AuditHistory() {
+export default function AuditHistory({ setActiveTab, navigateBack }) {
   const { lang, t } = useApp();
   const [logs, setLogs] = useState([]);
   const [search, setSearch] = useState('');
@@ -36,22 +37,25 @@ export default function AuditHistory() {
   });
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-6xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <History className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-          <span>{lang === 'bn' ? 'সিস্টেম ট্র্যাকিং ও নিরাপত্তা' : 'Audit Trail & Compliance'}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'কার্যক্রম ও অডিট লগ ইতিহাস' : 'Activity & Audit Log History'}
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn'
+    <div className="gov-container py-6 space-y-6 max-w-6xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'কার্যক্রম ও অডিট লগ ইতিহাস' : 'Activity & Audit Log History'}
+        subtitle={
+          lang === 'bn'
             ? 'প্ল্যাটফর্মে সম্পাদিত প্রতিটি যাচাইকরণ, নামজারি আবেদন ও কর্মকর্তার সিদ্ধান্তের অপরিবর্তনীয় অডিট ট্রেইল।'
-            : 'Immutable timestamped audit logs for all verifications, applications, and administrative actions.'}
-        </p>
-      </div>
+            : 'Immutable timestamped audit logs for all verifications, applications, and administrative actions.'
+        }
+        icon={History}
+        badge={lang === 'bn' ? 'নিরাপত্তা অডিট' : 'Audit Trail'}
+        badgeColor="indigo"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+      />
 
       {/* Filter & Refresh */}
       <div className="gov-card p-4 flex flex-wrap items-center justify-between gap-3 text-xs">

@@ -1,22 +1,31 @@
 import React from 'react';
 import { useApp } from '../context/AppContext';
+import PageHeader from '../components/PageHeader';
 import { User, Shield, Mail, Phone, CreditCard, Award, Moon, Sun, Globe } from 'lucide-react';
 
-export default function UserProfile({ setActiveTab }) {
+export default function UserProfile({ setActiveTab, navigateBack }) {
   const { user, lang, toggleLang, theme, toggleTheme, switchDemoRole, t } = useApp();
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-3xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          <User className="w-6 h-6 text-[#0b462d] dark:text-emerald-400" />
-          <span>{lang === 'bn' ? 'ব্যবহারকারী প্রোফাইল ও সেটিংস' : 'User Profile & Preferences'}</span>
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn' ? 'আপনার ডিজিটাল নাগরিক পরিচয়, পদবি ও ইন্টারফেস পছন্দসমূহ।' : 'Manage your citizen profile, credentials, and UI preferences.'}
-        </p>
-      </div>
+    <div className="gov-container py-6 space-y-6 max-w-3xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'ব্যবহারকারী প্রোফাইল ও সেটিংস' : 'User Profile & Preferences'}
+        subtitle={
+          lang === 'bn'
+            ? 'আপনার ডিজিটাল নাগরিক পরিচয়, পদবি ও ইন্টারফেস পছন্দসমূহ।'
+            : 'Manage your citizen profile, credentials, and UI preferences.'
+        }
+        icon={User}
+        badge={user?.role === 'admin' ? 'System Administrator' : user?.role === 'officer' ? 'AC Land Officer' : 'Citizen'}
+        badgeColor={user?.role === 'admin' ? 'rose' : user?.role === 'officer' ? 'indigo' : 'emerald'}
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+      />
 
       <div className="gov-card p-6 space-y-6">
         {/* Profile Card Header */}

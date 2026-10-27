@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import {
   FileCheck2, UploadCloud, Search, AlertTriangle, CheckCircle,
-  FileText, Sparkles, RefreshCw, ArrowRight, Info
+  FileText, Sparkles, RefreshCw, ArrowRight, Info, Cpu, CheckCircle2
 } from 'lucide-react';
 
-export default function DeedVerification({ setActiveTab, setVerificationResult }) {
+export default function DeedVerification({ setActiveTab, setVerificationResult, navigateBack }) {
   const { lang, t, user } = useApp();
 
   const [formData, setFormData] = useState({
@@ -23,6 +24,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult }
 
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [verifyStage, setVerifyStage] = useState(0);
   const [error, setError] = useState('');
   const [dragActive, setDragActive] = useState(false);
 
@@ -84,15 +86,27 @@ export default function DeedVerification({ setActiveTab, setVerificationResult }
 
     setLoading(true);
     setError('');
+    setVerifyStage(1);
 
     try {
-      const result = await api.verifyDeed(formData, user?.id);
+      await new Promise(r => setTimeout(r, 280));
+      setVerifyStage(2);
+
+      const resultPromise = api.verifyDeed(formData, user?.id);
+      await new Promise(r => setTimeout(r, 320));
+      setVerifyStage(3);
+
+      const result = await resultPromise;
+      await new Promise(r => setTimeout(r, 260));
+      setVerifyStage(4);
+
       setVerificationResult(result);
       setActiveTab('verification-result');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setVerifyStage(0);
     }
   };
 
@@ -101,39 +115,115 @@ export default function DeedVerification({ setActiveTab, setVerificationResult }
     setFile(selectedFile);
     setLoading(true);
     setError('');
+    setVerifyStage(1);
 
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
       if (user?.id) fd.append('user_id', user.id);
 
-      const result = await api.uploadDeed(fd);
+      await new Promise(r => setTimeout(r, 280));
+      setVerifyStage(2);
+
+      const resultPromise = api.uploadDeed(fd);
+      await new Promise(r => setTimeout(r, 320));
+      setVerifyStage(3);
+
+      const result = await resultPromise;
+      await new Promise(r => setTimeout(r, 260));
+      setVerifyStage(4);
+
       setVerificationResult(result);
       setActiveTab('verification-result');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setVerifyStage(0);
     }
   };
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-4xl">
-      {/* Header */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <FileCheck2 className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-          <span>{lang === 'bn' ? 'দলিল যাচাই সেবা' : 'Deed Verification Service'}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'ডিজিটাল দলিল ও মালিকানা যাচাই (বালাম ক্রস-চেক)' : 'Digital Deed & Land Ownership Verification'}
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn'
+    <div className="gov-container py-6 space-y-6 max-w-4xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'ডিজিটাল দলিল ও মালিকানা যাচাই' : 'Digital Deed & Land Ownership Verification'}
+        subtitle={
+          lang === 'bn'
             ? 'দলিলের তথ্য বা স্ক্যান কপি আপলোড করে সাব-রেজিস্ট্রি বালাম রেকর্ডের সাথে স্বত্ব ও তথ্যের অমিল শনাক্ত করুন।'
-            : 'Cross-reference submitted deed parameters or uploaded scans against registry demo records for title consistency.'}
-        </p>
-      </div>
+            : 'Cross-reference submitted deed parameters or uploaded scans against registry demo records for title consistency.'
+        }
+        icon={FileCheck2}
+        badge={lang === 'bn' ? 'C++ নেটিভ ভেরিফাইড' : 'C++ Accelerated'}
+        badgeColor="emerald"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+      />
+
+      {/* Staged Multi-Phase Verification Overlay */}
+      {loading && (
+        <div className="p-5 rounded-xl bg-slate-900 text-white border border-emerald-500/30 shadow-xl space-y-4 animate-page-enter">
+          <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center gap-2">
+              <Cpu className="w-5 h-5 text-emerald-400 animate-pulse" />
+              <span className="font-bold text-sm">
+                {lang === 'bn' ? 'দলিল বিশ্লেষণ ও বালাম ক্রস-চেক চলছে...' : 'Cross-Checking Deed with Sub-Registry Balam...'}
+              </span>
+            </div>
+            <span className="text-xs font-mono text-emerald-400 font-bold">
+              {verifyStage === 1 ? 'Phase 1/3' : verifyStage === 2 ? 'Phase 2/3' : 'Phase 3/3'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+            <div className={`p-3 rounded-lg border transition-all ${
+              verifyStage >= 1
+                ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
+                : 'bg-slate-800/50 border-slate-700 text-slate-400'
+            }`}>
+              <div className="font-semibold flex items-center gap-1.5">
+                {verifyStage > 1 ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" />}
+                <span>1. {lang === 'bn' ? 'দলিল ও তথ্য প্রক্রিয়াকরণ' : 'Deed Parsing'}</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {lang === 'bn' ? 'দলিল নং ও দাগ শনাক্তকরণ' : 'Parsing deed & plot tags'}
+              </p>
+            </div>
+
+            <div className={`p-3 rounded-lg border transition-all ${
+              verifyStage >= 2
+                ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
+                : 'bg-slate-800/50 border-slate-700 text-slate-400'
+            }`}>
+              <div className="font-semibold flex items-center gap-1.5">
+                {verifyStage > 2 ? <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" /> : verifyStage === 2 ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <span className="w-3.5 h-3.5 rounded-full border border-slate-600 inline-block" />}
+                <span>2. {lang === 'bn' ? 'বালাম বই ক্রস-ম্যাচ' : 'Balam Registry Match'}</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {lang === 'bn' ? 'সাব-রেজিস্ট্রি বালাম যাচাই' : 'Sub-registry record match'}
+              </p>
+            </div>
+
+            <div className={`p-3 rounded-lg border transition-all ${
+              verifyStage >= 3
+                ? 'bg-emerald-950/40 border-emerald-500/50 text-emerald-300'
+                : 'bg-slate-800/50 border-slate-700 text-slate-400'
+            }`}>
+              <div className="font-semibold flex items-center gap-1.5">
+                {verifyStage >= 3 ? <RefreshCw className="w-3.5 h-3.5 animate-spin text-emerald-400" /> : <span className="w-3.5 h-3.5 rounded-full border border-slate-600 inline-block" />}
+                <span>3. {lang === 'bn' ? 'C++ জালিয়াতি ও কার্টেল' : 'C++ Native Graph Engine'}</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {lang === 'bn' ? 'সাইকেল ও নাম গরমিল এআই' : 'Cartel cycle & fraud graph'}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Test Scenario Loaders */}
       <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 space-y-2">

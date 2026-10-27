@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import {
   GitBranchPlus, User, MapPin, FileText, CheckCircle2, Save,
   Send, ArrowRight, ArrowLeft, AlertTriangle, Sparkles, RefreshCw
 } from 'lucide-react';
 
-export default function SmartMutation({ setActiveTab, setSelectedTracking }) {
+export default function SmartMutation({ setActiveTab, setSelectedTracking, navigateBack }) {
   const { lang, t, user } = useApp();
   const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -165,35 +166,41 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking }) {
   }
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-3xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <GitBranchPlus className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-          <span>{lang === 'bn' ? 'স্মার্ট ই-নামজারি সেবা' : 'Smart E-Namjari Service'}</span>
-        </div>
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-              {lang === 'bn' ? 'স্মার্ট ই-নামজারি ও জমাভাগ আবেদন' : 'Smart E-Namjari & Mutation Application'}
-            </h1>
-            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {lang === 'bn'
-                ? 'অনলাইনে আবেদন ফরম পূরণ করুন, খসড়া সংরক্ষণ করুন অথবা সরাসরি দাখিল করে ট্র্যাকিং নম্বর সংগ্রহ করুন।'
-                : 'Guided e-mutation application with instant tracking and automated document validation.'}
-            </p>
-          </div>
-
+    <div className="gov-container py-6 space-y-6 max-w-3xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'স্মার্ট ই-নামজারি ও জমাভাগ আবেদন' : 'Smart E-Namjari & Mutation Application'}
+        subtitle={
+          lang === 'bn'
+            ? 'অনলাইনে আবেদন ফরম পূরণ করুন, খসড়া সংরক্ষণ করুন অথবা সরাসরি দাখিল করে ট্র্যাকিং নম্বর সংগ্রহ করুন।'
+            : 'Guided e-mutation application with instant tracking and automated document validation.'
+        }
+        icon={GitBranchPlus}
+        badge={lang === 'bn' ? `ধাপ ${step} / ৪` : `Step ${step} of 4`}
+        badgeColor="emerald"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => {
+          if (step > 1) {
+            setStep(s => s - 1);
+          } else {
+            navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'));
+          }
+        }}
+        fallbackTab="dashboard"
+        actions={
           <button
             type="button"
             onClick={handlePresetFill}
-            className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#0b462d] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold hover:bg-emerald-100 flex items-center gap-1.5 shadow-sm"
+            className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#0b462d] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold hover:bg-emerald-100 flex items-center gap-1.5 shadow-xs transition"
           >
-            <Sparkles className="w-3.5 h-3.5 text-[#c59b27]" />
-            <span>{lang === 'bn' ? 'ডেমো তথ্য লোড' : 'Load Demo Preset'}</span>
+            <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+            <span>{lang === 'bn' ? 'ডেমো তথ্য পূরণ' : 'Load Demo Preset'}</span>
           </button>
-        </div>
-      </div>
+        }
+      />
 
       {/* Progress Steps Header */}
       <div className="grid grid-cols-4 gap-2 text-center text-xs">

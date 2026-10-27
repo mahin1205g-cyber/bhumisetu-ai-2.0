@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import PageHeader from '../components/PageHeader';
 import {
   Search, GitBranchPlus, Clock, CheckCircle2, XCircle, AlertCircle,
   FileText, User, MapPin, Calendar, RefreshCw, ArrowRight
 } from 'lucide-react';
 
-export default function ApplicationTracking({ initialTrackingNo }) {
+export default function ApplicationTracking({ initialTrackingNo, setActiveTab, navigateBack }) {
   const { lang, t } = useApp();
   const [trackingNo, setTrackingNo] = useState(initialTrackingNo || 'MUT-2026-DHK-4821');
   const [appData, setAppData] = useState(null);
@@ -61,22 +62,26 @@ export default function ApplicationTracking({ initialTrackingNo }) {
   };
 
   return (
-    <div className="gov-container py-8 space-y-8 max-w-4xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4">
-        <div className="flex items-center gap-2 text-xs font-bold text-[#c59b27] uppercase tracking-wider mb-1">
-          <GitBranchPlus className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-          <span>{lang === 'bn' ? 'ই-নামজারি ট্র্যাকিং' : 'Application Tracking'}</span>
-        </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'নামজারি আবেদন ট্র্যাকিং ও টাইমলাইন' : 'Track Mutation Application Status'}
-        </h1>
-        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-          {lang === 'bn'
+    <div className="gov-container py-6 space-y-6 max-w-4xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'নামজারি আবেদন ট্র্যাকিং ও টাইমলাইন' : 'Track Mutation Application Status'}
+        subtitle={
+          lang === 'bn'
             ? 'আবেদন নম্বর দিয়ে রিয়েলটাইম টাইমলাইন, কর্মকর্তার মন্তব্য ও পরবর্তী করণীয় যাচাই করুন।'
-            : 'Track status changes, review comments, and simulated officer decisions.'}
-        </p>
-      </div>
+            : 'Track status changes, review comments, and simulated officer decisions.'
+        }
+        icon={GitBranchPlus}
+        badge={lang === 'bn' ? 'ই-নামজারি ট্র্যাকিং' : 'Mutation Tracking'}
+        badgeColor="emerald"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' },
+          { label: lang === 'bn' ? 'নামজারি' : 'Mutation', tab: 'mutation' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('mutation') : (setActiveTab && setActiveTab('mutation'))}
+        fallbackTab="mutation"
+      />
 
       {/* Quick Search & Preset Pills */}
       <div className="gov-card p-5 space-y-3">

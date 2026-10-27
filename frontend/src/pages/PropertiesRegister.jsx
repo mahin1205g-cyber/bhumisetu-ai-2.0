@@ -2,12 +2,13 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import { FastRecordIndex } from '../utils/fastSearch';
+import PageHeader from '../components/PageHeader';
 import {
   Layers, Search, Filter, Eye, RefreshCw, AlertTriangle, CheckCircle2,
   Zap, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, FileText
 } from 'lucide-react';
 
-export default function PropertiesRegister({ setActiveTab, setVerificationResult, setDueDiligenceResult }) {
+export default function PropertiesRegister({ setActiveTab, setVerificationResult, setDueDiligenceResult, navigateBack }) {
   const { lang, t } = useApp();
   const [properties, setProperties] = useState([]);
   const [search, setSearch] = useState('');
@@ -82,37 +83,33 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
   };
 
   return (
-    <div className="gov-container py-8 space-y-6 max-w-6xl">
-      {/* Title */}
-      <div className="border-b border-gray-200 dark:border-gray-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2 text-xs font-bold text-[#d97706] dark:text-[#febd69] uppercase tracking-wider mb-1">
-            <Layers className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-            <span>{lang === 'bn' ? 'ভূমি রেকর্ড ও পার্সেল ডাটাবেজ' : 'Land Records & Parcel Database'}</span>
+    <div className="gov-container py-6 space-y-6 max-w-6xl">
+      {/* Top Page Header with Universal Back Button & Breadcrumbs */}
+      <PageHeader
+        title={lang === 'bn' ? 'খতিয়ান, দাগ ও প্লট রেজিস্টার' : 'Khatian, Plot & Parcel Register'}
+        subtitle={
+          lang === 'bn'
+            ? 'নিবন্ধিত জমির দাগ, খতিয়ান, বর্তমান মালিকানা ও স্বত্ব স্ট্যাটাস উচ্চগতির বাইনারি সার্চ দিয়ে অনুসন্ধান করুন।'
+            : 'Explore registered land parcels, current owners, and title status via O(log N) Binary Search.'
+        }
+        icon={Layers}
+        badge="Binary Search O(log N)"
+        badgeColor="emerald"
+        breadcrumbs={[
+          { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
+        ]}
+        setActiveTab={setActiveTab}
+        onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
+        fallbackTab="dashboard"
+        actions={
+          <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-1.5 flex items-center gap-2 text-xs">
+            <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500 animate-pulse" />
+            <span className="font-bold text-emerald-900 dark:text-emerald-300 font-mono text-[11px]">
+              {properties.length} {lang === 'bn' ? 'রেকর্ড' : 'Records'}
+            </span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {lang === 'bn' ? 'খতিয়ান, দাগ ও প্লট রেজিস্টার' : 'Khatian, Plot & Parcel Register'}
-          </h1>
-          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-            {lang === 'bn'
-              ? 'নিবন্ধিত জমির দাগ, খতিয়ান, বর্তমান মালিকানা ও স্বত্ব স্ট্যাটাস উচ্চগতির বাইনারি সার্চ দিয়ে অনুসন্ধান করুন।'
-              : 'Explore registered land parcels, current owners, and title status via O(log N) Binary Search.'}
-          </p>
-        </div>
-
-        {/* Algorithm Metric Tag */}
-        <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg p-2.5 flex items-center gap-2 text-xs">
-          <Zap className="w-4 h-4 text-amber-500 fill-amber-500 animate-pulse" />
-          <div>
-            <div className="font-bold text-emerald-900 dark:text-emerald-300 font-mono text-[11px]">
-              Binary Search O(log N)
-            </div>
-            <div className="text-[10px] text-emerald-700 dark:text-emerald-400">
-              {lang === 'bn' ? '১০০-৫০০ মিলিয়ন ডেটা ক্র্যাশ-মুক্ত' : '500M users & records safe'}
-            </div>
-          </div>
-        </div>
-      </div>
+        }
+      />
 
       {/* Fast Binary Search Bar & Filters */}
       <div className="gov-card p-4 space-y-3">
