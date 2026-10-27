@@ -79,7 +79,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
   if (loading) {
     return (
       <div className="gov-container py-20 text-center space-y-3">
-        <RefreshCw className="w-9 h-9 text-[#febd69] animate-spin mx-auto" />
+        <RefreshCw className="w-9 h-9 text-[#047857] animate-spin mx-auto" />
         <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">
           {lang === 'bn' ? 'ড্যাশবোর্ড ডেটা প্রস্তুত হচ্ছে...' : 'Loading dashboard statistics...'}
         </p>
@@ -122,23 +122,23 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
       </div>
 
       {/* 1. Welcoming Hero Banner & Personalized Greeting */}
-      <div className="gov-card p-6 bg-gradient-to-r from-[#0d1e18] via-[#0b2b1e] to-[#071912] text-white border border-emerald-500/20 shadow-lg relative overflow-hidden">
+      <div className="gov-card p-6 bg-gradient-to-r from-[#065F46] via-[#047857] to-[#0b462d] text-white border border-emerald-500/20 shadow-lg relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
           <div className="flex items-start sm:items-center gap-4">
             <BhumiSathiLogo size={56} className="w-12 h-12 sm:w-14 sm:h-14 flex-shrink-0 animate-float drop-shadow-xl" />
             <div>
               <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-                <span className="text-3d-gold font-bold text-xs uppercase tracking-wider">
-                  {lang === 'bn' ? 'ভূমিসাথী — BhumiSathi' : 'BhumiSathi Portal'}
+                <span className="text-emerald-100 font-bold text-xs uppercase tracking-wider">
+                  {lang === 'bn' ? 'ভূমিসেতু — Bhumisetu' : 'Bhumisetu Portal'}
                 </span>
-                <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#febd69] text-gray-950 font-mono">
+                <span className="text-xs font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-[#F5B544] text-slate-900 font-mono">
                   {user?.role === 'officer'
                     ? (lang === 'bn' ? 'ভূমি কর্মকর্তা' : 'AC Land Officer')
                     : user?.role === 'admin'
                     ? (lang === 'bn' ? 'সিস্টেম অ্যাডমিন' : 'Admin')
                     : (lang === 'bn' ? 'নাগরিক সেবা' : 'Citizen')}
                 </span>
-                <span className="text-xs text-gray-300">
+                <span className="text-xs text-emerald-100/80">
                   {lang === 'bn' ? 'অনলাইন সেবা পোর্টাল' : 'Online Land Portal'}
                 </span>
               </div>
@@ -146,10 +146,10 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
               <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
                 {lang === 'bn' ? `স্বাগতম, ${user?.name || 'নাগরিক'}` : `Welcome, ${user?.name || 'Citizen'}`}
               </h1>
-              <p className="text-xs sm:text-sm text-gray-300 mt-1 max-w-xl">
+              <p className="text-xs sm:text-sm text-emerald-50 mt-1 max-w-xl">
                 {lang === 'bn'
-                  ? 'নিরাপদ ভূমি সিদ্ধান্তের বিশ্বস্ত সাথী — দলিল যাচাই, ই-নামজারি এবং স্বত্ব ঝুঁকি নিরূপণ এক ক্লিকেই।'
-                  : 'Your companion for safer land decisions — deed verification, smart e-namjari mutations, and pre-purchase due diligence.'}
+                  ? 'নিরাপদ ভূমি সিদ্ধান্তের নির্ভরযোগ্য ডিজিটাল সেতু — দলিল যাচাই, ই-নামজারি এবং স্বত্ব ঝুঁকি নিরূপণ এক ক্লিকেই।'
+                  : 'Your trusted digital bridge for safer land decisions — deed verification, smart e-namjari mutations, and pre-purchase due diligence.'}
               </p>
             </div>
           </div>
@@ -166,7 +166,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             </button>
             <button
               onClick={() => setActiveTab('deed-verify')}
-              className="gov-btn-gold text-xs py-2 px-4 shadow"
+              className="gov-btn-primary text-xs py-2 px-4 shadow-sm"
             >
               <FileCheck2 className="w-4 h-4" />
               <span>{lang === 'bn' ? 'নতুন দলিল যাচাই' : 'Verify Deed'}</span>
@@ -175,18 +175,18 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         </div>
 
         {/* Scalability Indicator Badge */}
-        <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-300">
+        <div className="mt-4 pt-3 border-t border-white/10 flex flex-wrap items-center justify-between gap-2 text-xs text-gray-200">
           <div className="flex items-center gap-2">
-            <Zap className="w-3.5 h-3.5 text-[#febd69]" />
+            <Zap className="w-3.5 h-3.5 text-emerald-300" />
             <span className="font-semibold text-white">
               {lang === 'bn' ? 'অ্যালগরিদম স্পিড:' : 'Search Engine:'}
             </span>
-            <span className="text-[#febd69] font-mono">Binary Search O(log N)</span>
-            <span className="text-gray-400">({lang === 'bn' ? '১০০-৫০০ মিলিয়ন ডেটায় ক্র্যাশ-মুক্ত' : 'Scalable to 500M records'})</span>
+            <span className="text-[#F5B544] font-mono">Binary Search O(log N)</span>
+            <span className="text-emerald-100/80">({lang === 'bn' ? '১০০-৫০০ মিলিয়ন ডেটায় ক্র্যাশ-মুক্ত' : 'Scalable to 500M records'})</span>
           </div>
 
           <div className="flex items-center gap-3">
-            <a href="tel:16122" className="text-amber-300 hover:underline flex items-center gap-1">
+            <a href="tel:16122" className="text-emerald-100 hover:text-white hover:underline flex items-center gap-1 font-semibold">
               <PhoneCall className="w-3 h-3" />
               <span>{lang === 'bn' ? 'হটলাইন ১৬১২২' : 'Hotline 16122'}</span>
             </a>
@@ -195,12 +195,12 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
       </div>
 
       {/* 2. Instant In-Dashboard Fast Search Bar */}
-      <div className="gov-card p-4 sm:p-5 bg-white dark:bg-[#131c27] shadow-sm border border-gray-200 dark:border-gray-700">
+      <div className="gov-card p-4 sm:p-5 bg-white dark:bg-[#131c27] shadow-sm border border-[#E2E8F0] dark:border-gray-700">
         <form onSubmit={handleDashboardSearch} className="space-y-3">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
               <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                <Search className="w-4 h-4 text-[#d97706] dark:text-[#febd69]" />
+                <Search className="w-4 h-4 text-[#047857] dark:text-emerald-400" />
                 <span>{lang === 'bn' ? 'তাৎক্ষণিক অনুসন্ধান (বাইনারি সার্চ)' : 'Instant Search (Binary Search O(log N))'}</span>
               </h2>
               <p className="text-[11px] text-gray-500 dark:text-gray-400">
@@ -225,7 +225,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                     setDashboardQuery(chip.query);
                     api.searchBinary(chip.query, 'all', 8).then((res) => setDashSearchResults(res));
                   }}
-                  className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono transition"
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 hover:bg-emerald-50 hover:text-[#047857] dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono transition"
                 >
                   +{chip.label}
                 </button>
@@ -246,7 +246,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             </div>
             <button
               type="submit"
-              className="gov-btn-gold text-xs py-2.5 px-4 font-bold flex-shrink-0"
+              className="gov-btn-primary text-xs py-2.5 px-4 font-bold flex-shrink-0"
             >
               <Zap className={`w-3.5 h-3.5 ${dashSearchLoading ? 'animate-spin' : ''}`} />
               <span>{lang === 'bn' ? 'খুঁজুন' : 'Search'}</span>
@@ -309,11 +309,11 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         {/* Metric 1: Registered Parcels */}
         <div
           onClick={() => setActiveTab('properties')}
-          className="gov-card p-4 sm:p-5 border-l-4 border-l-[#0b462d] dark:border-l-emerald-500 cursor-pointer transition card-3d-interactive"
+          className="gov-card p-4 sm:p-5 border-l-4 border-l-[#047857] dark:border-l-emerald-500 cursor-pointer transition card-3d-interactive"
         >
           <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
             <span className="text-xs font-semibold">{lang === 'bn' ? 'মোট প্লট / পার্সেল' : 'Total Parcels'}</span>
-            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-[#0b462d] dark:text-emerald-400 shadow-sm">
+            <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-[#047857] dark:text-emerald-400 shadow-sm">
               <Layers className="w-4 h-4" />
             </div>
           </div>
@@ -406,7 +406,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           <div className="gov-card p-5 flex flex-col justify-between hover:border-emerald-600 transition group bg-white dark:bg-[#131c27] card-3d-interactive">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-[#0b462d] dark:text-emerald-300 flex items-center justify-center shadow-sm">
+                <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-[#047857] dark:text-emerald-300 flex items-center justify-center shadow-sm">
                   <FileCheck2 className="w-5 h-5" />
                 </div>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
@@ -495,7 +495,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             <div className="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800">
               <button
                 onClick={() => setActiveTab('due-diligence')}
-                className="w-full gov-btn-gold text-xs justify-center py-2"
+                className="w-full gov-btn-primary text-xs justify-center py-2"
               >
                 <span>{lang === 'bn' ? 'ঝুঁকি বিশ্লেষণ করুন' : 'Assess Land Risk'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -506,11 +506,11 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
       </div>
 
       {/* 5. In-Dashboard Instant Application Tracker Widget */}
-      <div className="gov-card p-5 bg-gradient-to-br from-amber-50/50 to-emerald-50/40 dark:from-[#131d27] dark:to-[#0f241a] border border-amber-200/80 dark:border-emerald-900/60">
+      <div className="gov-card p-5 bg-gradient-to-br from-emerald-50/30 to-emerald-50/70 dark:from-[#131d27] dark:to-[#0f241a] border border-[#E2E8F0] dark:border-emerald-900/60">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200/60 dark:border-gray-800">
           <div>
             <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              <Clock className="w-4 h-4 text-[#d97706] dark:text-[#febd69]" />
+              <Clock className="w-4 h-4 text-[#047857] dark:text-emerald-400" />
               <span>{lang === 'bn' ? 'তাৎক্ষণিক নামজারি আবেদন ট্র্যাকার' : 'Instant E-Namjari Status Checker'}</span>
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
@@ -563,7 +563,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                   if (setSelectedTracking) setSelectedTracking(quickTrackResult.tracking_no);
                   setActiveTab('mutation-track');
                 }}
-                className="text-xs text-[#0b462d] dark:text-emerald-400 hover:underline font-semibold flex items-center gap-1"
+                className="text-xs text-[#047857] dark:text-emerald-400 hover:underline font-semibold flex items-center gap-1"
               >
                 <span>{lang === 'bn' ? 'সম্পূর্ণ ট্র্যাকিং পেজ দেখুন' : 'View Full Details'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
@@ -692,7 +692,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           </h3>
           <button
             onClick={() => setActiveTab('audit-logs')}
-            className="text-xs text-[#0b462d] dark:text-emerald-400 hover:underline font-semibold flex items-center gap-1"
+            className="text-xs text-[#047857] dark:text-emerald-400 hover:underline font-semibold flex items-center gap-1"
           >
             <span>{lang === 'bn' ? 'সম্পূর্ণ লগ দেখুন' : 'View All Logs'}</span>
             <ArrowRight className="w-3.5 h-3.5" />

@@ -56,8 +56,8 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
             </span>
             <strong className="text-gray-900 dark:text-white block font-mono">
               {user?.role === 'admin' 
-                ? (user?.email && user.email !== 'admin@bhumisathi.gov.bd' && user.email !== 'admin@landguard.gov.bd' ? user.email : 'dbscbayazid111@gmail.com') 
-                : (user?.email || 'citizen@bhumisathi.gov.bd')}
+                ? (user?.email && user.email !== 'admin@bhumisetu.gov.bd' && user.email !== 'admin@bhumisathi.gov.bd' && user.email !== 'admin@landguard.gov.bd' ? user.email : 'dbscbayazid111@gmail.com') 
+                : (user?.email || 'citizen@bhumisetu.gov.bd')}
             </strong>
           </div>
 

@@ -8,9 +8,19 @@ export default {
   theme: {
     extend: {
       colors: {
-        'gov-green': '#0b462d',
-        'gov-green-dark': '#083321',
-        'gov-gold': '#c59b27',
+        'bhumisetu-bg': '#FFFFFF',
+        'bhumisetu-sub': '#F7FAF8',
+        'bhumisetu-emerald': '#047857',
+        'bhumisetu-deep': '#065F46',
+        'bhumisetu-mint': '#D1FAE5',
+        'bhumisetu-text': '#17212B',
+        'bhumisetu-muted': '#64748B',
+        'bhumisetu-border': '#E2E8F0',
+        'bhumisetu-gold': '#F5B544',
+        // Legacy compatibility
+        'gov-green': '#047857',
+        'gov-green-dark': '#065F46',
+        'gov-gold': '#F5B544',
       }
     },
   },

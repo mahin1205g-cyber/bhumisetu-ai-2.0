@@ -134,7 +134,7 @@ export default function IntroOverlay({ onComplete }) {
         <div ref={badgeRef} className="mb-4">
           <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-semibold tracking-wider uppercase bg-emerald-950/60 text-emerald-300 border border-emerald-500/30 backdrop-blur-sm">
             <Shield className="w-3 h-3 text-emerald-400" />
-            <span>LandGuard AI • Digital Land Verification</span>
+            <span>Bhumisetu • Digital Land Platform</span>
           </span>
         </div>
 
@@ -149,7 +149,7 @@ export default function IntroOverlay({ onComplete }) {
         {/* Typographic Title */}
         <div ref={titleRef} className="space-y-1">
           <h1 className="text-3xl sm:text-4xl font-black tracking-tight text-white drop-shadow-sm">
-            ভূমি সেতু <span className="text-emerald-400 font-light text-2xl sm:text-3xl">| BhumiSetu</span>
+            ভূমিসেতু <span className="text-emerald-400 font-light text-2xl sm:text-3xl">| Bhumisetu</span>
           </h1>
           <p className="text-xs uppercase tracking-widest text-emerald-200/80 font-mono font-medium">
             Next-Gen Land Technology Platform

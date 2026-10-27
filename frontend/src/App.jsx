@@ -298,8 +298,8 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)] text-[var(--text-main)] transition-colors duration-200">
-      {/* 1.5s First-Visit Cinematic Intro Sequence */}
-      <IntroOverlay />
+      {/* Subtle First-Visit Entrance Sequence (Only on Homepage, Never on Login/Register/Forms) */}
+      {activeTab === 'home' && <IntroOverlay />}
 
       {/* Slide Drawer (Opened via Menu button in Header) */}
       <SlideDrawer

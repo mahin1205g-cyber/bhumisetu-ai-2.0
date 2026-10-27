@@ -104,17 +104,17 @@ export default function VerificationResult({ result, setActiveTab, navigateBack 
       </div>
 
       {/* Printable Certificate Layout */}
-      <div className="gov-card p-6 sm:p-8 space-y-6 printable-area bg-white dark:bg-[#121a16] border-2 border-[#0b462d]">
+      <div className="gov-card p-6 sm:p-8 space-y-6 printable-area bg-white dark:bg-[#121a16] border-2 border-[#047857]">
         {/* Official Header */}
-        <div className="text-center border-b-2 border-[#0b462d] pb-6 space-y-1.5 relative">
-          <div className="text-xs uppercase tracking-widest text-[#0b462d] dark:text-emerald-400 font-bold">
+        <div className="text-center border-b-2 border-[#047857] pb-6 space-y-1.5 relative">
+          <div className="text-xs uppercase tracking-widest text-[#047857] dark:text-emerald-400 font-bold">
             {t('govBangladesh')}
           </div>
           <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">
             {lang === 'bn' ? 'দলিল ও বালাম ক্রস-চেক যাচাই প্রতিবেদন' : 'Digital Deed Cross-Check Verification Certificate'}
           </div>
           <div className="text-xs text-gray-500 font-medium">
-            {lang === 'bn' ? 'ল্যান্ডগার্ড এআই স্বয়ংক্রিয় বিশ্লেষণ ইঞ্জিন | P2 মডিউল' : 'LandGuard AI Automated Verification Engine | P2 Module'}
+            {lang === 'bn' ? 'ভূমিসেতু (Bhumisetu) স্বয়ংক্রিয় বিশ্লেষণ ইঞ্জিন | P2 মডিউল' : 'Bhumisetu AI Automated Verification Engine | P2 Module'}
           </div>
 
           <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
@@ -314,11 +314,11 @@ export default function VerificationResult({ result, setActiveTab, navigateBack 
           </div>
 
           {/* Simulated Office Seal */}
-          <div className="w-28 h-28 rounded-full border-2 border-dashed border-[#0b462d] dark:border-emerald-500 p-1 flex items-center justify-center text-center rotate-6 select-none opacity-80">
-            <div className="w-full h-full rounded-full border border-[#0b462d] flex flex-col items-center justify-center text-[9px] font-bold text-[#0b462d] dark:text-emerald-400 uppercase leading-tight">
-              <span>LANDGUARD AI</span>
-              <span className="text-[#c59b27]">VERIFIED</span>
-              <span>{(verification_ref || 'LG-VR-2026').split('-').pop()}</span>
+          <div className="w-28 h-28 rounded-full border-2 border-dashed border-[#047857] dark:border-emerald-500 p-1 flex items-center justify-center text-center rotate-6 select-none opacity-80">
+            <div className="w-full h-full rounded-full border border-[#047857] flex flex-col items-center justify-center text-[9px] font-bold text-[#047857] dark:text-emerald-400 uppercase leading-tight">
+              <span>BHUMISETU</span>
+              <span className="text-[#F5B544]">VERIFIED</span>
+              <span>{(verification_ref || 'BS-VR-2026').split('-').pop()}</span>
             </div>
           </div>
         </div>

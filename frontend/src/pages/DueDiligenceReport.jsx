@@ -119,17 +119,17 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
       </div>
 
       {/* Printable Report Box */}
-      <div className="gov-card p-6 sm:p-8 space-y-6 printable-area bg-white dark:bg-[#121a16] border-2 border-[#0b462d]">
+      <div className="gov-card p-6 sm:p-8 space-y-6 printable-area bg-white dark:bg-[#121a16] border-2 border-[#047857]">
         {/* Report Header */}
-        <div className="text-center border-b-2 border-[#0b462d] pb-6 space-y-1.5">
-          <div className="text-xs uppercase tracking-widest text-[#0b462d] dark:text-emerald-400 font-bold">
+        <div className="text-center border-b-2 border-[#047857] pb-6 space-y-1.5">
+          <div className="text-xs uppercase tracking-widest text-[#047857] dark:text-emerald-400 font-bold">
             {t('govBangladesh')}
           </div>
           <div className="text-xl sm:text-2xl font-black text-gray-900 dark:text-white">
             {lang === 'bn' ? 'জমি ক্রয়ের প্রাক-মূল্যায়ন ডিউ ডিলিজেন্স রিপোর্ট' : 'Pre-Purchase Land Due Diligence & Risk Report'}
           </div>
           <div className="text-xs text-gray-500 font-medium">
-            {lang === 'bn' ? 'ল্যান্ডগার্ড এআই স্বত্ব ঝুঁকি স্ক্রীনিং ব্যবস্থা | P5 মডিউল' : 'LandGuard AI Title Risk Engine | P5 Module'}
+            {lang === 'bn' ? 'ভূমিসেতু (Bhumisetu) স্বত্ব ঝুঁকি স্ক্রীনিং ব্যবস্থা | P5 মডিউল' : 'Bhumisetu AI Title Risk Engine | P5 Module'}
           </div>
 
           <div className="flex flex-wrap items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -290,9 +290,9 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
               <p className="text-[11px] text-gray-500 max-w-xs leading-tight">
                 {lang === 'bn'
                   ? 'এই কিউআর কোড স্ক্যান করে প্ল্যাটফর্মে সংরক্ষিত ঝুঁকি মূল্যায়ন রেফারেন্স যাচাই করা যাবে।'
-                  : 'Scan to verify server-side risk assessment records on LandGuard AI.'}
+                  : 'Scan to verify server-side risk assessment records on Bhumisetu.'}
               </p>
-              <span className="text-[10px] text-[#c59b27] font-semibold block">
+              <span className="text-[10px] text-[#F5B544] font-semibold block">
                 {lang === 'bn' ? 'ক্লিক করে বড় করুন, লিংক কপি বা কিউআর কোড ডাউনলোড করুন।' : 'Click to enlarge, copy link, or download QR image.'}
               </span>
             </div>
@@ -300,7 +300,7 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
 
           <div className="text-right text-xs space-y-1">
             <div className="font-bold text-gray-900 dark:text-white">
-              {lang === 'bn' ? 'ল্যান্ডগার্ড এআই নিরাপত্তা সেল' : 'LandGuard AI Security Cell'}
+              {lang === 'bn' ? 'ভূমিসেতু এআই নিরাপত্তা সেল' : 'Bhumisetu AI Security Cell'}
             </div>
             <div className="text-[11px] text-gray-500 font-mono">
               ALG-VER: 2026.P5.ML-IF

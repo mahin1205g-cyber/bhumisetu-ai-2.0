@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import BhumiSathiLogo from '../components/BhumiSathiLogo';
 import {
   User, Lock, Mail, Phone, CreditCard, Eye, EyeOff, CheckCircle2,
   KeyRound, ShieldCheck, ArrowRight, RefreshCw, Sparkles, ArrowLeft
@@ -120,13 +121,13 @@ export default function Register({ setActiveTab, navigateBack }) {
   };
 
   return (
-    <div className="gov-container py-8 max-w-md mx-auto space-y-6">
+    <div className="gov-container py-10 max-w-md mx-auto space-y-6">
       {/* Top Back Navigation */}
       <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => navigateBack ? navigateBack('login') : setActiveTab('login')}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-300 shadow-xs transition"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:border-[#047857]/40 hover:bg-[#F7FAF8] dark:hover:bg-[#1A2823] hover:text-[#047857] shadow-xs transition"
           title={lang === 'bn' ? 'লগইন পাতায় ফিরে যান' : 'Back to Login'}
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -134,16 +135,19 @@ export default function Register({ setActiveTab, navigateBack }) {
         </button>
 
         <span className="text-[11px] text-slate-400 font-medium">
-          LandGuard AI • Register
+          Bhumisetu • Register
         </span>
       </div>
 
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <div className="flex justify-center mb-1">
+          <BhumiSathiLogo size={52} className="shadow-xs" />
+        </div>
+        <h1 className="text-2xl font-bold text-[#17212B] dark:text-white">
           {lang === 'bn' ? 'নাগরিক ডিজিটাল প্রোফাইল নিবন্ধন' : 'Citizen Registration'}
         </h1>
-        <p className="text-xs text-gray-500">
-          {lang === 'bn' ? 'ভূমি সংক্রান্ত সেবা ও দলিল যাচাইয়ে অংশগ্রহণ করতে নিবন্ধন করুন' : 'Register to verify deeds and file mutation applications'}
+        <p className="text-xs text-[#64748B]">
+          {lang === 'bn' ? 'ভূমিসেতু প্ল্যাটফর্মে দলিল যাচাই ও নামজারি আবেদন করতে নিবন্ধন করুন' : 'Register to verify deeds and file mutation applications on Bhumisetu'}
         </p>
       </div>
 

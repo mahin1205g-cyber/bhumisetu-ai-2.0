@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
+import BhumiSathiLogo from '../components/BhumiSathiLogo';
 import {
   User, Lock, Eye, EyeOff, Shield, ArrowRight, Sparkles, CheckCircle2,
   Phone, Mail, KeyRound, RefreshCw, Send, ArrowLeft, Home
@@ -12,7 +13,7 @@ export default function Login({ setActiveTab, navigateBack }) {
   const [loginMode, setLoginMode] = useState('password'); // 'password' | 'otp'
 
   // Password mode state
-  const [identifier, setIdentifier] = useState('citizen@landguard.gov.bd');
+  const [identifier, setIdentifier] = useState('citizen@bhumisetu.gov.bd');
   const [password, setPassword] = useState('demo123');
   const [showPassword, setShowPassword] = useState(false);
 
@@ -110,13 +111,13 @@ export default function Login({ setActiveTab, navigateBack }) {
   };
 
   return (
-    <div className="gov-container py-8 max-w-md mx-auto space-y-6">
-      {/* Top Back Navigation */}
+    <div className="gov-container py-10 max-w-md mx-auto space-y-6">
+      {/* Top Back Navigation with Clean Apple/Linear Styling */}
       <div className="flex items-center justify-between">
         <button
           type="button"
           onClick={() => navigateBack ? navigateBack('home') : setActiveTab('home')}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-300 shadow-xs transition"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:border-[#047857]/40 hover:bg-[#F7FAF8] dark:hover:bg-[#1A2823] hover:text-[#047857] shadow-xs transition"
           title={lang === 'bn' ? 'মূল পাতায় ফিরে যান' : 'Back to Home'}
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -124,48 +125,48 @@ export default function Login({ setActiveTab, navigateBack }) {
         </button>
 
         <span className="text-[11px] text-slate-400 font-medium">
-          LandGuard AI • Auth
+          Bhumisetu • Auth
         </span>
       </div>
 
-      {/* Page Title */}
+      {/* Brand Header with Static Vector Logo (No Distracting Animation) */}
       <div className="text-center space-y-2">
-        <div className="w-12 h-12 rounded-full bg-[#0b462d] border-2 border-[#c59b27] flex items-center justify-center mx-auto text-[#ffd700] font-bold text-lg shadow">
-          LG
+        <div className="flex justify-center mb-1">
+          <BhumiSathiLogo size={52} className="shadow-xs" />
         </div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          {lang === 'bn' ? 'ডিজিটাল ভূমি সেবা পোর্টালে লগইন' : 'Sign in to LandGuard AI'}
+        <h1 className="text-2xl font-bold text-[#17212B] dark:text-white">
+          {lang === 'bn' ? 'ভূমিসেতু পোর্টালে লগইন' : 'Sign in to Bhumisetu'}
         </h1>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-[#64748B]">
           {lang === 'bn' ? 'নাগরিক ও কর্মকর্তা ড্যাশবোর্ডে প্রবেশ করতে লগইন করুন' : 'Access your citizen or officer verification workspace'}
         </p>
       </div>
 
       {/* 1-Click Demo Logins */}
-      <div className="p-3.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 space-y-2 text-xs">
-        <span className="font-bold text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-[#c59b27]" />
+      <div className="p-3.5 rounded-xl bg-[#F0FDF4] dark:bg-[#0B241A] border border-[#D1FAE5] dark:border-[#1E2E28] space-y-2 text-xs">
+        <span className="font-bold text-[#047857] dark:text-emerald-300 flex items-center gap-1.5">
+          <Sparkles className="w-3.5 h-3.5 text-[#F5B544]" />
           {lang === 'bn' ? '১-ক্লিকে ডেমো অ্যাকাউন্টে প্রবেশ:' : '1-Click Quick Demo Login:'}
         </span>
         <div className="grid grid-cols-3 gap-2 pt-1">
           <button
             type="button"
             onClick={() => handleDemoLogin('citizen')}
-            className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-800 text-[11px] font-bold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition shadow-sm text-center"
+            className="p-2 rounded-lg bg-white dark:bg-[#14201C] border border-[#A7F3D0] dark:border-[#1E2E28] text-[11px] font-bold text-[#047857] dark:text-emerald-300 hover:bg-[#D1FAE5]/40 transition shadow-xs text-center"
           >
             {lang === 'bn' ? '👤 নাগরিক' : '👤 Citizen'}
           </button>
           <button
             type="button"
             onClick={() => handleDemoLogin('officer')}
-            className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-800 text-[11px] font-bold text-blue-800 dark:text-blue-300 hover:bg-blue-100 transition shadow-sm text-center"
+            className="p-2 rounded-lg bg-white dark:bg-[#14201C] border border-blue-200 dark:border-blue-900 text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-50 transition shadow-xs text-center"
           >
             {lang === 'bn' ? '🏛️ কর্মকর্তা' : '🏛️ Officer'}
           </button>
           <button
             type="button"
             onClick={() => handleDemoLogin('admin')}
-            className="p-2 rounded-lg bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-800 text-[11px] font-bold text-amber-800 dark:text-amber-300 hover:bg-amber-100 transition shadow-sm text-center"
+            className="p-2 rounded-lg bg-white dark:bg-[#14201C] border border-amber-200 dark:border-amber-900 text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 transition shadow-xs text-center"
           >
             {lang === 'bn' ? '⚙️ অ্যাডমিন' : '⚙️ Admin'}
           </button>
@@ -173,13 +174,13 @@ export default function Login({ setActiveTab, navigateBack }) {
       </div>
 
       {/* Login Mode Switcher Tabs */}
-      <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 border border-gray-200 dark:border-gray-700">
+      <div className="flex rounded-xl bg-[#F7FAF8] dark:bg-[#14201C] p-1 border border-[#E2E8F0] dark:border-[#1E2E28]">
         <button
           type="button"
           onClick={() => { setLoginMode('password'); setError(''); setSuccessMsg(''); }}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             loginMode === 'password'
-              ? 'bg-white dark:bg-gray-900 text-[#0b462d] dark:text-emerald-400 shadow-sm'
+              ? 'bg-white dark:bg-[#1E2E28] text-[#047857] dark:text-emerald-400 shadow-xs'
               : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
           }`}
         >
@@ -192,7 +193,7 @@ export default function Login({ setActiveTab, navigateBack }) {
           onClick={() => { setLoginMode('otp'); setError(''); setSuccessMsg(''); }}
           className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
             loginMode === 'otp'
-              ? 'bg-white dark:bg-gray-900 text-[#0b462d] dark:text-emerald-400 shadow-sm'
+              ? 'bg-white dark:bg-[#1E2E28] text-[#047857] dark:text-emerald-400 shadow-xs'
               : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
           }`}
         >
@@ -215,12 +216,12 @@ export default function Login({ setActiveTab, navigateBack }) {
       )}
 
       {/* Main Login Card */}
-      <div className="gov-card p-6 space-y-4">
+      <div className="gov-card p-6 sm:p-7 space-y-4">
         {loginMode === 'password' ? (
           /* Password Login Form */
           <form onSubmit={handlePasswordLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'ইমেইল বা ব্যবহারকারী নাম' : 'Email or Username'}
               </label>
               <div className="relative">
@@ -229,7 +230,7 @@ export default function Login({ setActiveTab, navigateBack }) {
                   type="text"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="citizen@landguard.gov.bd"
+                  placeholder="citizen@bhumisetu.gov.bd"
                   className="gov-input pl-9"
                   required
                 />
@@ -237,7 +238,7 @@ export default function Login({ setActiveTab, navigateBack }) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'}
               </label>
               <div className="relative">
@@ -263,7 +264,7 @@ export default function Login({ setActiveTab, navigateBack }) {
             <button
               type="submit"
               disabled={loading}
-              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow"
+              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow-xs"
             >
               {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Signing in...') : (lang === 'bn' ? 'লগইন করুন' : 'Sign In')}
             </button>
@@ -272,7 +273,7 @@ export default function Login({ setActiveTab, navigateBack }) {
           /* OTP / Verification Code Login Form */
           <form onSubmit={handleOTPLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'মোবাইল নম্বর বা ইমেইল ঠিকানা' : 'Mobile Number or Email'}
               </label>
               <div className="flex gap-2">
@@ -314,12 +315,12 @@ export default function Login({ setActiveTab, navigateBack }) {
                   <button
                     type="button"
                     onClick={() => setOtpCode(otpPreview)}
-                    className="text-[11px] text-[#0b462d] dark:text-emerald-400 underline font-bold"
+                    className="text-[11px] text-[#047857] dark:text-emerald-400 underline font-bold"
                   >
                     {lang === 'bn' ? 'কোডটি বসান (Auto-Fill)' : 'Auto-Fill'}
                   </button>
                 </div>
-                <div className="font-mono text-sm tracking-widest text-[#0b462d] dark:text-emerald-400 font-black">
+                <div className="font-mono text-sm tracking-widest text-[#047857] dark:text-emerald-400 font-black">
                   {otpPreview}
                 </div>
                 <p className="text-[10px] text-gray-500">
@@ -329,7 +330,7 @@ export default function Login({ setActiveTab, navigateBack }) {
             )}
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
                 {lang === 'bn' ? '৬-সংখ্যার ওটিপি কোড (OTP Verification Code)' : '6-Digit OTP Code'}
               </label>
               <div className="relative">
@@ -349,18 +350,18 @@ export default function Login({ setActiveTab, navigateBack }) {
             <button
               type="submit"
               disabled={loading || !otpCode}
-              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow"
+              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow-xs"
             >
               {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Verifying...') : (lang === 'bn' ? 'কোড যাচাই করে লগইন করুন' : 'Verify & Sign In')}
             </button>
           </form>
         )}
 
-        <div className="pt-2 border-t border-gray-100 dark:border-gray-800 text-center text-xs text-gray-500">
+        <div className="pt-2 border-t border-[#E2E8F0] dark:border-[#1E2E28] text-center text-xs text-gray-500">
           <span>{lang === 'bn' ? 'নতুন নাগরিক?' : 'New citizen?'} </span>
           <button
             onClick={() => setActiveTab('register')}
-            className="text-emerald-700 dark:text-emerald-400 font-bold hover:underline"
+            className="text-[#047857] dark:text-emerald-400 font-bold hover:underline"
           >
             {lang === 'bn' ? 'এখানে নিবন্ধন করুন' : 'Register here'}
           </button>

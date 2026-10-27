@@ -36,8 +36,8 @@ export default function DisclaimerPolicy({ setActiveTab, navigateBack }) {
           </div>
           <p className="leading-relaxed">
             {lang === 'bn'
-              ? 'ভূমিসাথী (BhumiSathi) একটি স্বাধীন আধুনিক প্রযুক্তিগত উদ্ভাবনী প্ল্যাটফর্ম। এটি স্বয়ংক্রিয় নিয়ম ও ডেটাবেজ বিশ্লেষণের মাধ্যমে ভূমি নিরাপত্তা ও নাগরিক সচেতনতা নিশ্চিত করতে সহায়তা করে।'
-              : 'BhumiSathi is an automated digital land integrity platform designed to assist in property title security.'}
+              ? 'ভূমিসেতু (Bhumisetu) একটি আধুনিক প্রযুক্তিনির্ভর ডিজিটাল ভূমি সিদ্ধান্ত সহায়তা প্ল্যাটফর্ম। এটি স্বয়ংক্রিয় নিয়ম ও ডেটাবেজ বিশ্লেষণের মাধ্যমে ভূমি নিরাপত্তা ও নাগরিক সচেতনতা নিশ্চিত করতে সহায়তা করে।'
+              : 'Bhumisetu is an automated digital land integrity platform designed to assist in property title security.'}
           </p>
         </div>
 

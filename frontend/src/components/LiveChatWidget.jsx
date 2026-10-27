@@ -367,25 +367,25 @@ export default function LiveChatWidget({ setActiveTab }) {
           }}
         >
           {/* ChatGPT Style Premium Header */}
-          <div className="bg-gradient-to-r from-[#0b462d] via-[#0e5839] to-[#072417] text-white p-3.5 sm:p-4 flex items-center justify-between border-b border-[#c59b27]/30 shadow-md">
+          <div className="bg-gradient-to-r from-[#065F46] via-[#047857] to-[#0b462d] text-white p-3.5 sm:p-4 flex items-center justify-between border-b border-emerald-600/30 shadow-md">
             <div className="flex items-center gap-3">
               <div className="relative">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-[#c59b27] flex items-center justify-center text-slate-950 font-black shadow-lg">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-[#F5B544] flex items-center justify-center text-slate-950 font-black shadow-lg">
                   <Bot className="w-5 h-5 text-white" />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-[#0b462d] rounded-full animate-pulse" />
+                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-[#065F46] rounded-full animate-pulse" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-bold text-sm sm:text-base leading-tight tracking-wide">
-                    {lang === 'bn' ? 'ভূমিসাথী এআই সহকারী' : 'BhumiSathi AI Assistant'}
+                    {lang === 'bn' ? 'ভূমিসেতু এআই সহকারী' : 'Bhumisetu AI Assistant'}
                   </h3>
-                  <span className="bg-[#c59b27]/30 text-[#ffd700] text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#c59b27]/50 font-bold">
+                  <span className="bg-[#F5B544]/30 text-[#F5B544] text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#F5B544]/50 font-bold">
                     {chatStatus.ai_configured ? 'Gemini Live' : 'Domain AI'}
                   </span>
                 </div>
-                <p className="text-[11px] text-emerald-200 flex items-center gap-1.5">
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${chatStatus.ai_configured ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+                <p className="text-[11px] text-emerald-100 flex items-center gap-1.5">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${chatStatus.ai_configured ? 'bg-emerald-300 animate-ping' : 'bg-amber-300'}`}></span>
                   <span className="truncate max-w-[200px]">{chatStatus.provider || (lang === 'bn' ? 'অনলাইন · রিয়েলটাইম ভূমি বিশেষজ্ঞ' : 'Online · Land Expert')}</span>
                 </p>
               </div>

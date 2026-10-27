@@ -194,7 +194,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
           <button
             type="button"
             onClick={handlePresetFill}
-            className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#0b462d] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold hover:bg-emerald-100 flex items-center gap-1.5 shadow-xs transition"
+            className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#047857] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold hover:bg-emerald-100 flex items-center gap-1.5 shadow-xs transition"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
             <span>{lang === 'bn' ? 'ডেমো তথ্য পূরণ' : 'Load Demo Preset'}</span>

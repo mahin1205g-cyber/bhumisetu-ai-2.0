@@ -608,7 +608,7 @@ function getMockFallback(endpoint, options = {}) {
     return {
       id: 1,
       name: "মোঃ রফিকুল ইসলাম",
-      email: "citizen@landguard.gov.bd",
+      email: "citizen@bhumisetu.gov.bd",
       role: "citizen",
       designation: "নাগরিক"
     };

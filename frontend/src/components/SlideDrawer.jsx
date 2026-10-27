@@ -93,27 +93,27 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
 
       {/* Sliding Window / Drawer from the Left */}
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-[320px] sm:w-[360px] bg-white dark:bg-[#121921] shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out ${
+        className={`fixed inset-y-0 left-0 z-50 w-[320px] sm:w-[360px] bg-white dark:bg-[#0c1310] shadow-2xl flex flex-col transform transition-transform duration-300 ease-in-out border-r border-[#E2E8F0] dark:border-gray-800 ${
           isOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
       >
-        {/* BhumiSathi Brand Header */}
-        <div className="bg-[#0e141b] text-white px-5 py-3 flex items-center justify-between border-b border-[#232f3e]">
+        {/* Bhumisetu Brand Header */}
+        <div className="bg-[#FFFFFF] dark:bg-[#0c1310] text-[#17212B] dark:text-white px-5 py-3.5 flex items-center justify-between border-b border-[#E2E8F0] dark:border-gray-800">
           <div className="flex items-center gap-2.5">
             <BhumiSathiLogo size={28} className="w-7 h-7 flex-shrink-0" />
             <div>
-              <div className="text-[#febd69] text-sm font-black tracking-tight leading-none">
-                {lang === 'bn' ? 'ভূমিসাথী' : 'BhumiSathi'}
+              <div className="text-[#047857] dark:text-emerald-400 text-sm font-black tracking-tight leading-none">
+                {lang === 'bn' ? 'ভূমিসেতু' : 'Bhumisetu'}
               </div>
-              <div className="text-[10px] text-gray-400 leading-tight">
-                {lang === 'bn' ? 'আপনার বিশ্বস্ত ভূমি সঙ্গী' : 'Your Land Decisions Companion'}
+              <div className="text-[10px] text-[#64748B] dark:text-gray-400 leading-tight">
+                {lang === 'bn' ? 'নিরাপদ ডিজিটাল ভূমি সঙ্গী' : 'Smart Land Decisions Platform'}
               </div>
             </div>
           </div>
           {/* Close Button [X] */}
           <button
             onClick={onClose}
-            className="w-7 h-7 rounded-md bg-[#232f3e] hover:bg-gray-800 text-gray-300 hover:text-white flex items-center justify-center transition border border-gray-700"
+            className="w-7 h-7 rounded-md bg-[#F7FAF8] dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700 text-[#64748B] dark:text-gray-300 hover:text-[#17212B] dark:hover:text-white flex items-center justify-center transition border border-[#E2E8F0] dark:border-gray-700"
             title="Close Menu (Esc)"
           >
             <X className="w-4 h-4" />
@@ -121,23 +121,23 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
         </div>
 
         {/* User Greeting Bar */}
-        <div className="bg-[#131921] text-white px-5 py-3 flex items-center justify-between border-b border-[#232f3e] shadow-md select-none">
+        <div className="bg-[#F7FAF8] dark:bg-[#111915] text-[#17212B] dark:text-white px-5 py-3 flex items-center justify-between border-b border-[#E2E8F0] dark:border-gray-800 select-none">
           <div
             onClick={() => handleNav(user ? 'profile' : 'login')}
             className="flex items-center gap-3 cursor-pointer group"
           >
-            <div className="w-9 h-9 rounded-full bg-[#232f3e] border border-gray-700 flex items-center justify-center text-[#febd69] font-bold shadow-inner">
+            <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-[#047857] dark:text-emerald-300 font-bold shadow-xs">
               <User className="w-4 h-4" />
             </div>
             <div>
-              <div className="text-[11px] text-gray-400 font-medium leading-none mb-0.5">
+              <div className="text-[11px] text-[#64748B] dark:text-gray-400 font-medium leading-none mb-0.5">
                 {lang === 'bn' ? 'স্বাগতম' : 'Hello'}
               </div>
-              <div className="text-xs font-bold text-white group-hover:text-[#febd69] transition flex items-center gap-1.5 truncate max-w-[210px]">
+              <div className="text-xs font-bold text-[#17212B] dark:text-white group-hover:text-[#047857] dark:group-hover:text-emerald-400 transition flex items-center gap-1.5 truncate max-w-[210px]">
                 <span>{user ? user.name : (lang === 'bn' ? 'লগইন করুন' : 'Sign In')}</span>
               </div>
               {user && (
-                <div className="text-[10px] text-[#febd69] font-medium leading-none mt-1">
+                <div className="text-[10px] text-[#047857] dark:text-emerald-400 font-semibold leading-none mt-1">
                   {user.designation || (user.role === 'admin' ? 'অ্যাডমিন' : user.role === 'officer' ? 'এসি ল্যান্ড' : 'নাগরিক')}
                 </div>
               )}
@@ -146,12 +146,12 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
         </div>
 
         {/* Scalability & Algorithm Badge */}
-        <div className="bg-[#232f3e] px-4 py-2 text-[11px] text-[#febd69] flex items-center justify-between border-b border-gray-800">
+        <div className="bg-emerald-50/60 dark:bg-emerald-950/30 px-4 py-2 text-[11px] text-[#065F46] dark:text-emerald-300 flex items-center justify-between border-b border-[#E2E8F0] dark:border-gray-800">
           <div className="flex items-center gap-1.5 font-semibold">
-            <Zap className="w-3.5 h-3.5 text-[#febd69] animate-pulse" />
+            <Zap className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400" />
             <span>{lang === 'bn' ? 'বাইনারি সার্চ অ্যালগরিদম সক্রিয়' : 'Binary Search O(log N) Engine'}</span>
           </div>
-          <span className="text-[10px] bg-black/40 text-emerald-400 px-1.5 py-0.5 rounded font-mono">
+          <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-[#047857] dark:text-emerald-300 px-1.5 py-0.5 rounded font-mono font-semibold">
             500M Scale
           </span>
         </div>
@@ -173,12 +173,12 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                       onClick={() => handleNav(item.id)}
                       className={`w-full px-5 py-2.5 flex items-center justify-between text-left transition group ${
                         isActive
-                          ? 'bg-amber-50 dark:bg-[#1a2736] text-[#0f172a] dark:text-[#febd69] font-bold border-l-4 border-l-[#febd69]'
-                          : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-[#1a2636] font-medium'
+                          ? 'bg-[#D1FAE5]/60 dark:bg-emerald-950/40 text-[#047857] dark:text-emerald-300 font-bold border-l-4 border-l-[#047857]'
+                          : 'text-[#17212B] dark:text-gray-200 hover:bg-[#F7FAF8] dark:hover:bg-gray-800/60 font-medium'
                       }`}
                     >
                       <div className="flex items-center gap-3 min-w-0">
-                        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#d97706] dark:text-[#febd69]' : 'text-gray-500 dark:text-gray-400 group-hover:text-gray-900 dark:group-hover:text-white'}`} />
+                        <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-[#047857] dark:text-emerald-400' : 'text-[#64748B] dark:text-gray-400 group-hover:text-[#047857] dark:group-hover:text-emerald-400'}`} />
                         <span className="text-xs truncate">{item.label}</span>
                       </div>
 
@@ -188,8 +188,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                             {item.badge}
                           </span>
                         )}
-                        {/* Amazon-Style Chevron Arrow */}
-                        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-gray-700 dark:group-hover:text-gray-200 group-hover:translate-x-0.5 transition" />
+                        <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#047857] dark:group-hover:text-emerald-400 group-hover:translate-x-0.5 transition" />
                       </div>
                     </button>
                   );
@@ -199,7 +198,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
           ))}
 
           {/* Quick Controls inside Drawer */}
-          <div className="p-4 space-y-2 bg-gray-50 dark:bg-[#0e1620]">
+          <div className="p-4 space-y-2 bg-[#F7FAF8] dark:bg-[#0c1310] border-t border-[#E2E8F0] dark:border-gray-800">
             <div className="text-[11px] font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-2">
               {lang === 'bn' ? 'কুইক সেটিংস' : 'Quick Settings'}
             </div>
@@ -207,15 +206,15 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={toggleLang}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#131c27] text-xs font-semibold text-gray-800 dark:text-gray-200 hover:border-[#febd69] transition"
+                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-[#E2E8F0] dark:border-gray-700 bg-white dark:bg-[#111915] text-xs font-semibold text-[#17212B] dark:text-gray-200 hover:border-[#047857] transition"
               >
-                <Globe className="w-3.5 h-3.5 text-[#d97706]" />
+                <Globe className="w-3.5 h-3.5 text-[#047857]" />
                 <span>{lang === 'bn' ? 'English' : 'বাংলা'}</span>
               </button>
 
               <button
                 onClick={toggleTheme}
-                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-gray-300 dark:border-gray-700 bg-white dark:bg-[#131c27] text-xs font-semibold text-gray-800 dark:text-gray-200 hover:border-[#febd69] transition"
+                className="flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg border border-[#E2E8F0] dark:border-gray-700 bg-white dark:bg-[#111915] text-xs font-semibold text-[#17212B] dark:text-gray-200 hover:border-[#047857] transition"
               >
                 {theme === 'dark' ? (
                   <>
@@ -224,7 +223,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                   </>
                 ) : (
                   <>
-                    <Moon className="w-3.5 h-3.5 text-slate-700" />
+                    <Moon className="w-3.5 h-3.5 text-[#64748B]" />
                     <span>ডার্ক মোড</span>
                   </>
                 )}
@@ -234,12 +233,12 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
             {/* Gov Hotline 16122 Info Pill */}
             <div className="mt-3 p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <PhoneCall className="w-4 h-4 text-emerald-700 dark:text-emerald-400" />
-                <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                <PhoneCall className="w-4 h-4 text-[#047857] dark:text-emerald-400" />
+                <span className="text-xs font-bold text-[#065F46] dark:text-emerald-200">
                   {lang === 'bn' ? 'ভূমি সেবা কল করুন' : 'Land Helpline'}: 16122
                 </span>
               </div>
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-semibold">২৪/৭</span>
+              <span className="text-[10px] text-[#047857] dark:text-emerald-400 font-semibold">২৪/৭</span>
             </div>
 
             {/* Logout / Login button */}
@@ -261,7 +260,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                   onClose();
                   setActiveTab('login');
                 }}
-                className="w-full mt-2 gov-btn-gold text-xs py-2 justify-center"
+                className="w-full mt-2 gov-btn-primary text-xs py-2 justify-center"
               >
                 <User className="w-3.5 h-3.5" />
                 <span>{t('navLogin')}</span>

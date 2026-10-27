@@ -12,8 +12,8 @@ export default function HelpFAQ({ setActiveTab, navigateBack }) {
       title: lang === 'bn' ? 'এআই ও ঝুঁকি মূল্যায়ন পদ্ধতি (Scoring Methodology)' : 'Scoring Methodology & AI Engine',
       icon: Cpu,
       content: lang === 'bn'
-        ? "ল্যান্ডগার্ড এআই একটি স্বচ্ছ ও ব্যাখ্যামূলক নিয়ম-ভিত্তিক এআই ফ্রেমওয়ার্ক ব্যবহার করে। প্রতিটি ঝুঁকি সূচকের জন্য সুস্পষ্ট পয়েন্ট নির্ধারণ করা হয়েছে: একাধিকবার বিক্রি (+৪৫), বিক্রেতার নাম ও বর্তমান মালিকের গরমিল (+৪০), দ্বৈত দলিল নম্বর (+৫০), ৩০ দিনের কম সময়ে দ্রুত হস্তান্তর (+১৫), বাজার মূল্যের অস্বাভাবিকতা (+২০)। মোট স্কোর ০ থেকে ১০০ পর্যন্ত হিসেব হয়। ৬০ বা তদূর্ধ্ব উচ্চ ঝুঁকি, ৩০–৫৯ মাঝারি ঝুঁকি এবং ৩০-এর নিচে নিম্ন ঝুঁকি।"
-        : "LandGuard AI employs a transparent, explainable rule-based anomaly detection engine combined with scikit-learn Isolation Forest scoring. Conflicting seller names (+40), duplicate sale records (+45), duplicate deed registration (+50), rapid transfers under 30 days (+15), and valuation anomalies (+20) are aggregated up to 100 points."
+        ? "ভূমিসেতু এআই একটি স্বচ্ছ ও ব্যাখ্যামূলক নিয়ম-ভিত্তিক এআই ফ্রেমওয়ার্ক ব্যবহার করে। প্রতিটি ঝুঁকি সূচকের জন্য সুস্পষ্ট পয়েন্ট নির্ধারণ করা হয়েছে: একাধিকবার বিক্রি (+৪৫), বিক্রেতার নাম ও বর্তমান মালিকের গরমিল (+৪০), দ্বৈত দলিল নম্বর (+৫০), ৩০ দিনের কম সময়ে দ্রুত হস্তান্তর (+১৫), বাজার মূল্যের অস্বাভাবিকতা (+২০)। মোট স্কোর ০ থেকে ১০০ পর্যন্ত হিসেব হয়। ৬০ বা তদূর্ধ্ব উচ্চ ঝুঁকি, ৩০–৫৯ মাঝারি ঝুঁকি এবং ৩০-এর নিচে নিম্ন ঝুঁকি।"
+        : "Bhumisetu employs a transparent, explainable rule-based anomaly detection engine combined with scikit-learn Isolation Forest scoring. Conflicting seller names (+40), duplicate sale records (+45), duplicate deed registration (+50), rapid transfers under 30 days (+15), and valuation anomalies (+20) are aggregated up to 100 points."
     },
     {
       title: lang === 'bn' ? 'বাংলাদেশ ভূমি পরিভাষা নির্দেশিকা (Glossary)' : 'Bangladesh Land Terminology Glossary',
@@ -26,8 +26,8 @@ export default function HelpFAQ({ setActiveTab, navigateBack }) {
       title: lang === 'bn' ? 'ডিজিটাল কিউআর কোড যাচাইকরণ নির্দেশিকা' : 'QR Code Verification Guidelines',
       icon: ShieldCheck,
       content: lang === 'bn'
-        ? "প্রতিটি প্রতিবেদন প্রস্তুত হওয়ার পর সিস্টেমে একটি সার্ভার-ভ্যালিডেটেড অনন্য রেফারেন্স নম্বর (যেমন: LG-VR-2026-XXXX অথবা LG-DD-2026-XXXX) তৈরি হয়। সনদে প্রদর্শিত কিউআর কোড স্ক্যান করলে সরাসরি ল্যান্ডগার্ড এআই প্ল্যাটফর্মের অভ্যন্তরীণ যাচাই পাতায় ফলাফল প্রদর্শন করে। এটি কোনো অফিশিয়াল সাব-রেজিস্ট্রার সিল বা সনদ নয়।"
-        : "Each report generates a unique reference code (e.g., LG-VR-2026-XXXX or LG-DD-2026-XXXX). Scanning the QR code resolves to the secure server verification endpoint inside the LandGuard AI system."
+        ? "প্রতিটি প্রতিবেদন প্রস্তুত হওয়ার পর সিস্টেমে একটি সার্ভার-ভ্যালিডেটেড অনন্য রেফারেন্স নম্বর (যেমন: BS-VR-2026-XXXX অথবা BS-DD-2026-XXXX) তৈরি হয়। সনদে প্রদর্শিত কিউআর কোড স্ক্যান করলে সরাসরি ভূমিসেতু প্ল্যাটফর্মের অভ্যন্তরীণ যাচাই পাতায় ফলাফল প্রদর্শন করে। এটি কোনো অফিশিয়াল সাব-রেজিস্ট্রার সিল বা সনদ নয়।"
+        : "Each report generates a unique reference code (e.g., BS-VR-2026-XXXX or BS-DD-2026-XXXX). Scanning the QR code resolves to the secure server verification endpoint inside the Bhumisetu system."
     }
   ];
 
@@ -38,7 +38,7 @@ export default function HelpFAQ({ setActiveTab, navigateBack }) {
         title={lang === 'bn' ? 'ব্যবহারবিধি, প্রশ্নোত্তর ও অ্যালগরিদম পদ্ধতি' : 'Methodology, Terminology & FAQ'}
         subtitle={
           lang === 'bn'
-            ? 'ল্যান্ডগার্ড এআই কীভাবে বিশ্লেষণ করে, স্কোরিং নিয়মাবলী ও ভূমি সেবার প্রচলিত পরিভাষা।'
+            ? 'ভূমিসেতু কীভাবে বিশ্লেষণ করে, স্কোরিং নিয়মাবলী ও ভূমি সেবার প্রচলিত পরিভাষা।'
             : 'Algorithm transparency, scoring logic, and Bangladesh land terms glossary.'
         }
         icon={HelpCircle}
