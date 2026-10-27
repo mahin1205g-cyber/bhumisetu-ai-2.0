@@ -87,20 +87,20 @@ export default function DueDiligenceReport({ result, setActiveTab }) {
   return (
     <div className="gov-container py-8 space-y-6 max-w-4xl">
       {/* Top Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 no-print">
+      <div className="flex flex-wrap items-center justify-between gap-3 no-print bg-white dark:bg-gray-800/80 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
         <button
           onClick={() => setActiveTab('due-diligence')}
-          className="gov-btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
+          className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
         >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>{lang === 'bn' ? 'নতুন যাচাই' : 'New Check'}</span>
+          <ArrowLeft className="w-4 h-4" />
+          <span>{lang === 'bn' ? '← প্রাক-ক্রয় স্বত্ব যাচাই ফরম-এ ফিরে যান' : '← Back to Due Diligence Form'}</span>
         </button>
 
         <button
           onClick={handlePrint}
-          className="gov-btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5 shadow"
+          className="gov-btn-gold text-xs py-2 px-4 flex items-center gap-1.5 font-bold shadow"
         >
-          <Printer className="w-3.5 h-3.5" />
+          <Printer className="w-4 h-4" />
           <span>{lang === 'bn' ? 'রিপোর্ট প্রিন্ট / সংরক্ষণ' : 'Print / Download Report'}</span>
         </button>
       </div>
@@ -304,6 +304,39 @@ export default function DueDiligenceReport({ result, setActiveTab }) {
           {lang === 'bn'
             ? 'কোনো গরমিল শনাক্ত না হওয়ার অর্থ এই নয় যে জমিটি আইনিভাবে সম্পূর্ণ নিরাপদ। এটি প্রাথমিক স্ক্রীনিং ব্যবস্থা এবং কোনোভাবেই সাব-রেজিস্ট্রি বা ভূমি অফিসের আইনি দায়িত্ব বহন করে না।'
             : 'Absence of detected anomalies does not certify legal safety. Always consult qualified property attorneys and verify ground possession.'}
+        </div>
+      </div>
+
+      {/* Bottom Action Bar */}
+      <div className="gov-card p-4 flex flex-wrap items-center justify-between gap-4 no-print border-2 border-amber-600/30 bg-amber-50/40 dark:bg-amber-950/20 shadow-md">
+        <button
+          onClick={() => setActiveTab('due-diligence')}
+          className="gov-btn-primary text-xs py-2.5 px-5 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{lang === 'bn' ? '← পূর্ববর্তী পেজে ফিরে যান (নতুন জমি যাচাই)' : '← Back to Due Diligence Form'}</span>
+        </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setActiveTab('deed-verify')}
+            className="gov-btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-semibold"
+          >
+            <span>{lang === 'bn' ? 'দলিল ক্রস-চেক করুন' : 'Verify Deed'}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className="gov-btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-semibold"
+          >
+            <span>{lang === 'bn' ? 'ড্যাশবোর্ডে ফিরে যান' : 'Go to Dashboard'}</span>
+          </button>
+          <button
+            onClick={handlePrint}
+            className="gov-btn-gold text-xs py-2 px-4 flex items-center gap-1.5 font-bold shadow"
+          >
+            <Printer className="w-4 h-4" />
+            <span>{lang === 'bn' ? 'রিপোর্ট প্রিন্ট / সংরক্ষণ' : 'Print Report'}</span>
+          </button>
         </div>
       </div>
     </div>

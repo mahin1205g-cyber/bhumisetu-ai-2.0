@@ -1,18 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
-import { User, Lock, Eye, EyeOff, Shield, ArrowRight, Sparkles, CheckCircle2 } from 'lucide-react';
+import {
+  User, Lock, Eye, EyeOff, Shield, ArrowRight, Sparkles, CheckCircle2,
+  Phone, Mail, KeyRound, RefreshCw, Send, ArrowLeft
+} from 'lucide-react';
 
 export default function Login({ setActiveTab }) {
   const { lang, t, loginUser, switchDemoRole } = useApp();
 
+  const [loginMode, setLoginMode] = useState('password'); // 'password' | 'otp'
+
+  // Password mode state
   const [identifier, setIdentifier] = useState('citizen@landguard.gov.bd');
   const [password, setPassword] = useState('demo123');
   const [showPassword, setShowPassword] = useState(false);
+
+  // OTP mode state
+  const [otpDestination, setOtpDestination] = useState('01711002233');
+  const [otpCode, setOtpCode] = useState('');
+  const [otpSent, setOtpSent] = useState(false);
+  const [otpPreview, setOtpPreview] = useState('');
+  const [countdown, setCountdown] = useState(0);
+
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
 
-  const handleLogin = async (e) => {
+  // Countdown timer effect
+  useEffect(() => {
+    let timer;
+    if (countdown > 0) {
+      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    }
+    return () => clearTimeout(timer);
+  }, [countdown]);
+
+  const handlePasswordLogin = async (e) => {
     e.preventDefault();
     if (!identifier || !password) {
       setError(lang === 'bn' ? 'ব্যবহারকারী নাম/ইমেইল ও পাসওয়ার্ড পূরণ করুন।' : 'Please enter your username/email and password.');
@@ -21,9 +45,56 @@ export default function Login({ setActiveTab }) {
 
     setLoading(true);
     setError('');
-
     try {
       const res = await api.login(identifier, password);
+      loginUser(res.user, res.token);
+      setActiveTab('dashboard');
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSendOTP = async () => {
+    if (!otpDestination || otpDestination.trim().length < 3) {
+      setError(lang === 'bn' ? 'অনুগ্রহ করে সঠিক মোবাইল নম্বর বা ইমেইল ঠিকানা দিন।' : 'Please enter a valid phone number or email.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setSuccessMsg('');
+
+    try {
+      const res = await api.sendOTP(otpDestination, 'login');
+      setOtpSent(true);
+      setOtpPreview(res.otp_preview || '849201');
+      setCountdown(60);
+      setSuccessMsg(
+        lang === 'bn'
+          ? `আপনার ${res.channel_bn || 'মোবাইলে'} ৬-সংখ্যার ওটিপি কোড পাঠানো হয়েছে।`
+          : `Verification code sent to your ${res.channel || 'phone'}.`
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleOTPLogin = async (e) => {
+    e.preventDefault();
+    if (!otpCode || otpCode.trim().length < 4) {
+      setError(lang === 'bn' ? 'অনুগ্রহ করে ৬-সংখ্যার ওটিপি কোড দিন।' : 'Please enter the 6-digit OTP code.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const res = await api.loginWithOTP(otpDestination, otpCode);
       loginUser(res.user, res.token);
       setActiveTab('dashboard');
     } catch (err) {
@@ -40,6 +111,7 @@ export default function Login({ setActiveTab }) {
 
   return (
     <div className="gov-container py-12 max-w-md mx-auto space-y-6">
+      {/* Page Title */}
       <div className="text-center space-y-2">
         <div className="w-12 h-12 rounded-full bg-[#0b462d] border-2 border-[#c59b27] flex items-center justify-center mx-auto text-[#ffd700] font-bold text-lg shadow">
           LG
@@ -83,64 +155,189 @@ export default function Login({ setActiveTab }) {
         </div>
       </div>
 
+      {/* Login Mode Switcher Tabs */}
+      <div className="flex rounded-xl bg-gray-100 dark:bg-gray-800 p-1 border border-gray-200 dark:border-gray-700">
+        <button
+          type="button"
+          onClick={() => { setLoginMode('password'); setError(''); setSuccessMsg(''); }}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            loginMode === 'password'
+              ? 'bg-white dark:bg-gray-900 text-[#0b462d] dark:text-emerald-400 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <Lock className="w-3.5 h-3.5" />
+          <span>{lang === 'bn' ? 'পাসওয়ার্ড দিয়ে লগইন' : 'Password Login'}</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setLoginMode('otp'); setError(''); setSuccessMsg(''); }}
+          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
+            loginMode === 'otp'
+              ? 'bg-white dark:bg-gray-900 text-[#0b462d] dark:text-emerald-400 shadow-sm'
+              : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
+          }`}
+        >
+          <KeyRound className="w-3.5 h-3.5 text-amber-500" />
+          <span>{lang === 'bn' ? 'ওটিপি / কোড দিয়ে লগইন' : 'OTP Code Login'}</span>
+        </button>
+      </div>
+
       {error && (
         <div className="p-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs">
           {error}
         </div>
       )}
 
-      {/* Main Login Form */}
+      {successMsg && (
+        <div className="p-3 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
+          <span>{successMsg}</span>
+        </div>
+      )}
+
+      {/* Main Login Card */}
       <div className="gov-card p-6 space-y-4">
-        <form onSubmit={handleLogin} className="space-y-4">
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              {lang === 'bn' ? 'ইমেইল বা ব্যবহারকারী নাম' : 'Email or Username'}
-            </label>
-            <div className="relative">
-              <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
-                type="text"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="citizen@landguard.gov.bd"
-                className="gov-input pl-9"
-                required
-              />
+        {loginMode === 'password' ? (
+          /* Password Login Form */
+          <form onSubmit={handlePasswordLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                {lang === 'bn' ? 'ইমেইল বা ব্যবহারকারী নাম' : 'Email or Username'}
+              </label>
+              <div className="relative">
+                <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  placeholder="citizen@landguard.gov.bd"
+                  className="gov-input pl-9"
+                  required
+                />
+              </div>
             </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-              {lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'}
-            </label>
-            <div className="relative">
-              <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="gov-input pl-9 pr-9"
-                required
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-              >
-                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                {lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'}
+              </label>
+              <div className="relative">
+                <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="gov-input pl-9 pr-9"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
-          </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow"
-          >
-            {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Signing in...') : (lang === 'bn' ? 'লগইন করুন' : 'Sign In')}
-          </button>
-        </form>
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow"
+            >
+              {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Signing in...') : (lang === 'bn' ? 'লগইন করুন' : 'Sign In')}
+            </button>
+          </form>
+        ) : (
+          /* OTP / Verification Code Login Form */
+          <form onSubmit={handleOTPLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                {lang === 'bn' ? 'মোবাইল নম্বর বা ইমেইল ঠিকানা' : 'Mobile Number or Email'}
+              </label>
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  {otpDestination.includes('@') ? (
+                    <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  ) : (
+                    <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                  )}
+                  <input
+                    type="text"
+                    value={otpDestination}
+                    onChange={(e) => setOtpDestination(e.target.value)}
+                    placeholder="01711002233 বা user@email.com"
+                    className="gov-input pl-9"
+                    required
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={handleSendOTP}
+                  disabled={loading || countdown > 0}
+                  className="gov-btn-secondary text-xs px-3.5 py-2 font-bold whitespace-nowrap"
+                >
+                  {countdown > 0 ? (
+                    <span>{countdown}s</span>
+                  ) : (
+                    <span>{otpSent ? (lang === 'bn' ? 'পুনরায় পাঠান' : 'Resend') : (lang === 'bn' ? 'ওটিপি পাঠান' : 'Send OTP')}</span>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            {/* Simulated Live Gateway Notification */}
+            {otpPreview && (
+              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-xs space-y-1">
+                <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center justify-between">
+                  <span>📩 {lang === 'bn' ? 'মোবাইল / ইমেইল ওটিপি সিমুলেশন:' : 'Incoming OTP Message:'}</span>
+                  <button
+                    type="button"
+                    onClick={() => setOtpCode(otpPreview)}
+                    className="text-[11px] text-[#0b462d] dark:text-emerald-400 underline font-bold"
+                  >
+                    {lang === 'bn' ? 'কোডটি বসান (Auto-Fill)' : 'Auto-Fill'}
+                  </button>
+                </div>
+                <div className="font-mono text-sm tracking-widest text-[#0b462d] dark:text-emerald-400 font-black">
+                  {otpPreview}
+                </div>
+                <p className="text-[10px] text-gray-500">
+                  {lang === 'bn' ? 'এই কোডটি ইনপুট ফিল্ডে প্রদান করে ভেরিফাই করুন (মেয়াদ ৫ মিনিট)।' : 'Use this 6-digit code to complete login.'}
+                </p>
+              </div>
+            )}
+
+            <div>
+              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                {lang === 'bn' ? '৬-সংখ্যার ওটিপি কোড (OTP Verification Code)' : '6-Digit OTP Code'}
+              </label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
+                  placeholder="849201"
+                  className="gov-input pl-9 tracking-widest font-mono text-sm"
+                  required
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={loading || !otpCode}
+              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow"
+            >
+              {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Verifying...') : (lang === 'bn' ? 'কোড যাচাই করে লগইন করুন' : 'Verify & Sign In')}
+            </button>
+          </form>
+        )}
 
         <div className="pt-2 border-t border-gray-100 dark:border-gray-800 text-center text-xs text-gray-500">
           <span>{lang === 'bn' ? 'নতুন নাগরিক?' : 'New citizen?'} </span>

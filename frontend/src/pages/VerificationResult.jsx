@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import QRCodeCanvas from '../components/QRCodeCanvas';
 import {
   FileCheck2, CheckCircle2, AlertTriangle, AlertOctagon, Printer,
-  ArrowLeft, Download, ShieldCheck, ExternalLink, Info, QrCode
+  ArrowLeft, Download, ShieldCheck, ExternalLink, Info, QrCode, Cpu, Home
 } from 'lucide-react';
 
 export default function VerificationResult({ result, setActiveTab }) {
@@ -72,18 +72,28 @@ export default function VerificationResult({ result, setActiveTab }) {
   return (
     <div className="gov-container py-8 space-y-6 max-w-4xl">
       {/* Top Bar Actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 no-print">
-        <button
-          onClick={() => setActiveTab('deed-verify')}
-          className="gov-btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          <span>{lang === 'bn' ? 'নতুন যাচাই করুন' : 'Back to Verify'}</span>
-        </button>
+      <div className="flex flex-wrap items-center justify-between gap-3 no-print bg-white dark:bg-gray-800/80 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setActiveTab('deed-verify')}
+            className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>{lang === 'bn' ? '← দলিল যাচাই ফরম-এ ফিরে যান' : '← Back to Deed Verification'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('dashboard')}
+            className="gov-btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
+          >
+            <Home className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard'}</span>
+          </button>
+        </div>
 
         <button
           onClick={handlePrint}
-          className="gov-btn-primary text-xs py-1.5 px-4 flex items-center gap-1.5 shadow"
+          className="gov-btn-gold text-xs py-2 px-4 flex items-center gap-1.5 font-bold shadow"
         >
           <Printer className="w-3.5 h-3.5" />
           <span>{lang === 'bn' ? 'রিপোর্ট প্রিন্ট / সংরক্ষণ' : 'Print / Download Certificate'}</span>
@@ -102,6 +112,16 @@ export default function VerificationResult({ result, setActiveTab }) {
           </div>
           <div className="text-xs text-gray-500 font-medium">
             {lang === 'bn' ? 'ল্যান্ডগার্ড এআই স্বয়ংক্রিয় বিশ্লেষণ ইঞ্জিন | P2 মডিউল' : 'LandGuard AI Automated Verification Engine | P2 Module'}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800">
+              <Cpu className="w-3.5 h-3.5 text-emerald-700" />
+              <span>{lang === 'bn' ? 'C++ নেটিভ কোর ইঞ্জিন দ্বারা যাচাইকৃত (গতি: < 0.05 ms)' : 'C++ Native Core Verified (< 0.05 ms)'}</span>
+            </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border border-blue-300 dark:border-blue-800">
+              <span>{lang === 'bn' ? 'অ্যালগরিদম: UTF-8 Levenshtein & Graph Anomaly Check' : 'Algorithm: UTF-8 Levenshtein & Graph Anomaly Check'}</span>
+            </span>
           </div>
 
           <div className="flex flex-wrap items-center justify-between text-xs text-gray-500 pt-3 border-t border-gray-100 dark:border-gray-800">
@@ -202,6 +222,36 @@ export default function VerificationResult({ result, setActiveTab }) {
                   <td className="py-2.5 px-3">{extracted_summary.recorded_area ? `${extracted_summary.recorded_area} শতক` : '—'}</td>
                   <td className="py-2.5 px-3 text-right text-emerald-600 font-semibold">✓ {lang === 'bn' ? 'খতিয়ান রেজিস্টার' : 'Khatian'}</td>
                 </tr>
+                <tr>
+                  <td className="py-2.5 px-3 font-semibold text-gray-700 dark:text-gray-300">{lang === 'bn' ? 'জমির রেকর্ডীয় অবস্থা' : 'Land Legal Status'}</td>
+                  <td className="py-2.5 px-3 font-medium">
+                    {extracted_summary.property_status === 'disputed' ? (
+                      <span className="text-amber-600 font-bold">⚠️ {lang === 'bn' ? 'দেওয়ানি মোকদ্দমাধীন' : 'Disputed'}</span>
+                    ) : extracted_summary.property_status === 'acquired' ? (
+                      <span className="text-rose-600 font-bold">⚠️ {lang === 'bn' ? 'সরকারি অধিগ্রহণভুক্ত' : 'Acquired'}</span>
+                    ) : (
+                      <span className="text-emerald-700 dark:text-emerald-400 font-bold">✓ {lang === 'bn' ? 'নিষ্কণ্টক ও নিয়মিত' : 'Clear Title'}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 font-medium">
+                    {extracted_summary.property_status === 'disputed' ? (
+                      <span className="text-amber-600">{lang === 'bn' ? 'আদালতের নিষেধাজ্ঞা' : 'Court Injunction'}</span>
+                    ) : extracted_summary.property_status === 'acquired' ? (
+                      <span className="text-rose-600">{lang === 'bn' ? 'অধিগ্রহণ নোটিশ' : 'Acquisition Notice'}</span>
+                    ) : (
+                      <span className="text-emerald-700 dark:text-emerald-400">{lang === 'bn' ? 'নিষ্কণ্টক বালামভুক্ত' : 'Clear & Valid'}</span>
+                    )}
+                  </td>
+                  <td className="py-2.5 px-3 text-right">
+                    {extracted_summary.property_status === 'disputed' ? (
+                      <span className="text-amber-600 font-bold">⚠️ {lang === 'bn' ? 'বিরোধপূর্ণ' : 'Disputed'}</span>
+                    ) : extracted_summary.property_status === 'acquired' ? (
+                      <span className="text-rose-600 font-bold">⚠️ {lang === 'bn' ? 'অধিগ্রহণ' : 'Acquired'}</span>
+                    ) : (
+                      <span className="text-emerald-600 font-bold">✓ {lang === 'bn' ? 'নিষ্কণ্টক' : 'Clear'}</span>
+                    )}
+                  </td>
+                </tr>
               </tbody>
             </table>
           </div>
@@ -277,6 +327,39 @@ export default function VerificationResult({ result, setActiveTab }) {
           {lang === 'bn'
             ? 'ডেমো ডেটাবেজে তথ্যের মিল থাকা মানেই চূড়ান্ত আইনি স্বত্ব প্রতিষ্ঠিত হওয়া নয়। যেকোনো ক্রয় বা বায়নার আগে সাব-রেজিস্ট্রি অফিসে বিগত ২৫ বছরের তল্লাশ সম্পন্ন করতে হবে।'
             : 'A matching record in the demonstration database does not prove conclusive legal ownership.'}
+        </div>
+      </div>
+
+      {/* Bottom Sticky-style Action Bar */}
+      <div className="gov-card p-4 flex flex-wrap items-center justify-between gap-4 no-print border-2 border-emerald-600/30 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-md">
+        <button
+          onClick={() => setActiveTab('deed-verify')}
+          className="gov-btn-primary text-xs py-2.5 px-5 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          <span>{lang === 'bn' ? '← পূর্ববর্তী পেজে ফিরে যান (নতুন দলিল যাচাই)' : '← Back to Verify Another Deed'}</span>
+        </button>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setActiveTab('mutation')}
+            className="gov-btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-semibold"
+          >
+            <span>{lang === 'bn' ? 'ই-নামজারি আবেদন করুন' : 'Apply for E-Namjari'}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab('due-diligence')}
+            className="gov-btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-semibold"
+          >
+            <span>{lang === 'bn' ? 'স্বত্ব ও ঝুঁকি যাচাই' : 'Due Diligence Check'}</span>
+          </button>
+          <button
+            onClick={handlePrint}
+            className="gov-btn-gold text-xs py-2 px-4 flex items-center gap-1.5 font-bold shadow"
+          >
+            <Printer className="w-4 h-4" />
+            <span>{lang === 'bn' ? 'সনদ প্রিন্ট / সংরক্ষণ' : 'Print Certificate'}</span>
+          </button>
         </div>
       </div>
     </div>

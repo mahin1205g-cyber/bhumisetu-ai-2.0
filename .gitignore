@@ -16,3 +16,5 @@ __pycache__/
 *.sqlite
 *.sqlite3
 .DS_Store
+tempCodeRunnerFile.*
+*.o

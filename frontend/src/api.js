@@ -291,6 +291,44 @@ function getMockFallback(endpoint, options = {}) {
   }
 
   // 6. Login
+  if (endpoint.includes("/auth/send-otp")) {
+    const dest = body.destination || "01711002233";
+    const channel = dest.includes("@") ? "email" : "phone";
+    return {
+      success: true,
+      destination: dest,
+      channel: channel,
+      channel_bn: channel === "email" ? "ইমেইল" : "মোবাইল এসএমএস",
+      otp_preview: "849201",
+      expires_in_seconds: 300,
+      message: `৬-সংখ্যার যাচাইকরণ কোড পাঠানো হয়েছে (${channel === "email" ? "ইমেইল" : "মোবাইল এসএমএস"})।`
+    };
+  }
+
+  if (endpoint.includes("/auth/verify-otp")) {
+    return {
+      verified: true,
+      message: "ভেরিফিকেশন সফল হয়েছে!"
+    };
+  }
+
+  if (endpoint.includes("/auth/login-otp")) {
+    const dest = body.destination || "citizen@bhumisathi.gov.bd";
+    return {
+      success: true,
+      token: `demo-token-${Date.now()}`,
+      user: {
+        id: 1,
+        name: dest.includes("@") ? dest.split("@")[0].toUpperCase() : "যাচাইকৃত নাগরিক",
+        email: dest.includes("@") ? dest : `citizen_${dest}@bhumisathi.gov.bd`,
+        role: "citizen",
+        designation: "নাগরিক",
+        phone: dest.includes("@") ? "01711002233" : dest,
+        nid: "19902692518000123"
+      }
+    };
+  }
+
   if (endpoint.includes("/auth/login")) {
     const isAdmin = body.identifier && (body.identifier.includes("admin") || body.identifier.includes("bayazid"));
     const isOfficer = body.identifier && body.identifier.includes("officer");
@@ -609,6 +647,9 @@ async function request(endpoint, options = {}) {
 export const api = {
   // Auth
   login: (identifier, password) => request("/auth/login", { method: "POST", body: { identifier, password } }),
+  loginWithOTP: (destination, code) => request("/auth/login-otp", { method: "POST", body: { destination, code } }),
+  sendOTP: (destination, purpose = "login") => request("/auth/send-otp", { method: "POST", body: { destination, purpose } }),
+  verifyOTP: (destination, code) => request("/auth/verify-otp", { method: "POST", body: { destination, code } }),
   register: (data) => request("/auth/register", { method: "POST", body: data }),
   getMe: (userId) => request(`/auth/me${userId ? `?user_id=${userId}` : ""}`),
   getDemoUsers: () => request("/auth/demo-users"),
@@ -648,5 +689,10 @@ export const api = {
 
   // O(log N) High-Performance Binary Search API
   searchBinary: (query, category = "all", limit = 25) =>
-    request(`/search/binary?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}&limit=${limit}`)
+    request(`/search/binary?q=${encodeURIComponent(query)}&category=${encodeURIComponent(category)}&limit=${limit}`),
+
+  // C++ Native Hybrid Acceleration Engine & Benchmark
+  getEngineStatus: () => request("/engine/status"),
+  runBenchmark: (operations = 20000) => request(`/benchmark?operations=${operations}`),
+  detectFraudGraph: (transfers) => request("/fraud/detect-graph", { method: "POST", body: transfers })
 };

@@ -12,7 +12,18 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-import engine
+try:
+    import engine
+except ImportError:
+    from backend import engine
+
+try:
+    import cpp_bridge
+except ImportError:
+    try:
+        from backend import cpp_bridge
+    except ImportError:
+        cpp_bridge = None
 
 app = FastAPI(
     title="LandGuard AI — Unified Digital Land Security Platform",
@@ -81,6 +92,17 @@ class RegisterRequest(BaseModel):
     nid: Optional[str] = ""
     role: Optional[str] = "citizen"
     designation: Optional[str] = ""
+    otp_code: Optional[str] = ""
+
+
+class SendOTPRequest(BaseModel):
+    destination: str = Field(min_length=3)
+    purpose: Optional[str] = "login"
+
+
+class VerifyOTPRequest(BaseModel):
+    destination: str = Field(min_length=3)
+    code: str = Field(min_length=4)
 
 
 class DeedVerifyRequest(BaseModel):
@@ -210,6 +232,36 @@ def register(req: RegisterRequest):
         "token": token,
         "user": user,
         "message": "নিবন্ধন সফল হয়েছে (Registration successful)"
+    }
+
+
+@app.post("/api/auth/send-otp")
+def send_otp(req: SendOTPRequest):
+    """Sends a 6-digit verification code to the given phone number or email."""
+    return engine.send_otp_code(req.destination, req.purpose)
+
+
+@app.post("/api/auth/verify-otp")
+def verify_otp(req: VerifyOTPRequest):
+    """Validates the 6-digit OTP verification code."""
+    res = engine.verify_otp_code(req.destination, req.code, consume=False)
+    if not res.get("verified"):
+        raise HTTPException(status_code=400, detail=res.get("message", "ভুল ওটিপি কোড"))
+    return res
+
+
+@app.post("/api/auth/login-otp")
+def login_otp(req: VerifyOTPRequest):
+    """Logs in or registers a citizen using verified phone/email OTP."""
+    user = engine.authenticate_with_otp(req.destination, req.code)
+    if not user:
+        raise HTTPException(status_code=400, detail="ভুল ওটিপি কোড প্রদান করা হয়েছে (Invalid OTP code)")
+    token = f"lg-token-{user['id']}-{secrets.token_hex(8)}"
+    return {
+        "success": True,
+        "token": token,
+        "user": user,
+        "message": "ওটিপি লগইন সফল হয়েছে (OTP Login successful)"
     }
 
 
@@ -493,6 +545,46 @@ def search_binary(q: str = "", category: str = "all", limit: int = 25):
     Scales smoothly to 100M - 500M records with O(log N) lookup complexity.
     """
     return engine.binary_search_land_records(query=q, category=category, limit=limit)
+
+
+# =====================================================================
+# C++ HIGH-PERFORMANCE ENGINE & BENCHMARK SUITE
+# =====================================================================
+
+@app.get("/api/engine/status")
+def engine_status():
+    """Returns runtime telemetry for the C++ Native Acceleration Engine."""
+    if cpp_bridge:
+        return {
+            "status": "online",
+            "service": "BhumiSathi C++ Accelerated Engine",
+            **cpp_bridge.get_engine_info()
+        }
+    return {
+        "status": "online",
+        "service": "BhumiSathi Fallback Engine",
+        "cpp_accelerated": False
+    }
+
+
+@app.get("/api/benchmark")
+def benchmark(operations: int = 20000):
+    """Runs a live side-by-side benchmark comparing Python vs C++ Native Engine.
+    Evaluates fuzzy string matches and graph cycle traversals.
+    """
+    if cpp_bridge:
+        return cpp_bridge.run_benchmark(operations)
+    return {"status": "error", "message": "C++ Bridge not loaded"}
+
+
+@app.post("/api/fraud/detect-graph")
+def detect_fraud_graph_api(transfers: List[dict]):
+    """Analyzes ownership transfer chains for circular cartel loops (A -> B -> C -> A),
+    double-sales, and rapid flips using C++ graph traversal.
+    """
+    if cpp_bridge:
+        return cpp_bridge.detect_fraud_graph(transfers)
+    return {"status": "error", "message": "C++ Bridge not loaded"}
 
 
 
