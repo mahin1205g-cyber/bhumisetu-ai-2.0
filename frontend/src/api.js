@@ -507,6 +507,37 @@ function getMockFallback(endpoint, options = {}) {
     return { success: true, message: "পদক্ষেপ সফলভাবে রেকর্ড করা হয়েছে।" };
   }
 
+  if (endpoint.includes("/mutation/start-review")) {
+    return { success: true, status: "Under Review", message: "নথি পর্যালোচনা শুরু হয়েছে।" };
+  }
+
+  if (endpoint.includes("/resubmit")) {
+    return { success: true, status: "Resubmitted", message: "সংশোধিত তথ্য সফলভাবে দাখিল হয়েছে।" };
+  }
+
+  if (endpoint.includes("/chat/status")) {
+    return {
+      status: "online",
+      ai_configured: false,
+      provider: "BhumiSathi Knowledge Engine",
+      supported_languages: ["bn", "bn-Latn", "en"]
+    };
+  }
+
+  if (endpoint.includes("/chat/message")) {
+    const msg = (body.message || "").toLowerCase();
+    let reply = "ধন্যবাদ। ভূমি প্রশাসন, নামজারি আবেদন বা দলিলের তথ্যের জন্য আপনার ট্র্যাকিং নম্বর লিখুন অথবা প্রশ্ন করুন।";
+    if (msg.includes("খরচ") || msg.includes("ফি") || msg.includes("টাকা")) {
+      reply = "ই-নামজারির মোট সরকারি ফি ১,১৭০/- টাকা (কোর্ট ফি ২০ + নোটিশ ৫০ + রেকর্ড সংশোধন ১০০০ + ডিসিআর ১০০ টাকা)।";
+    }
+    return {
+      reply,
+      ai_configured: false,
+      provider: "BhumiSathi Grounded Engine",
+      context_used: false
+    };
+  }
+
   // 10. Audit Logs
   if (endpoint.includes("/audit-logs")) {
     return [
@@ -671,7 +702,13 @@ export const api = {
   getMyMutations: (userId) => request(`/mutation/my-applications?user_id=${userId || 1}`),
   getAllMutations: (statusFilter) => request(`/mutation/all-applications${statusFilter ? `?status_filter=${encodeURIComponent(statusFilter)}` : ""}`),
   performMutationAction: (data) => request("/mutation/action", { method: "POST", body: data }),
+  startMutationReview: (trackingNo) => request(`/mutation/start-review/${encodeURIComponent(trackingNo)}`, { method: "POST" }),
+  resubmitMutation: (trackingNo, data) => request(`/mutation/${encodeURIComponent(trackingNo)}/resubmit`, { method: "POST", body: data }),
   getMutationStats: () => request("/mutation/stats"),
+
+  // AI Live Chat
+  sendChatMessage: (data) => request("/chat/message", { method: "POST", body: data }),
+  getChatStatus: () => request("/chat/status"),
 
   // P5: Due Diligence
   assessDueDiligence: (data, userId) => request(`/due-diligence/assess${userId ? `?user_id=${userId}` : ""}`, { method: "POST", body: data }),

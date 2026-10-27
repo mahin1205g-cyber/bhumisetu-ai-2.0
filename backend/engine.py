@@ -17,6 +17,7 @@ import secrets
 from datetime import datetime, date
 from pathlib import Path
 from contextlib import contextmanager
+from typing import Optional, List, Dict, Any
 
 try:
     import cpp_bridge
@@ -799,23 +800,57 @@ def list_deed_verifications(limit=20):
 VALID_MUTATION_STATUSES = [
     "Draft",
     "Submitted",
+    "Under Review",
+    "Correction Required",
+    "Resubmitted",
+    "Approved",
+    "Rejected",
+    # Legacy aliases preserved for backwards compatibility
     "Initial Review",
     "Document Verification",
     "Additional Information Required",
-    "Decision Pending",
-    "Approved",
-    "Rejected"
+    "Decision Pending"
 ]
 
+STATUS_CANONICAL_MAP = {
+    "draft": "Draft",
+    "submitted": "Submitted",
+    "under review": "Under Review",
+    "under_review": "Under Review",
+    "initial review": "Under Review",
+    "document verification": "Under Review",
+    "correction required": "Correction Required",
+    "correction_required": "Correction Required",
+    "additional information required": "Correction Required",
+    "resubmitted": "Resubmitted",
+    "decision pending": "Under Review",
+    "approved": "Approved",
+    "rejected": "Rejected"
+}
+
+ALLOWED_TRANSITIONS = {
+    "Draft": ["Submitted"],
+    "Submitted": ["Under Review", "Correction Required", "Approved", "Rejected"],
+    "Under Review": ["Approved", "Correction Required", "Rejected"],
+    "Correction Required": ["Resubmitted", "Rejected"],
+    "Resubmitted": ["Under Review", "Approved", "Correction Required", "Rejected"],
+    "Approved": [],
+    "Rejected": []
+}
+
 STATUS_TRANSLATIONS = {
-    "Draft": {"bn": "খসড়া সংরক্ষণ", "color": "slate"},
-    "Submitted": {"bn": "দাখিলকৃত (পেন্ডিং)", "color": "blue"},
-    "Initial Review": {"bn": "প্রাথমিক পর্যালোচনা", "color": "indigo"},
-    "Document Verification": {"bn": "কাগজপত্র যাচাই", "color": "amber"},
-    "Additional Information Required": {"bn": "অতিরিক্ত তথ্যের নোটিশ", "color": "orange"},
-    "Decision Pending": {"bn": "চূড়ান্ত সিদ্ধান্ত অপেক্ষমাণ", "color": "purple"},
-    "Approved": {"bn": "অনুমোদিত (ডেমো মঞ্জুরি)", "color": "emerald"},
-    "Rejected": {"bn": "খারিজ / বাতিল", "color": "rose"}
+    "Draft": {"bn": "খসড়া সংরক্ষণ", "en": "Draft", "color": "slate"},
+    "Submitted": {"bn": "দাখিলকৃত (পেন্ডিং)", "en": "Submitted", "color": "blue"},
+    "Under Review": {"bn": "নথি পর্যালোচনা চলছে", "en": "Under Review", "color": "indigo"},
+    "Correction Required": {"bn": "সংশোধনের অনুরোধ / তথ্য তলব", "en": "Correction Required", "color": "orange"},
+    "Resubmitted": {"bn": "সংশোধিত তথ্য দাখিলকৃত", "en": "Resubmitted", "color": "teal"},
+    "Approved": {"bn": "অনুমোদিত (ডেমো মঞ্জুরি)", "en": "Approved", "color": "emerald"},
+    "Rejected": {"bn": "খারিজ / বাতিল", "en": "Rejected", "color": "rose"},
+    # Legacy aliases
+    "Initial Review": {"bn": "নথি পর্যালোচনা চলছে", "en": "Under Review", "color": "indigo"},
+    "Document Verification": {"bn": "কাগজপত্র যাচাই", "en": "Under Review", "color": "amber"},
+    "Additional Information Required": {"bn": "সংশোধনের অনুরোধ / তথ্য তলব", "en": "Correction Required", "color": "orange"},
+    "Decision Pending": {"bn": "চূড়ান্ত সিদ্ধান্ত অপেক্ষমাণ", "en": "Under Review", "color": "purple"}
 }
 
 
@@ -998,9 +1033,18 @@ def list_mutation_applications(user_id=None, role=None, status_filter=None, limi
         return result
 
 
-def update_mutation_status(tracking_no: str, new_status: str, changed_by_name: str, changed_by_role: str, remarks: str = ""):
+def update_mutation_status(
+    tracking_no: str,
+    new_status: str,
+    changed_by_name: str,
+    changed_by_role: str,
+    remarks: str = "",
+    rejection_reason: str = "",
+    correction_details: str = ""
+):
     init()
-    if new_status not in VALID_MUTATION_STATUSES:
+    canonical_new = STATUS_CANONICAL_MAP.get(new_status.strip().lower())
+    if not canonical_new or canonical_new not in VALID_MUTATION_STATUSES:
         raise ValueError(f"Invalid status: {new_status}")
 
     app = get_mutation_application(tracking_no)
@@ -1008,42 +1052,134 @@ def update_mutation_status(tracking_no: str, new_status: str, changed_by_name: s
         raise ValueError("Application not found")
 
     old_status = app["status"]
-    now_iso = datetime.now().isoformat()
+    canonical_old = STATUS_CANONICAL_MAP.get(old_status.strip().lower(), old_status)
 
-    rejection_reason = remarks if new_status == "Rejected" else ""
-    review_notes = remarks if new_status != "Rejected" else ""
+    # State transition validation
+    if canonical_old != canonical_new:
+        allowed = ALLOWED_TRANSITIONS.get(canonical_old, [])
+        if canonical_new not in allowed:
+            raise ValueError(f"Invalid status transition from '{old_status}' to '{canonical_new}'")
+
+    # Rejection reason validation
+    final_rejection_reason = rejection_reason.strip() or remarks.strip()
+    if canonical_new == "Rejected" and not final_rejection_reason:
+        raise ValueError("Rejection reason is required")
+
+    # Correction details validation
+    final_correction_details = correction_details.strip() or remarks.strip()
+    if canonical_new == "Correction Required" and not final_correction_details:
+        raise ValueError("Correction details or notice remarks are required")
+
+    now_iso = datetime.now().isoformat()
+    rejection_reason_to_store = final_rejection_reason if canonical_new == "Rejected" else (app.get("rejection_reason") or "")
+    review_notes_to_store = final_correction_details if canonical_new == "Correction Required" else (remarks.strip() or app.get("review_notes") or "")
 
     with conn() as c:
         c.execute(
             """UPDATE mutation_applications SET
                 status = ?,
-                review_notes = COALESCE(?, review_notes),
-                rejection_reason = COALESCE(?, rejection_reason),
+                review_notes = ?,
+                rejection_reason = ?,
                 updated_at = ?
             WHERE tracking_no = ?""",
-            (new_status, review_notes, rejection_reason, now_iso, tracking_no)
+            (canonical_new, review_notes_to_store, rejection_reason_to_store, now_iso, tracking_no)
         )
 
         c.execute(
             """INSERT INTO mutation_status_history (
                 application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, remarks, created_at
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-            (app["id"], tracking_no, old_status, new_status, changed_by_name, changed_by_role, remarks, now_iso)
+            (app["id"], tracking_no, old_status, canonical_new, changed_by_name, changed_by_role, remarks.strip(), now_iso)
         )
 
     log_audit(changed_by_name, changed_by_role, "MUTATION_STATUS_CHANGE", "P4_MUTATION",
-              f"Changed {tracking_no} status from '{old_status}' to '{new_status}' (Remarks: {remarks})")
+              f"Changed {tracking_no} status from '{old_status}' to '{canonical_new}' (Remarks: {remarks})")
 
     # Notify citizen
-    st_bn = STATUS_TRANSLATIONS.get(new_status, {}).get("bn", new_status)
+    st_bn = STATUS_TRANSLATIONS.get(canonical_new, {}).get("bn", canonical_new)
     add_notification(
         app["user_id"], "citizen",
         f"ই-নামজারি আবেদনের অগ্রগতি ({tracking_no})",
         f"E-Namjari Status Update ({tracking_no})",
-        f"আপনার আবেদনটির স্ট্যাটাস পরিবর্তিত হয়ে '{st_bn}' হয়েছে। মন্তব্য: {remarks or 'স্বাভাবিক প্রক্রিয়াধীন'}",
-        f"Application status changed to '{new_status}'. Remarks: {remarks or 'Processing normally'}",
-        "success" if new_status == "Approved" else "warning" if new_status in ["Rejected", "Additional Information Required"] else "info",
+        f"আপনার আবেদনটির স্ট্যাটাস পরিবর্তিত হয়ে '{st_bn}' হয়েছে। মন্তব্য: {remarks.strip() or 'স্বাভাবিক প্রক্রিয়াধীন'}",
+        f"Application status changed to '{canonical_new}'. Remarks: {remarks.strip() or 'Processing normally'}",
+        "success" if canonical_new == "Approved" else "warning" if canonical_new in ["Rejected", "Correction Required", "Additional Information Required"] else "info",
         f"/mutation/track?tracking_no={tracking_no}"
+    )
+
+    return get_mutation_application(tracking_no)
+
+
+def resubmit_mutation_application(tracking_no: str, user_id: Optional[int], user_name: str, corrected_data: dict):
+    """Allows an applicant to provide corrected documents/information and resubmit an application in Correction Required status."""
+    init()
+    app = get_mutation_application(tracking_no)
+    if not app:
+        raise ValueError("Application not found")
+
+    old_status = app["status"]
+    canonical_old = STATUS_CANONICAL_MAP.get(old_status.strip().lower(), old_status)
+
+    if canonical_old != "Correction Required":
+        raise ValueError(f"Application cannot be resubmitted from current status '{old_status}'. It must be in 'Correction Required' status.")
+
+    applicant_remarks = corrected_data.get("remarks", "").strip() or "সংশোধিত তথ্য ও প্রয়োজনীয় প্রমাণক দাখিল করা হয়েছে।"
+    docs = corrected_data.get("supporting_docs")
+    if docs is None:
+        docs = app.get("supporting_docs", [])
+    elif isinstance(docs, str):
+        try:
+            docs = json.loads(docs)
+        except Exception:
+            docs = [docs]
+
+    now_iso = datetime.now().isoformat()
+
+    with conn() as c:
+        c.execute(
+            """UPDATE mutation_applications SET
+                applicant_phone = COALESCE(?, applicant_phone),
+                applicant_address = COALESCE(?, applicant_address),
+                khatian_no = COALESCE(?, khatian_no),
+                plot_no = COALESCE(?, plot_no),
+                land_area = COALESCE(?, land_area),
+                supporting_docs = ?,
+                status = 'Resubmitted',
+                review_notes = ?,
+                updated_at = ?
+            WHERE tracking_no = ?""",
+            (
+                corrected_data.get("applicant_phone"),
+                corrected_data.get("applicant_address"),
+                corrected_data.get("khatian_no"),
+                corrected_data.get("plot_no"),
+                float(corrected_data.get("land_area")) if corrected_data.get("land_area") else None,
+                json.dumps(docs, ensure_ascii=False),
+                applicant_remarks,
+                now_iso,
+                tracking_no
+            )
+        )
+
+        c.execute(
+            """INSERT INTO mutation_status_history (
+                application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, remarks, created_at
+            ) VALUES (?, ?, ?, 'Resubmitted', ?, 'citizen', ?, ?)""",
+            (app["id"], tracking_no, old_status, user_name, applicant_remarks, now_iso)
+        )
+
+    log_audit(user_name, "citizen", "MUTATION_RESUBMIT", "P4_MUTATION",
+              f"Resubmitted corrected application {tracking_no}. Remarks: {applicant_remarks}")
+
+    # Notify officer
+    add_notification(
+        None, "officer",
+        f"সংশোধিত ই-নামজারি আবেদন ({tracking_no})",
+        f"Resubmitted E-Namjari Application ({tracking_no})",
+        f"আবেদনকারী {user_name} তলবকৃত তথ্য সংশোধন করে পুনরায় দাখিল করেছেন।",
+        f"Applicant {user_name} has resubmitted corrected information for {tracking_no}.",
+        "info",
+        f"/officer/review/{tracking_no}"
     )
 
     return get_mutation_application(tracking_no)

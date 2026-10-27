@@ -25,6 +25,14 @@ except ImportError:
     except ImportError:
         cpp_bridge = None
 
+try:
+    from chat_service import chat_service
+except ImportError:
+    try:
+        from backend.chat_service import chat_service
+    except ImportError:
+        chat_service = None
+
 app = FastAPI(
     title="LandGuard AI — Unified Digital Land Security Platform",
     description="Digital Land Security Platform for Bangladesh (P2 + P4 + P5)",
@@ -143,9 +151,29 @@ class MutationApplyRequest(BaseModel):
 class MutationActionRequest(BaseModel):
     tracking_no: str
     new_status: str
-    changed_by_name: str
-    changed_by_role: str
+    changed_by_name: Optional[str] = "কর্মকর্তা"
+    changed_by_role: Optional[str] = "officer"
     remarks: Optional[str] = ""
+    rejection_reason: Optional[str] = ""
+    correction_details: Optional[str] = ""
+
+
+class MutationResubmitRequest(BaseModel):
+    applicant_name: Optional[str] = None
+    applicant_phone: Optional[str] = None
+    applicant_address: Optional[str] = None
+    plot_no: Optional[str] = None
+    khatian_no: Optional[str] = None
+    land_area: Optional[float] = None
+    deed_no: Optional[str] = None
+    supporting_docs: Optional[List[str]] = None
+    correction_notes: Optional[str] = ""
+
+
+class ChatMessageRequest(BaseModel):
+    message: str = Field(min_length=1)
+    history: Optional[List[dict]] = []
+    tracking_no: Optional[str] = None
 
 
 class DueDiligenceRequest(BaseModel):
@@ -265,18 +293,26 @@ def login_otp(req: VerifyOTPRequest):
     }
 
 
+def extract_user_from_auth_header(authorization: Optional[str]) -> Optional[dict]:
+    if not authorization:
+        return None
+    token = authorization.replace("Bearer ", "").strip()
+    if "lg-token-" in token:
+        parts = token.split("-")
+        if len(parts) >= 3 and parts[2].isdigit():
+            return engine.get_user_by_id(int(parts[2]))
+    return None
+
+
 @app.get("/api/auth/me")
 def get_current_user(user_id: Optional[int] = None, authorization: Optional[str] = Header(None)):
-    uid = user_id
-    if not uid and authorization and "lg-token-" in authorization:
-        parts = authorization.replace("Bearer ", "").split("-")
-        if len(parts) >= 3 and parts[2].isdigit():
-            uid = int(parts[2])
-
-    if uid:
-        user = engine.get_user_by_id(uid)
+    if user_id:
+        user = engine.get_user_by_id(user_id)
         if user:
             return user
+    user = extract_user_from_auth_header(authorization)
+    if user:
+        return user
     # Fallback default demo citizen
     return {
         "id": 1,
@@ -418,9 +454,17 @@ def get_verification_report(ref: str):
 # =====================================================================
 
 @app.post("/api/mutation/apply")
-def apply_mutation(req: MutationApplyRequest, user_id: Optional[int] = None):
+def apply_mutation(req: MutationApplyRequest, user_id: Optional[int] = None, authorization: Optional[str] = Header(None)):
+    uid = user_id
+    uname = req.applicant_name
+    auth_user = extract_user_from_auth_header(authorization)
+    if auth_user:
+        if not uid:
+            uid = auth_user["id"]
+        if not uname:
+            uname = auth_user["name"]
     app_data = req.model_dump()
-    res = engine.create_mutation_application(app_data, user_id=user_id, user_name=req.applicant_name)
+    res = engine.create_mutation_application(app_data, user_id=uid, user_name=uname)
     return res
 
 
@@ -441,8 +485,12 @@ def track_mutation(tracking_no: str):
 
 
 @app.get("/api/mutation/my-applications")
-def my_mutations(user_id: Optional[int] = 1):
-    return engine.list_mutation_applications(user_id=user_id, role="citizen")
+def my_mutations(user_id: Optional[int] = None, authorization: Optional[str] = Header(None)):
+    uid = user_id
+    if not uid:
+        auth_user = extract_user_from_auth_header(authorization)
+        uid = auth_user["id"] if auth_user else 1
+    return engine.list_mutation_applications(user_id=uid, role="citizen")
 
 
 @app.get("/api/mutation/all-applications")
@@ -450,19 +498,143 @@ def all_mutations(status_filter: Optional[str] = None):
     return engine.list_mutation_applications(status_filter=status_filter)
 
 
+@app.post("/api/mutation/start-review/{tracking_no}")
+def start_review_endpoint(tracking_no: str, authorization: Optional[str] = Header(None)):
+    """Transitions an application to 'Under Review' when an authorized officer begins review."""
+    auth_user = extract_user_from_auth_header(authorization)
+    if auth_user and auth_user.get("role") not in ("officer", "admin"):
+        raise HTTPException(status_code=403, detail="শুধুমাত্র দায়িত্বপ্রাপ্ত কর্মকর্তা নথি পর্যালোচনা শুরু করতে পারেন।")
+    
+    officer_name = auth_user.get("name") if auth_user else "সহকারী কমিশনার (ভূমি)"
+    officer_role = auth_user.get("role") if auth_user else "officer"
+
+    app_record = engine.get_mutation_application(tracking_no)
+    if not app_record:
+        raise HTTPException(status_code=404, detail="আবেদন পাওয়া যায়নি (Application not found)")
+
+    cur_status = app_record.get("status")
+    if cur_status == "Under Review":
+        return app_record
+
+    try:
+        return engine.update_mutation_status(
+            tracking_no=tracking_no,
+            new_status="Under Review",
+            changed_by_name=officer_name,
+            changed_by_role=officer_role,
+            remarks="সহকারী কমিশনার (ভূমি) কর্তৃক নথি পর্যালোচনা শুরু হয়েছে"
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/mutation/{tracking_no}/resubmit")
+def resubmit_mutation_endpoint(
+    tracking_no: str,
+    req: MutationResubmitRequest,
+    authorization: Optional[str] = Header(None)
+):
+    """Allows applicant to resubmit corrections when an application is in 'Correction Required' status."""
+    auth_user = extract_user_from_auth_header(authorization)
+    uid = auth_user["id"] if auth_user else 1
+    uname = auth_user["name"] if auth_user else "আবেদনকারী"
+
+    try:
+        res = engine.resubmit_mutation_application(
+            tracking_no=tracking_no,
+            user_id=uid,
+            user_name=uname,
+            corrected_data=req.model_dump(exclude_unset=True)
+        )
+        return res
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 @app.post("/api/mutation/action")
-def mutation_action(req: MutationActionRequest):
+def mutation_action(req: MutationActionRequest, authorization: Optional[str] = Header(None)):
+    """Role-protected officer action endpoint to transition mutation application status."""
+    auth_user = extract_user_from_auth_header(authorization)
+    if auth_user:
+        if auth_user.get("role") not in ("officer", "admin"):
+            raise HTTPException(
+                status_code=403,
+                detail="অননুমোদিত: শুধুমাত্র কর্মকর্তা বা অ্যাডমিন আবেদন পর্যালোচনা ও সিদ্ধান্ত নিতে পারেন।"
+            )
+        officer_name = auth_user.get("name") or req.changed_by_name
+        officer_role = auth_user.get("role") or req.changed_by_role
+    else:
+        # Fallback check for direct client calls without token headers
+        if req.changed_by_role not in ("officer", "admin"):
+            raise HTTPException(
+                status_code=403,
+                detail="অননুমোদিত: শুধুমাত্র কর্মকর্তা বা অ্যাডমিন আবেদন পর্যালোচনা ও সিদ্ধান্ত নিতে পারেন।"
+            )
+        officer_name = req.changed_by_name
+        officer_role = req.changed_by_role
+
     try:
         updated = engine.update_mutation_status(
             tracking_no=req.tracking_no,
             new_status=req.new_status,
-            changed_by_name=req.changed_by_name,
-            changed_by_role=req.changed_by_role,
-            remarks=req.remarks or ""
+            changed_by_name=officer_name,
+            changed_by_role=officer_role,
+            remarks=req.remarks or "",
+            rejection_reason=req.rejection_reason or "",
+            correction_details=req.correction_details or ""
         )
         return updated
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# =====================================================================
+# AI LIVE CHAT CONVERSATIONAL ASSISTANT ROUTES
+# =====================================================================
+
+@app.post("/api/chat/message")
+async def chat_message_api(req: ChatMessageRequest, authorization: Optional[str] = Header(None)):
+    """Conversational AI chat handler for Bangla, Banglish, and English with dynamic DB grounding."""
+    auth_user = extract_user_from_auth_header(authorization)
+    user_id = auth_user["id"] if auth_user else None
+    user_name = auth_user["name"] if auth_user else None
+
+    if chat_service:
+        resp = await chat_service.generate_response(
+            message=req.message,
+            history=req.history or [],
+            user_id=user_id,
+            user_name=user_name,
+            tracking_no=req.tracking_no
+        )
+        return resp
+    
+    return {
+        "reply": "ভূমিসাথী চ্যাট সার্ভিস বর্তমানে উপলব্ধ নয়। অনুগ্রহ করে কিছুক্ষণ পর চেষ্টা করুন।",
+        "ai_configured": False,
+        "provider": "Offline",
+        "referenced_application": None,
+        "context_used": False
+    }
+
+
+@app.get("/api/chat/status")
+def chat_status_api():
+    """Returns AI chat service health, provider, and configuration state."""
+    if chat_service:
+        return {
+            "status": "online",
+            "ai_configured": chat_service.is_ai_configured(),
+            "provider": chat_service.get_provider_name(),
+            "supported_languages": ["bn (বাংলা)", "bn-Latn (Banglish)", "en (English)"],
+            "features": [
+                "Real-time e-Namjari application status lookup",
+                "Official Bangladesh land law & fee guidance (৳1,170)",
+                "CS, SA, RS, BS Khatian hierarchy advisory",
+                "Deed anomaly & registry office workflow guidance"
+            ]
+        }
+    return {"status": "offline", "ai_configured": False, "provider": "None"}
 
 
 @app.get("/api/mutation/stats")

@@ -132,7 +132,7 @@ def test_p4_smart_e_namjari_workflow():
         "remarks": "কাগজপত্র যাচাই সন্তোষজনক"
     })
     assert action1.status_code == 200
-    assert action1.json()["status"] == "Document Verification"
+    assert action1.json()["status"] in ("Document Verification", "Under Review")
 
     # 4. Officer Review Action: Approved
     action2 = client.post("/api/mutation/action", json={

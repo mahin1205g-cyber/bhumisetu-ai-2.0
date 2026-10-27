@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
+import { api } from '../api';
 import {
   INITIAL_GREETING,
   QUICK_PROMPTS,
@@ -24,11 +25,29 @@ export default function LiveChatWidget({ setActiveTab }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [feedbackState, setFeedbackState] = useState({});
   const [isListening, setIsListening] = useState(false);
+  const [chatStatus, setChatStatus] = useState({
+    status: 'online',
+    provider: 'BhumiSathi Knowledge Engine',
+    ai_configured: false
+  });
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
   const streamIntervalRef = useRef(null);
+
+  // Fetch AI backend service status
+  useEffect(() => {
+    api.getChatStatus()
+      .then(res => {
+        if (res && res.provider) {
+          setChatStatus(res);
+        }
+      })
+      .catch(err => {
+        console.warn('Chat status lookup notice:', err);
+      });
+  }, []);
 
   // Initialize greeting on first load or language change
   useEffect(() => {
@@ -154,7 +173,7 @@ export default function LiveChatWidget({ setActiveTab }) {
     }, stepInterval);
   };
 
-  const handleSend = (queryToSend) => {
+  const handleSend = async (queryToSend) => {
     const textToSend = typeof queryToSend === 'string' ? queryToSend : input;
     if (!textToSend || !textToSend.trim() || isStreaming) return;
 
@@ -169,11 +188,43 @@ export default function LiveChatWidget({ setActiveTab }) {
     setInput('');
     setIsThinking(true);
 
-    // Realistic delay simulating AI reasoning
-    setTimeout(() => {
-      const response = askLandAI(textToSend, lang);
-      streamResponse(response.answer, response.action);
-    }, 650);
+    try {
+      const historyPayload = messages
+        .filter(m => m.id !== 'welcome' && m.id !== 'welcome-reset')
+        .slice(-8)
+        .map(m => ({ sender: m.sender, text: m.text }));
+
+      const response = await api.sendChatMessage({
+        message: textToSend.trim(),
+        history: historyPayload
+      });
+
+      if (response && response.provider) {
+        setChatStatus(prev => ({
+          ...prev,
+          provider: response.provider,
+          ai_configured: response.ai_configured
+        }));
+      }
+
+      let action = null;
+      if (response.referenced_application) {
+        action = {
+          type: 'navigate',
+          tab: 'mutation-track',
+          trackingNo: response.referenced_application.tracking_no,
+          label: lang === 'bn'
+            ? `আবেদন ট্র্যাকিং দেখুন (${response.referenced_application.tracking_no})`
+            : `Track Application (${response.referenced_application.tracking_no})`
+        };
+      }
+
+      streamResponse(response.reply || response.answer, action);
+    } catch (err) {
+      console.warn('Backend chat API failed, using grounded fallback engine:', err);
+      const fallback = askLandAI(textToSend, lang);
+      streamResponse(fallback.answer, fallback.action);
+    }
   };
 
   const stopGeneration = () => {
@@ -330,12 +381,12 @@ export default function LiveChatWidget({ setActiveTab }) {
                     {lang === 'bn' ? 'ভূমিসাথী এআই সহকারী' : 'BhumiSathi AI Assistant'}
                   </h3>
                   <span className="bg-[#c59b27]/30 text-[#ffd700] text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#c59b27]/50 font-bold">
-                    GPT-Land
+                    {chatStatus.ai_configured ? 'Gemini Live' : 'Domain AI'}
                   </span>
                 </div>
-                <p className="text-[11px] text-emerald-200 flex items-center gap-1">
-                  <span className="inline-block w-1.5 h-1.5 bg-emerald-400 rounded-full"></span>
-                  {lang === 'bn' ? 'অনলাইন · রিয়েলটাইম ভূমি বিশেষজ্ঞ' : 'Online · Realtime Land Expert'}
+                <p className="text-[11px] text-emerald-200 flex items-center gap-1.5">
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${chatStatus.ai_configured ? 'bg-emerald-400 animate-ping' : 'bg-amber-400'}`}></span>
+                  <span className="truncate max-w-[200px]">{chatStatus.provider || (lang === 'bn' ? 'অনলাইন · রিয়েলটাইম ভূমি বিশেষজ্ঞ' : 'Online · Land Expert')}</span>
                 </p>
               </div>
             </div>
@@ -430,7 +481,7 @@ export default function LiveChatWidget({ setActiveTab }) {
                             }}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0b462d] hover:bg-[#12583a] text-white text-xs font-semibold shadow hover:scale-105 transition"
                           >
-                            <span>{lang === 'bn' ? msg.action.labelBn : msg.action.labelEn}</span>
+                            <span>{msg.action.label || (lang === 'bn' ? msg.action.labelBn : msg.action.labelEn)}</span>
                             <ExternalLink className="w-3.5 h-3.5" />
                           </button>
                         </div>
