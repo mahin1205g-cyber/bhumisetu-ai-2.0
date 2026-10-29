@@ -6,3 +6,4 @@ httpx
 pytest
 python-multipart
 pypdf
+python-dotenv

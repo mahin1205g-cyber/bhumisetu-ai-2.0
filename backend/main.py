@@ -12,6 +12,13 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+try:  # optional: load local .env for developer setups (never required in production)
+    from dotenv import load_dotenv
+
+    load_dotenv(Path(__file__).parent.parent / ".env")
+except ImportError:
+    pass
+
 try:
     import engine
 except ImportError:
@@ -171,7 +178,7 @@ class MutationResubmitRequest(BaseModel):
 
 
 class ChatMessageRequest(BaseModel):
-    message: str = Field(min_length=1)
+    message: str = Field(min_length=1, max_length=4000)
     history: Optional[List[dict]] = []
     tracking_no: Optional[str] = None
 
@@ -594,47 +601,54 @@ def mutation_action(req: MutationActionRequest, authorization: Optional[str] = H
 
 @app.post("/api/chat/message")
 async def chat_message_api(req: ChatMessageRequest, authorization: Optional[str] = Header(None)):
-    """Conversational AI chat handler for Bangla, Banglish, and English with dynamic DB grounding."""
+    """Conversational AI chat handler (Bengali / Banglish / English) with authorised DB tools."""
+    if not req.message.strip():
+        raise HTTPException(status_code=422, detail="Empty message: please type a question.")
+
     auth_user = extract_user_from_auth_header(authorization)
-    user_id = auth_user["id"] if auth_user else None
-    user_name = auth_user["name"] if auth_user else None
 
     if chat_service:
-        resp = await chat_service.generate_response(
+        return await chat_service.generate_response(
             message=req.message,
             history=req.history or [],
-            user_id=user_id,
-            user_name=user_name,
-            tracking_no=req.tracking_no
+            user=auth_user,
+            tracking_no=req.tracking_no,
         )
-        return resp
-    
+
     return {
-        "reply": "ভূমিসাথী চ্যাট সার্ভিস বর্তমানে উপলব্ধ নয়। অনুগ্রহ করে কিছুক্ষণ পর চেষ্টা করুন।",
+        "reply": "ভূমিসেতু চ্যাট সার্ভিস বর্তমানে উপলব্ধ নয়। অনুগ্রহ করে কিছুক্ষণ পর চেষ্টা করুন। / The Bhumisetu chat service is unavailable right now.",
         "ai_configured": False,
-        "provider": "Offline",
+        "provider": "Unavailable",
+        "model": None,
+        "context_used": False,
         "referenced_application": None,
-        "context_used": False
+        "error": {"code": "service_unavailable", "message": "Chat service failed to load.", "retryable": True},
     }
 
 
 @app.get("/api/chat/status")
 def chat_status_api():
-    """Returns AI chat service health, provider, and configuration state."""
+    """Returns AI chat service health, provider, model, and configuration state (no secrets)."""
     if chat_service:
+        configured = chat_service.is_ai_configured()
         return {
             "status": "online",
-            "ai_configured": chat_service.is_ai_configured(),
+            "ai_configured": configured,
             "provider": chat_service.get_provider_name(),
+            "model": chat_service.get_model_name(),
             "supported_languages": ["bn (বাংলা)", "bn-Latn (Banglish)", "en (English)"],
             "features": [
-                "Real-time e-Namjari application status lookup",
-                "Official Bangladesh land law & fee guidance (৳1,170)",
-                "CS, SA, RS, BS Khatian hierarchy advisory",
-                "Deed anomaly & registry office workflow guidance"
-            ]
+                "Natural multi-turn conversation with intent understanding",
+                "Authorised lookup of the signed-in user's e-Namjari status",
+                "Bangladesh land records, khatian and deed guidance",
+                "Due diligence, fraud-prevention and feature navigation help",
+            ],
+            "setup_hint": None if configured else (
+                "Set GEMINI_API_KEY or OPENAI_API_KEY in the backend environment. "
+                "See README → AI Assistant Configuration."
+            ),
         }
-    return {"status": "offline", "ai_configured": False, "provider": "None"}
+    return {"status": "offline", "ai_configured": False, "provider": "Unavailable", "model": None}
 
 
 @app.get("/api/mutation/stats")

@@ -3,14 +3,13 @@ import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import {
   INITIAL_GREETING,
-  QUICK_PROMPTS,
-  askLandAI
+  QUICK_PROMPTS
 } from '../utils/landChatbotEngine';
 import {
   MessageSquare, X, Send, Bot, User, Sparkles,
   Maximize2, Minimize2, RotateCcw, Copy, Check,
   ThumbsUp, ThumbsDown, Mic, MicOff, ExternalLink,
-  ChevronDown
+  ChevronDown, AlertTriangle, RefreshCw, WifiOff
 } from 'lucide-react';
 
 export default function LiveChatWidget({ setActiveTab }) {
@@ -26,15 +25,17 @@ export default function LiveChatWidget({ setActiveTab }) {
   const [feedbackState, setFeedbackState] = useState({});
   const [isListening, setIsListening] = useState(false);
   const [chatStatus, setChatStatus] = useState({
-    status: 'online',
-    provider: 'BhumiSathi Knowledge Engine',
-    ai_configured: false
+    status: 'checking',
+    provider: '',
+    model: null,
+    ai_configured: null
   });
 
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
   const recognitionRef = useRef(null);
   const streamIntervalRef = useRef(null);
+  const inFlightRef = useRef(false);
 
   // Fetch AI backend service status
   useEffect(() => {
@@ -46,10 +47,11 @@ export default function LiveChatWidget({ setActiveTab }) {
       })
       .catch(err => {
         console.warn('Chat status lookup notice:', err);
+        setChatStatus({ status: 'offline', provider: '', model: null, ai_configured: null });
       });
   }, []);
 
-  // Initialize greeting on first load or language change
+  // Initialize greeting on first load
   useEffect(() => {
     if (messages.length === 0) {
       setMessages([
@@ -58,6 +60,7 @@ export default function LiveChatWidget({ setActiveTab }) {
           sender: 'ai',
           text: INITIAL_GREETING[lang]?.text || INITIAL_GREETING.bn.text,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          isWelcome: true,
           action: null
         }
       ]);
@@ -127,13 +130,14 @@ export default function LiveChatWidget({ setActiveTab }) {
     }
   };
 
-  // Stream AI response like ChatGPT
+  // Reveal the (real) backend answer progressively for a responsive feel.
   const streamResponse = (fullText, action) => {
     setIsThinking(false);
     setIsStreaming(true);
 
     const messageId = Date.now().toString();
     const timestamp = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const text = fullText || '';
 
     // Append empty message placeholder
     setMessages(prev => [
@@ -147,17 +151,18 @@ export default function LiveChatWidget({ setActiveTab }) {
       }
     ]);
 
-    let currentIndex = 0;
-    const chunkSize = 3; // stream 3 characters/words at a time for fast realistic feel
-    const stepInterval = 16; // 60fps pacing
+    // Drive the reveal by elapsed wall-clock time, not tick count: browsers throttle
+    // timers in background tabs, which would otherwise leave the answer half-rendered.
+    const REVEAL_MS = 1400;
+    const startedAt = Date.now();
 
     if (streamIntervalRef.current) {
       clearInterval(streamIntervalRef.current);
     }
 
     streamIntervalRef.current = setInterval(() => {
-      currentIndex += chunkSize;
-      const partialText = fullText.slice(0, currentIndex);
+      const progress = Math.min(1, (Date.now() - startedAt) / REVEAL_MS);
+      const partialText = text.slice(0, Math.ceil(text.length * progress));
 
       setMessages(prev =>
         prev.map(msg =>
@@ -165,22 +170,40 @@ export default function LiveChatWidget({ setActiveTab }) {
         )
       );
 
-      if (currentIndex >= fullText.length) {
+      if (progress >= 1) {
         clearInterval(streamIntervalRef.current);
         streamIntervalRef.current = null;
         setIsStreaming(false);
       }
-    }, stepInterval);
+    }, 16);
   };
 
-  const handleSend = async (queryToSend) => {
-    const textToSend = typeof queryToSend === 'string' ? queryToSend : input;
-    if (!textToSend || !textToSend.trim() || isStreaming) return;
+  const appendAssistantMessage = (text, extra = {}) => {
+    setIsThinking(false);
+    setIsStreaming(false);
+    setMessages(prev => [
+      ...prev,
+      {
+        id: `ai-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+        sender: 'ai',
+        text,
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        ...extra
+      }
+    ]);
+  };
+
+  const handleSend = async (queryToSend, excludeIds = []) => {
+    const raw = typeof queryToSend === 'string' ? queryToSend : input;
+    const textToSend = (raw || '').trim();
+    if (!textToSend || inFlightRef.current || isThinking || isStreaming) return;
+
+    inFlightRef.current = true;
 
     const userMessage = {
-      id: Date.now().toString(),
+      id: `user-${Date.now()}`,
       sender: 'user',
-      text: textToSend.trim(),
+      text: textToSend,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     };
 
@@ -190,21 +213,36 @@ export default function LiveChatWidget({ setActiveTab }) {
 
     try {
       const historyPayload = messages
-        .filter(m => m.id !== 'welcome' && m.id !== 'welcome-reset')
-        .slice(-8)
+        .filter(m => !m.isWelcome && !m.isError && m.text && !excludeIds.includes(m.id))
+        .slice(-10)
         .map(m => ({ sender: m.sender, text: m.text }));
 
       const response = await api.sendChatMessage({
-        message: textToSend.trim(),
+        message: textToSend,
         history: historyPayload
       });
 
       if (response && response.provider) {
         setChatStatus(prev => ({
           ...prev,
+          status: 'online',
           provider: response.provider,
+          model: response.model ?? prev.model,
           ai_configured: response.ai_configured
         }));
+      }
+
+      // The backend reports provider/config failures explicitly; show them as
+      // errors with retry instead of pretending an answer was generated.
+      if (response && response.error) {
+        appendAssistantMessage(response.reply, {
+          isError: true,
+          errorCode: response.error.code,
+          retryable: Boolean(response.error.retryable),
+          retryText: textToSend,
+          relatedUserId: userMessage.id
+        });
+        return;
       }
 
       let action = null;
@@ -219,12 +257,31 @@ export default function LiveChatWidget({ setActiveTab }) {
         };
       }
 
-      streamResponse(response.reply || response.answer, action);
+      streamResponse(response.reply, action);
     } catch (err) {
-      console.warn('Backend chat API failed, using grounded fallback engine:', err);
-      const fallback = askLandAI(textToSend, lang);
-      streamResponse(fallback.answer, fallback.action);
+      console.warn('Chat API request failed:', err);
+      setChatStatus(prev => ({ ...prev, status: 'offline' }));
+      const offlineText = lang === 'bn'
+        ? '⚠️ সার্ভারের সাথে সংযোগ করা যায়নি, তাই কোনো উত্তর তৈরি হয়নি। ইন্টারনেট সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।'
+        : '⚠️ Could not reach the assistant server, so no answer was generated. Please check your connection and retry.';
+      appendAssistantMessage(offlineText, {
+        isError: true,
+        errorCode: 'network_error',
+        retryable: true,
+        retryText: textToSend,
+        relatedUserId: userMessage.id
+      });
+    } finally {
+      inFlightRef.current = false;
+      setIsThinking(false);
     }
+  };
+
+  const handleRetry = (msg) => {
+    if (!msg.retryText || inFlightRef.current) return;
+    const excludeIds = [msg.id, msg.relatedUserId].filter(Boolean);
+    setMessages(prev => prev.filter(m => !excludeIds.includes(m.id)));
+    handleSend(msg.retryText, excludeIds);
   };
 
   const stopGeneration = () => {
@@ -244,6 +301,7 @@ export default function LiveChatWidget({ setActiveTab }) {
         sender: 'ai',
         text: INITIAL_GREETING[lang]?.text || INITIAL_GREETING.bn.text,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        isWelcome: true,
         action: null
       }
     ]);
@@ -381,12 +439,22 @@ export default function LiveChatWidget({ setActiveTab }) {
                     {lang === 'bn' ? 'ভূমিসেতু এআই সহকারী' : 'Bhumisetu AI Assistant'}
                   </h3>
                   <span className="bg-[#F5B544]/30 text-[#F5B544] text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#F5B544]/50 font-bold">
-                    {chatStatus.ai_configured ? 'Gemini Live' : 'Domain AI'}
+                    {chatStatus.ai_configured
+                      ? 'AI Live'
+                      : chatStatus.status === 'offline'
+                        ? (lang === 'bn' ? 'অফলাইন' : 'Offline')
+                        : chatStatus.status === 'checking'
+                          ? '…'
+                          : (lang === 'bn' ? 'সেটআপ প্রয়োজন' : 'Setup needed')}
                   </span>
                 </div>
                 <p className="text-[11px] text-emerald-100 flex items-center gap-1.5">
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${chatStatus.ai_configured ? 'bg-emerald-300 animate-ping' : 'bg-amber-300'}`}></span>
-                  <span className="truncate max-w-[200px]">{chatStatus.provider || (lang === 'bn' ? 'অনলাইন · রিয়েলটাইম ভূমি বিশেষজ্ঞ' : 'Online · Land Expert')}</span>
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${chatStatus.ai_configured ? 'bg-emerald-300 animate-ping' : chatStatus.status === 'offline' ? 'bg-red-300' : 'bg-amber-300'}`}></span>
+                  <span className="truncate max-w-[220px]">
+                    {chatStatus.status === 'offline'
+                      ? (lang === 'bn' ? 'সার্ভারে সংযোগ নেই' : 'Server unreachable')
+                      : chatStatus.provider || (lang === 'bn' ? 'সংযোগ যাচাই হচ্ছে…' : 'Checking connection…')}
+                  </span>
                 </p>
               </div>
             </div>
@@ -443,6 +511,28 @@ export default function LiveChatWidget({ setActiveTab }) {
               </div>
             )}
 
+            {/* Assistant availability notices */}
+            {chatStatus.status === 'offline' && (
+              <div className="flex items-start gap-2 p-3 mb-3 rounded-xl bg-red-50 dark:bg-red-950/30 border border-red-200 dark:border-red-900/50 text-[11px] text-red-800 dark:text-red-200">
+                <WifiOff className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  {lang === 'bn'
+                    ? 'অ্যাসিস্ট্যান্ট সার্ভারে পৌঁছানো যাচ্ছে না। চ্যাট উত্তর তৈরি হবে না—অনুগ্রহ করে ব্যাকএন্ড সার্ভার চালু আছে কিনা দেখুন।'
+                    : 'The assistant server is unreachable. Chat answers cannot be generated—please check that the backend is running.'}
+                </span>
+              </div>
+            )}
+            {chatStatus.status === 'online' && chatStatus.ai_configured === false && (
+              <div className="flex items-start gap-2 p-3 mb-3 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 text-[11px] text-amber-800 dark:text-amber-200">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  {lang === 'bn'
+                    ? 'সার্ভারে AI প্রদানকারী কনফিগার করা নেই। ব্যাকএন্ডে GEMINI_API_KEY অথবা OPENAI_API_KEY সেট করুন (বিস্তারিত README-এ)। কনফিগার না করা পর্যন্ত কোনো ভুয়া উত্তর দেওয়া হবে না।'
+                    : 'No AI provider is configured on the server. Set GEMINI_API_KEY or OPENAI_API_KEY in the backend (see README). No simulated answers will be given until then.'}
+                </span>
+              </div>
+            )}
+
             {/* Conversation Messages */}
             {messages.map((msg, idx) => {
               const isAi = msg.sender === 'ai';
@@ -461,7 +551,9 @@ export default function LiveChatWidget({ setActiveTab }) {
                     <div
                       className={`p-3.5 rounded-2xl shadow-sm text-xs sm:text-[13px] ${
                         isAi
-                          ? 'bg-white dark:bg-[#16231d] text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-emerald-900/40 rounded-tl-none'
+                          ? msg.isError
+                            ? 'bg-amber-50 dark:bg-amber-950/30 text-amber-900 dark:text-amber-100 border border-amber-200 dark:border-amber-900/50 rounded-tl-none'
+                            : 'bg-white dark:bg-[#16231d] text-gray-900 dark:text-gray-100 border border-gray-200 dark:border-emerald-900/40 rounded-tl-none'
                           : 'bg-[#0b462d] text-white rounded-tr-none shadow-md'
                       }`}
                     >
@@ -469,6 +561,20 @@ export default function LiveChatWidget({ setActiveTab }) {
                         renderFormattedText(msg.text)
                       ) : (
                         <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                      )}
+
+                      {/* Retry for failed AI requests */}
+                      {isAi && msg.isError && msg.retryable && (
+                        <div className="mt-3 pt-2.5 border-t border-amber-200/70 dark:border-amber-900/40">
+                          <button
+                            onClick={() => handleRetry(msg)}
+                            disabled={isThinking || isStreaming}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold shadow transition"
+                          >
+                            <RefreshCw className="w-3.5 h-3.5" />
+                            <span>{lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Retry'}</span>
+                          </button>
+                        </div>
                       )}
 
                       {/* In-chat action button if suggested by AI */}
@@ -504,20 +610,24 @@ export default function LiveChatWidget({ setActiveTab }) {
                               <Copy className="w-3 h-3" />
                             )}
                           </button>
-                          <button
-                            onClick={() => setFeedback(msg.id, 'like')}
-                            title={lang === 'bn' ? 'উপকারী' : 'Helpful'}
-                            className={`p-1 hover:text-emerald-500 transition ${feedbackState[msg.id] === 'like' ? 'text-emerald-500' : ''}`}
-                          >
-                            <ThumbsUp className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => setFeedback(msg.id, 'dislike')}
-                            title={lang === 'bn' ? 'উপকারী নয়' : 'Not helpful'}
-                            className={`p-1 hover:text-red-500 transition ${feedbackState[msg.id] === 'dislike' ? 'text-red-500' : ''}`}
-                          >
-                            <ThumbsDown className="w-3 h-3" />
-                          </button>
+                          {!msg.isError && (
+                            <>
+                              <button
+                                onClick={() => setFeedback(msg.id, 'like')}
+                                title={lang === 'bn' ? 'উপকারী' : 'Helpful'}
+                                className={`p-1 hover:text-emerald-500 transition ${feedbackState[msg.id] === 'like' ? 'text-emerald-500' : ''}`}
+                              >
+                                <ThumbsUp className="w-3 h-3" />
+                              </button>
+                              <button
+                                onClick={() => setFeedback(msg.id, 'dislike')}
+                                title={lang === 'bn' ? 'উপকারী নয়' : 'Not helpful'}
+                                className={`p-1 hover:text-red-500 transition ${feedbackState[msg.id] === 'dislike' ? 'text-red-500' : ''}`}
+                              >
+                                <ThumbsDown className="w-3 h-3" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       )}
                     </div>
@@ -575,16 +685,22 @@ export default function LiveChatWidget({ setActiveTab }) {
                 e.preventDefault();
                 handleSend();
               }}
-              className="flex items-center gap-2 bg-gray-50 dark:bg-[#18261f] border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-1.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition"
+              className="flex items-end gap-2 bg-gray-50 dark:bg-[#18261f] border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-1.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition"
             >
-              <input
+              <textarea
                 ref={inputRef}
-                type="text"
+                rows={1}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    handleSend();
+                  }
+                }}
                 placeholder={lang === 'bn' ? 'ভূমি সংক্রান্ত যেকোনো প্রশ্ন লিখুন...' : 'Ask any land or deed related question...'}
                 disabled={isStreaming}
-                className="flex-1 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 outline-none placeholder-gray-400 dark:placeholder-gray-500"
+                className="flex-1 resize-none max-h-24 bg-transparent text-xs sm:text-sm text-gray-900 dark:text-gray-100 outline-none placeholder-gray-400 dark:placeholder-gray-500 py-1 leading-relaxed"
               />
 
               {/* Voice Input Button */}
@@ -604,7 +720,7 @@ export default function LiveChatWidget({ setActiveTab }) {
               {/* Send Button */}
               <button
                 type="submit"
-                disabled={!input.trim() || isStreaming}
+                disabled={!input.trim() || isStreaming || isThinking}
                 className="p-1.5 bg-[#0b462d] hover:bg-[#145e3c] disabled:opacity-40 disabled:hover:bg-[#0b462d] text-white rounded-lg transition shadow-sm"
               >
                 <Send className="w-4 h-4" />
@@ -612,8 +728,8 @@ export default function LiveChatWidget({ setActiveTab }) {
             </form>
 
             <div className="flex items-center justify-between mt-1.5 px-1 text-[10px] text-gray-400 dark:text-gray-500">
-              <span>{lang === 'bn' ? '🛡️ নিরাপদ AI পরামর্শক' : '🛡️ Secure AI Advisory'}</span>
-              <span>{lang === 'bn' ? 'Enter টিপে পাঠান' : 'Press Enter to send'}</span>
+              <span>{lang === 'bn' ? '🛡️ নিরাপদ AI পরামর্শক · কোনো ভুয়া রেকর্ড নয়' : '🛡️ Secure AI advisory · no fabricated records'}</span>
+              <span>{lang === 'bn' ? 'Enter পাঠান · Shift+Enter নতুন লাইন' : 'Enter to send · Shift+Enter for a new line'}</span>
             </div>
           </div>
         </div>

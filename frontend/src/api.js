@@ -515,28 +515,8 @@ function getMockFallback(endpoint, options = {}) {
     return { success: true, status: "Resubmitted", message: "সংশোধিত তথ্য সফলভাবে দাখিল হয়েছে।" };
   }
 
-  if (endpoint.includes("/chat/status")) {
-    return {
-      status: "online",
-      ai_configured: false,
-      provider: "BhumiSathi Knowledge Engine",
-      supported_languages: ["bn", "bn-Latn", "en"]
-    };
-  }
-
-  if (endpoint.includes("/chat/message")) {
-    const msg = (body.message || "").toLowerCase();
-    let reply = "ধন্যবাদ। ভূমি প্রশাসন, নামজারি আবেদন বা দলিলের তথ্যের জন্য আপনার ট্র্যাকিং নম্বর লিখুন অথবা প্রশ্ন করুন।";
-    if (msg.includes("খরচ") || msg.includes("ফি") || msg.includes("টাকা")) {
-      reply = "ই-নামজারির মোট সরকারি ফি ১,১৭০/- টাকা (কোর্ট ফি ২০ + নোটিশ ৫০ + রেকর্ড সংশোধন ১০০০ + ডিসিআর ১০০ টাকা)।";
-    }
-    return {
-      reply,
-      ai_configured: false,
-      provider: "BhumiSathi Grounded Engine",
-      context_used: false
-    };
-  }
+  // AI chat endpoints intentionally have no mock fallback: the assistant must
+  // either reach the real backend or surface an explicit error to the user.
 
   // 10. Audit Logs
   if (endpoint.includes("/audit-logs")) {
