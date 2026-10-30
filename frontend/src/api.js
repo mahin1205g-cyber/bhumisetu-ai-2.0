@@ -286,7 +286,7 @@ function getMockFallback(endpoint, options = {}) {
     return [
       { role: "citizen", name: "মোঃ রফিকুল ইসলাম", email: "citizen@bhumisathi.gov.bd", password: "demo123", designation: "নাগরিক" },
       { role: "officer", name: "বেগম ফরিদা পারভীন", email: "officer@bhumisathi.gov.bd", password: "demo123", designation: "সহকারী কমিশনার (ভূমি) / AC Land" },
-      { role: "admin", name: "Md Bayazid Hossain", email: "dbscbayazid111@gmail.com", password: "demo123", designation: "সিস্টেম আর্কিটেক্ট ও অ্যাডমিনিস্ট্রেটর" }
+      { role: "admin", name: "", email: "dbscbayazid111@gmail.com", password: "demo123", designation: "সিস্টেম আর্কিটেক্ট ও অ্যাডমিনিস্ট্রেটর" }
     ];
   }
 
@@ -337,7 +337,7 @@ function getMockFallback(endpoint, options = {}) {
       token: `demo-token-${Date.now()}`,
       user: {
         id: isAdmin ? 3 : isOfficer ? 2 : 1,
-        name: isAdmin ? "Md Bayazid Hossain" : isOfficer ? "বেগম ফরিদা পারভীন" : "মোঃ রফিকুল ইসলাম",
+        name: isAdmin ? "" : isOfficer ? "বেগম ফরিদা পারভীন" : "মোঃ রফিকুল ইসলাম",
         email: body.identifier || (isAdmin ? "dbscbayazid111@gmail.com" : isOfficer ? "officer@bhumisathi.gov.bd" : "citizen@bhumisathi.gov.bd"),
         role: isAdmin ? "admin" : isOfficer ? "officer" : "citizen",
         designation: isAdmin ? "সিস্টেম আর্কিটেক্ট ও অ্যাডমিনিস্ট্রেটর" : isOfficer ? "সহকারী কমিশনার (ভূমি) / AC Land" : "নাগরিক",

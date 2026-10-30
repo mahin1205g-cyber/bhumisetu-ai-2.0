@@ -99,7 +99,8 @@ pip install -r requirements.txt   # python-dotenv সহ
 cd backend && uvicorn main:app --reload --port 8000
 ```
 
-`.env` ব্যাকএন্ড চালু হওয়ার সময় স্বয়ংক্রিয়ভাবে লোড হয় (python-dotenv ইনস্টল থাকলে)।
+`.env` ব্যাকএন্ড চালু হওয়ার সময় স্বয়ংক্রিয়ভাবে লোড হয় (python-dotenv ইনস্টল থাকলে) —
+রিপো রুটের `.env` অথবা `backend/.env`, দুই জায়গাতেই রাখা যায় (রুট `.env`-এর অগ্রাধিকার)।
 `.env` কখনো কমিট করবেন না — `.gitignore`-এ এটি বাদ দেওয়া আছে।
 
 ### ৩. Vercel-এ সেটআপ

@@ -152,6 +152,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                   : 'Your trusted digital bridge for safer land decisions — deed verification, smart e-namjari mutations, and pre-purchase due diligence.'}
               </p>
             </div>
+        
           </div>
 
           {/* Quick Actions & Refresh */}

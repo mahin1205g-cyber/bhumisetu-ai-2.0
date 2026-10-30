@@ -4,7 +4,6 @@ import Header from './components/Header';
 import SlideDrawer from './components/SlideDrawer';
 import Footer from './components/Footer';
 import LiveChatWidget from './components/LiveChatWidget';
-import IntroOverlay from './components/IntroOverlay';
 
 // Pages
 import LandingPage from './pages/LandingPage';
@@ -298,9 +297,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--bg)] text-[var(--text-main)] transition-colors duration-200">
-      {/* Subtle First-Visit Entrance Sequence (Only on Homepage, Never on Login/Register/Forms) */}
-      {activeTab === 'home' && <IntroOverlay />}
-
       {/* Slide Drawer (Opened via Menu button in Header) */}
       <SlideDrawer
         isOpen={isDrawerOpen}

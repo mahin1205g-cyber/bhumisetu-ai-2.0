@@ -386,7 +386,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 {showUserMenu && user && (
                   <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#14201C] text-gray-900 dark:text-gray-100 rounded-xl shadow-xl border border-[#E2E8F0] dark:border-[#1E2E28] p-2 z-50">
                     <div className="p-2 border-b border-[#E2E8F0] dark:border-[#1E2E28]">
-                      <div className="font-bold text-xs truncate">{user.role === 'admin' ? 'Md Bayazid Hossain' : user.name}</div>
+                      <div className="font-bold text-xs truncate">{user.role === 'admin' ? '' : user.name}</div>
                       <div className="text-[11px] text-gray-500 truncate">{user.email}</div>
                       <div className="text-[10px] text-[#047857] dark:text-emerald-400 font-semibold mt-0.5">
                         {user.designation || user.role}
