@@ -546,6 +546,38 @@ def mark_notification_read(nid: int):
 # P2: DIGITAL DEED & OWNERSHIP VERIFICATION ENGINE
 # =====================================================================
 
+def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
+    init()
+    deed_no = str(input_data.get("deed_no", "")).strip()
+    reg_year = int(input_data.get("reg_year", 0) or 0)
+    district = str(input_data.get("district", "")).strip()
+    upazila = str(input_data.get("upazila", "")).strip()
+    mouza = str(input_data.get("mouza", "")).strip()
+    plot_id = str(input_data.get("plot_id", "")).strip()
+    khatian_no = str(input_data.get("khatian_no", "")).strip()
+    owner_name = str(input_data.get("owner_name", "")).strip()
+    notes = str(input_data.get("notes", "")).strip()
+
+    with conn() as c:
+        deed_record = None
+        if deed_no:
+            query = "SELECT * FROM deeds WHERE LOWER(deed_no) = LOWER(%s)"
+            params = [deed_no]
+            if reg_year > 0:
+                query += " AND reg_year = %s"
+                params.append(reg_year)
+            deed_record = c.execute(query, params).fetchone()
+
+        prop_record = None
+        if plot_id:
+            prop_record = c.execute(
+                "SELECT * FROM properties WHERE LOWER(plot_id) = LOWER(%s)", (plot_id,)
+            ).fetchone()
+        elif deed_record and deed_record["plot_id"]:
+            prop_record = c.execute(
+                "SELECT * FROM properties WHERE LOWER(plot_id) = LOWER(%s)", (deed_record["plot_id"],)
+            ).fetchone()
+
     discrepancies = []
     weighted_score = 0.0
     evaluated_weight = 0.0
@@ -710,6 +742,79 @@ def mark_notification_read(nid: int):
         else:
             result_status = "POTENTIAL_INCONSISTENCY"
 
+    ref_id = f"LG-VR-2026-{secrets.token_hex(3).upper()}"
+    now_iso = datetime.now().isoformat()
+
+    extracted_summary = {
+        "deed_no": deed_no,
+        "reg_year": reg_year or (deed_record["reg_year"] if deed_record else 2024),
+        "district": district or (deed_record["district"] if deed_record else "ঢাকা"),
+        "upazila": upazila or (deed_record["upazila"] if deed_record else "মিরপুর"),
+        "mouza": mouza or (deed_record["mouza"] if deed_record else "পাইকপাড়া"),
+        "plot_id": plot_id or (deed_record["plot_id"] if deed_record else "DHK-MIR-001"),
+        "khatian_no": khatian_no or (deed_record["khatian_no"] if deed_record else "BS-1045"),
+        "owner_name": owner_name or (deed_record["buyer_name"] if deed_record else ""),
+        "recorded_seller": deed_record["seller_name"] if deed_record else None,
+        "recorded_buyer": deed_record["buyer_name"] if deed_record else None,
+        "recorded_area": deed_record["area"] if deed_record else (prop_record["area"] if prop_record else None),
+        "recorded_price": deed_record["price"] if deed_record else None,
+        "property_status": prop_record["status"] if prop_record else "clear",
+        "sub_registry_office": deed_record["sub_registry_office"] if deed_record else "মিরপুর সাব-রেজিস্ট্রি অফিস"
+    }
+
+    with conn() as c:
+        c.execute(
+            """INSERT INTO deed_verifications (verification_ref, user_id, deed_no, reg_year, district, upazila, mouza,
+               plot_id, khatian_no, owner_name, result_status, match_score, discrepancies, extracted_data, notes, created_at)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (ref_id, user_id, deed_no, reg_year, district, upazila, mouza, plot_id, khatian_no, owner_name,
+             result_status, match_score, json.dumps(discrepancies, ensure_ascii=False),
+             json.dumps(extracted_summary, ensure_ascii=False), notes, now_iso)
+        )
+
+    log_audit(user_name, "citizen" if not user_id else "user", "DEED_VERIFY", "P2_VERIFICATION",
+              f"Verified deed {deed_no} (Status: {result_status}, Ref: {ref_id})")
+
+    return {
+        "verification_ref": ref_id,
+        "result_status": result_status,
+        "match_score": match_score,
+        "discrepancies": discrepancies,
+        "extracted_summary": extracted_summary,
+        "created_at": now_iso,
+        "verification_url": f"/verify-deed/{ref_id}",
+        "disclaimer_bn": "সতর্কবার্তা: এটি ডেমো ডেটাবেজভিত্তিক বিশ্লেষণ। এটি সরকারি বালাম বইয়ের চূড়ান্ত বা আইনি স্বত্ব সনদ নয়।",
+        "disclaimer_en": "Disclaimer: This is preliminary screening against synthetic demonstration records. It does not replace official Sub-Registry Office verification or legal counsel."
+    }
+
+
+def get_deed_verification_by_ref(ref: str):
+    init()
+    with conn() as c:
+        row_data = c.execute(
+            "SELECT * FROM deed_verifications WHERE verification_ref = %s", (ref,)
+        ).fetchone()
+        if not row_data:
+            return None
+        d = dict(row_data)
+        d["discrepancies"] = json.loads(d["discrepancies"]) if d["discrepancies"] else []
+        d["extracted_data"] = json.loads(d["extracted_data"]) if d["extracted_data"] else {}
+        return d
+
+
+def list_deed_verifications(limit=20):
+    init()
+    with conn() as c:
+        rows = c.execute(
+            "SELECT * FROM deed_verifications ORDER BY id DESC LIMIT %s", (limit,)
+        ).fetchall()
+        result = []
+        for r in rows:
+            d = dict(r)
+            d["discrepancies"] = json.loads(d["discrepancies"]) if d["discrepancies"] else []
+            d["extracted_data"] = json.loads(d["extracted_data"]) if d["extracted_data"] else {}
+            result.append(d)
+        return result
 
 
 # =====================================================================
