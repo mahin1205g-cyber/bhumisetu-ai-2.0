@@ -5,6 +5,7 @@
 node_modules/
 dist/
 build/
+public/
 .venv/
 venv/
 __pycache__/

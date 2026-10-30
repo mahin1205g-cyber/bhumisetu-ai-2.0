@@ -1,8 +1,0 @@
-fastapi
-uvicorn
-python-multipart
-httpx
-pypdf
-scikit-learn
-numpy
-python-dotenv

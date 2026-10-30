@@ -409,6 +409,8 @@ LEGACY_INDEX = Path(__file__).parent.parent / "frontend" / "legacy_index.html"
 
 BASE_INDEX = Path(__file__).parent.parent / "frontend" / "index.html"
 
+PUBLIC_INDEX = Path(__file__).parent.parent / "public" / "index.html"
+
 
 
 # If built Vite assets exist, mount them
@@ -424,6 +426,10 @@ if (FRONTEND_DIST / "assets").exists():
 @app.get("/")
 
 def index():
+
+    if PUBLIC_INDEX.exists():
+
+        return FileResponse(PUBLIC_INDEX)
 
     if (FRONTEND_DIST / "index.html").exists():
 

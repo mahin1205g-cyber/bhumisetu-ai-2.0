@@ -1,16 +1,10 @@
 {
-  "version": 2,
-  "buildCommand": "cd frontend && npm install && npm run build",
-  "outputDirectory": "frontend/dist",
-  "framework": "vite",
-  "rewrites": [
-    {
-      "source": "/api/(.*)",
-      "destination": "/api/index.py"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "fastapi",
+  "buildCommand": "cd frontend && npm install && npm run build && cd .. && rm -rf public && cp -r frontend/dist public && rm -rf frontend/node_modules",
+  "functions": {
+    "app.py": {
+      "maxDuration": 60
     }
-  ]
+  }
 }

@@ -43,9 +43,14 @@ cd bhumisetu-ai
 ```
 
 ### ৩. ব্যাকএন্ড সেটআপ ও চালু করার নিয়ম (FastAPI)
+
+> ব্যাকএন্ড এখন **PostgreSQL (Neon)** ব্যবহার করে — `DATABASE_URL` ছাড়া সার্ভার চালু হবে না।
+
 ```bash
 # ডিপেন্ডেন্সি ইনস্টল করুন
 pip install -r requirements.txt
+
+# .env-এ DATABASE_URL সেট করুন (Neon/Postgres connection string)
 
 # ব্যাকএন্ড ফোল্ডারে প্রবেশ করে সার্ভার চালু করুন
 cd backend
@@ -103,10 +108,42 @@ cd backend && uvicorn main:app --reload --port 8000
 রিপো রুটের `.env` অথবা `backend/.env`, দুই জায়গাতেই রাখা যায় (রুট `.env`-এর অগ্রাধিকার)।
 `.env` কখনো কমিট করবেন না — `.gitignore`-এ এটি বাদ দেওয়া আছে।
 
-### ৩. Vercel-এ সেটআপ
+### ৩. Vercel-এ ডিপ্লয় (Deployment)
 
-Vercel Project → **Settings → Environment Variables**-এ `GEMINI_API_KEY` (বা
-`OPENAI_API_KEY`) যোগ করে পুনরায় deploy করুন।
+**প্রয়োজনীয় Environment Variables** (Project → Settings → Environment Variables):
+
+| Variable | Value |
+| --- | --- |
+| `DATABASE_URL` | Neon/Postgres connection string (`...?sslmode=require`) — **বাধ্যতামূলক** |
+| `GEMINI_API_KEY` | Google Gemini key (AI chat-এর জন্য) |
+| `CORS_ORIGINS` | ফ্রন্টএন্ড আলাদা ডোমেইনে থাকলে সেটির URL (কমা দিয়ে একাধিক) |
+
+**এক প্রজেক্টে ফ্রন্টএন্ড + ব্যাকএন্ড (প্রস্তাবিত):**
+
+1. Vercel → **Add New Project** → এই রিপোটি ইমপোর্ট করুন।
+2. **Root Directory** খালি রাখুন (রিপো রুট)।
+3. বাকি সেটিং ডিফল্ট রাখুন — `vercel.json` নিজেই `framework: fastapi` সেট করে,
+   ফ্রন্টএন্ড বিল্ড করে `public/`-এ রাখে এবং `app.py`-কে একমাত্র Function হিসেবে চালায়।
+4. উপরের env vars যোগ করে **Deploy** করুন।
+5. যাচাই করুন:
+   ```bash
+   curl https://<project>.vercel.app/api/chat/status
+   # ব্রাউজারে: https://<project>.vercel.app/  এবং  /docs
+   ```
+
+> পুরোনো `api/index.py` + `rewrites` ভিত্তিক সেটআপ Vercel-এর বর্তমান FastAPI
+> রানটাইমে কাজ করে না (সব request ভুল path নিয়ে 404 হয়) — তাই সেটি সরানো হয়েছে।
+
+**আলাদা প্রজেক্ট (ফ্রন্টএন্ড ও ব্যাকএন্ড আলাদা):**
+
+- **ব্যাকএন্ড:** Root Directory = `backend` (কোনো `vercel.json` লাগবে না, `main.py`
+  স্বয়ংক্রিয়ভাবে FastAPI entrypoint হিসেবে ডিটেক্ট হয়)। env: `DATABASE_URL`,
+  `GEMINI_API_KEY`, `CORS_ORIGINS=https://<frontend-domain>`।
+- **ফ্রন্টএন্ড:** Root Directory = `frontend`, env:
+  `VITE_API_URL=https://<backend-domain>/api`।
+
+> Vercel-এ SQLite ব্যবহার করা যায় না (ফাইলসিস্টেম read-only) — `DATABASE_URL`
+> (Neon/Postgres) সবসময় লাগবে।
 
 ### ৪. যাচাই (Verify)
 
