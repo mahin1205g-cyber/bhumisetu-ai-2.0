@@ -7,3 +7,4 @@ pytest
 python-multipart
 pypdf
 python-dotenv
+psycopg[binary]
