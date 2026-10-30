@@ -4,7 +4,7 @@ import { api } from '../api';
 import PageHeader from '../components/PageHeader';
 import {
   FileCheck2, UploadCloud, Search, AlertTriangle, CheckCircle,
-  FileText, Sparkles, RefreshCw, ArrowRight, Info, Cpu, CheckCircle2
+  Sparkles, RefreshCw, Info, Cpu, CheckCircle2
 } from 'lucide-react';
 
 export default function DeedVerification({ setActiveTab, setVerificationResult, navigateBack }) {
@@ -77,33 +77,53 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
+  const getErrorMessage = (err) => {
+    if (err?.message) return err.message;
+    return lang === 'bn'
+      ? 'অনুরোধটি সম্পন্ন করা যায়নি। Backend চালু আছে কি না এবং API URL ঠিক আছে কি না পরীক্ষা করুন।'
+      : 'The request failed. Please check that the backend is running and the API URL is correct.';
+  };
+
+  const openResult = (result) => {
+    if (!result || typeof result !== 'object') {
+      throw new Error(lang === 'bn' ? 'সার্ভার থেকে সঠিক ফলাফল পাওয়া যায়নি।' : 'The server returned an invalid response.');
+    }
+    setVerificationResult(result);
+    setActiveTab('verification-result');
+  };
+
   const handleVerify = async (e) => {
     e.preventDefault();
-    if (!formData.deed_no && !formData.plot_id) {
-      setError(lang === 'bn' ? 'অনুগ্রহ করে দলিল নম্বর অথবা দাগ/প্লট নম্বর লিখুন।' : 'Please provide either Deed Number or Plot ID.');
+    const payload = {
+      ...formData,
+      deed_no: formData.deed_no.trim(),
+      plot_id: formData.plot_id.trim(),
+      khatian_no: formData.khatian_no.trim(),
+      owner_name: formData.owner_name.trim(),
+      reg_year: Number(formData.reg_year),
+    };
+
+    if (!payload.deed_no && !payload.plot_id) {
+      setError(lang === 'bn'
+        ? 'অনুগ্রহ করে দলিল নম্বর অথবা দাগ/প্লট নম্বর লিখুন।'
+        : 'Please provide either a Deed Number or Plot ID.');
+      return;
+    }
+    if (!Number.isInteger(payload.reg_year) || payload.reg_year < 1950 || payload.reg_year > new Date().getFullYear()) {
+      setError(lang === 'bn' ? 'সঠিক নিবন্ধন সাল লিখুন।' : 'Please enter a valid registration year.');
       return;
     }
 
     setLoading(true);
     setError('');
     setVerifyStage(1);
-
     try {
-      await new Promise(r => setTimeout(r, 280));
       setVerifyStage(2);
-
-      const resultPromise = api.verifyDeed(formData, user?.id);
-      await new Promise(r => setTimeout(r, 320));
+      const result = await api.verifyDeed(payload, user?.id);
       setVerifyStage(3);
-
-      const result = await resultPromise;
-      await new Promise(r => setTimeout(r, 260));
-      setVerifyStage(4);
-
-      setVerificationResult(result);
-      setActiveTab('verification-result');
+      openResult(result);
     } catch (err) {
-      setError(err.message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
       setVerifyStage(0);
@@ -111,32 +131,33 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
   };
 
   const handleFileUpload = async (selectedFile) => {
-    if (!selectedFile) return;
+    if (!selectedFile || loading) return;
+
+    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg'];
+    const allowedExtensions = /\.(pdf|png|jpe?g)$/i;
+    if (!allowedTypes.includes(selectedFile.type) && !allowedExtensions.test(selectedFile.name)) {
+      setError(lang === 'bn' ? 'শুধু PDF, JPG অথবা PNG ফাইল আপলোড করুন।' : 'Only PDF, JPG, or PNG files are allowed.');
+      return;
+    }
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError(lang === 'bn' ? 'ফাইলের আকার ১০ MB-এর বেশি হতে পারবে না।' : 'The file must be 10 MB or smaller.');
+      return;
+    }
+
     setFile(selectedFile);
     setLoading(true);
     setError('');
     setVerifyStage(1);
-
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
-      if (user?.id) fd.append('user_id', user.id);
-
-      await new Promise(r => setTimeout(r, 280));
+      if (user?.id !== undefined && user?.id !== null) fd.append('user_id', String(user.id));
       setVerifyStage(2);
-
-      const resultPromise = api.uploadDeed(fd);
-      await new Promise(r => setTimeout(r, 320));
+      const result = await api.uploadDeed(fd);
       setVerifyStage(3);
-
-      const result = await resultPromise;
-      await new Promise(r => setTimeout(r, 260));
-      setVerifyStage(4);
-
-      setVerificationResult(result);
-      setActiveTab('verification-result');
+      openResult(result);
     } catch (err) {
-      setError(err.message);
+      setError(getErrorMessage(err));
     } finally {
       setLoading(false);
       setVerifyStage(0);
@@ -284,7 +305,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {t('deedNo')} <span className="text-rose-500">*</span>
+                  {t('deedNo')} <span className="text-gray-400 font-normal">({lang === 'bn' ? 'ঐচ্ছিক, প্লট নম্বর দিলে' : 'optional when Plot ID is provided'})</span>
                 </label>
                 <input
                   type="text"
@@ -293,7 +314,6 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                   onChange={handleChange}
                   placeholder={lang === 'bn' ? 'যেমন: D-8492 অথবা D-1001' : 'e.g., D-8492 or D-1001'}
                   className="gov-input"
-                  required
                 />
               </div>
 
@@ -307,7 +327,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                   value={formData.reg_year}
                   onChange={handleChange}
                   min="1950"
-                  max="2026"
+                  max={new Date().getFullYear()}
                   className="gov-input"
                   required
                 />
@@ -449,31 +469,38 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
           </div>
 
           <div
-            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+            role="button"
+            tabIndex={0}
+            aria-label={lang === 'bn' ? 'দলিল ফাইল নির্বাচন করুন' : 'Choose deed file'}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                document.getElementById('deed-file-input')?.click();
+              }
+            }}
+            onDragOver={(e) => { e.preventDefault(); if (!loading) setDragActive(true); }}
             onDragLeave={() => setDragActive(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragActive(false);
-              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-                handleFileUpload(e.dataTransfer.files[0]);
-              }
+              if (!loading && e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]);
             }}
             className={`border-2 border-dashed rounded-xl p-6 text-center transition cursor-pointer ${
               dragActive
                 ? 'border-[#0b462d] bg-emerald-50 dark:bg-emerald-950/40'
                 : 'border-gray-300 dark:border-gray-700 hover:border-[#0b462d] bg-gray-50/50 dark:bg-gray-800/20'
             }`}
-            onClick={() => document.getElementById('deed-file-input').click()}
+            onClick={() => { if (!loading) document.getElementById('deed-file-input')?.click(); }}
           >
             <input
               id="deed-file-input"
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
+              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+              disabled={loading}
               className="hidden"
               onChange={(e) => {
-                if (e.target.files && e.target.files[0]) {
-                  handleFileUpload(e.target.files[0]);
-                }
+                if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
+                e.target.value = '';
               }}
             />
             <UploadCloud className="w-10 h-10 text-[#0b462d] dark:text-emerald-400 mx-auto mb-2" />

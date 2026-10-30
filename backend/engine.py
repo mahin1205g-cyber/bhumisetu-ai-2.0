@@ -546,253 +546,170 @@ def mark_notification_read(nid: int):
 # P2: DIGITAL DEED & OWNERSHIP VERIFICATION ENGINE
 # =====================================================================
 
-def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
-    init()
-    deed_no = str(input_data.get("deed_no", "")).strip()
-    reg_year = int(input_data.get("reg_year", 0) or 0)
-    district = str(input_data.get("district", "")).strip()
-    upazila = str(input_data.get("upazila", "")).strip()
-    mouza = str(input_data.get("mouza", "")).strip()
-    plot_id = str(input_data.get("plot_id", "")).strip()
-    khatian_no = str(input_data.get("khatian_no", "")).strip()
-    owner_name = str(input_data.get("owner_name", "")).strip()
-    notes = str(input_data.get("notes", "")).strip()
-
-    with conn() as c:
-        # Search official demo deeds database
-        deed_record = None
-        if deed_no:
-            query = "SELECT * FROM deeds WHERE LOWER(deed_no) = LOWER(%s)"
-            params = [deed_no]
-            if reg_year > 0:
-                query += " AND reg_year = %s"
-                params.append(reg_year)
-            deed_record = c.execute(query, params).fetchone()
-
-        # Search properties record
-        prop_record = None
-        if plot_id:
-            prop_record = c.execute("SELECT * FROM properties WHERE LOWER(plot_id) = LOWER(%s)", (plot_id,)).fetchone()
-        elif deed_record and deed_record["plot_id"]:
-            prop_record = c.execute("SELECT * FROM properties WHERE LOWER(plot_id) = LOWER(%s)", (deed_record["plot_id"],)).fetchone()
-
-        # Also search previous sales from records
-        sale_records = []
-        if plot_id or (deed_record and deed_record["plot_id"]):
-            pid = plot_id or deed_record["plot_id"]
-            sale_records = c.execute("SELECT * FROM records WHERE LOWER(plot_id) = LOWER(%s) ORDER BY sale_date", (pid,)).fetchall()
-
     discrepancies = []
-    match_score = 100
+    weighted_score = 0.0
+    evaluated_weight = 0.0
+
+    def add_score(field, weight, similarity, expected=None, provided=None):
+        nonlocal weighted_score, evaluated_weight
+
+        similarity = max(0.0, min(100.0, float(similarity)))
+        weighted_score += weight * similarity / 100
+        evaluated_weight += weight
+
+        if similarity < 100:
+            discrepancies.append({
+                "field": field,
+                "expected": expected,
+                "provided": provided,
+                "similarity_score": round(similarity, 2),
+                "severity": "high" if similarity < 60 else "medium",
+                "message_bn": f"{field}: প্রদত্ত তথ্যের সঙ্গে রেকর্ডের অমিল পাওয়া গেছে।",
+                "source": "ভূমি রেকর্ড যাচাই"
+            })
+
+    def text_similarity(provided, expected):
+        if not provided or not expected:
+            return None
+        if str(provided).strip().lower() == str(expected).strip().lower():
+            return 100.0
+        return cpp_bridge.fuzzy_match(str(provided), str(expected)) if cpp_bridge else 0.0
+
+    def number_similarity(provided, expected):
+        if provided is None or expected is None:
+            return None
+        try:
+            p = float(provided)
+            e = float(expected)
+            if p == e:
+                return 100.0
+            if max(abs(p), abs(e)) == 0:
+                return 100.0
+            return max(0.0, 100 - abs(p - e) / max(abs(p), abs(e)) * 100)
+        except (ValueError, TypeError):
+            return 0.0
 
     if not deed_record and not prop_record:
-        # Case: Insufficient demo records
         result_status = "INSUFFICIENT_DATA"
         match_score = 25
         discrepancies.append({
             "field": "দলিল নম্বর ও প্লট রেকর্ড",
             "field_en": "Deed & Plot Record",
             "severity": "high",
-            "message_bn": f"নম্বর '{deed_no}' বা প্লট '{plot_id}' ডেমো ডাটাবেজে খুঁজে পাওয়া যায়নি। সাব-রেজিস্ট্রি অফিসে মূল বালাম বই যাচাই আবশ্যক।",
-            "message_en": f"Deed '{deed_no}' or Plot '{plot_id}' was not found in demo registry records. Manual Balam book verification required.",
-            "source": "সাব-রেজিস্ট্রি ডেমো বালাম"
+            "message_bn": f"দলিল '{deed_no}' অথবা প্লট '{plot_id}' ডাটাবেজে পাওয়া যায়নি।",
+            "message_en": "Deed or plot record not found.",
+            "source": "ডেমো রেজিস্ট্রি"
         })
+
     else:
-        # Check deed fields
+        # 1. Deed Number — 8%
+        if deed_no and deed_record:
+            add_score("দলিল নম্বর", 8, 100, deed_record["deed_no"], deed_no)
+
+        # 2. Mouza + Upazila — 8% (4% each)
         if deed_record:
-            # Check Owner/Buyer Name
-            if owner_name:
-                rec_owner = deed_record["buyer_name"]
-                is_sub = (owner_name.lower() in rec_owner.lower()) or (rec_owner.lower() in owner_name.lower())
-                sim = cpp_bridge.fuzzy_match(owner_name, rec_owner) if cpp_bridge else 0.0
-                
-                if not is_sub and sim < 60.0:
-                    match_score -= 35
-                    discrepancies.append({
-                        "field": "মালিকের নাম / গ্রহীতা",
-                        "field_en": "Owner / Transferee Name",
-                        "severity": "high",
-                        "expected": rec_owner,
-                        "provided": owner_name,
-                        "similarity_score": sim,
-                        "message_bn": f"দলিলে নিবন্ধিত মালিক '{rec_owner}', কিন্তু প্রদত্ত নাম '{owner_name}' (সাদৃশ্য {sim}%)।",
-                        "message_en": f"Registered owner is '{rec_owner}', but provided name is '{owner_name}' (similarity {sim}%).",
-                        "source": "সাব-রেজিস্ট্রি অফিস বালাম (C++ Fuzzy Engine)"
-                    })
-                elif not is_sub and sim >= 60.0:
-                    match_score -= 10
-                    discrepancies.append({
-                        "field": "মালিকের নাম (বানান বৈসাদৃশ্য)",
-                        "field_en": "Owner Name (Spelling Variation)",
-                        "severity": "low",
-                        "expected": rec_owner,
-                        "provided": owner_name,
-                        "similarity_score": sim,
-                        "message_bn": f"দলিলে নিবন্ধিত মালিক '{rec_owner}' এবং আবেদনে '{owner_name}' (C++ সাদৃশ্য {sim}%)।",
-                        "message_en": f"Registered owner '{rec_owner}' and provided name '{owner_name}' (C++ similarity {sim}%).",
-                        "source": "C++ High-Performance Fuzzy Matcher"
-                    })
-
-            # Check Mouza
             if mouza:
-                rec_mouza = deed_record["mouza"]
-                is_mouza_sub = (mouza.lower() in rec_mouza.lower()) or (rec_mouza.lower() in mouza.lower())
-                mouza_sim = cpp_bridge.fuzzy_match(mouza, rec_mouza) if cpp_bridge else 0.0
-                if not is_mouza_sub and mouza_sim < 70.0:
-                    match_score -= 20
-                    discrepancies.append({
-                        "field": "মৌজা",
-                        "field_en": "Mouza",
-                        "severity": "medium",
-                        "expected": rec_mouza,
-                        "provided": mouza,
-                        "similarity_score": mouza_sim,
-                        "message_bn": f"দলিলে উল্লিখিত মৌজা '{rec_mouza}', তবে আবেদনে দেওয়া হয়েছে '{mouza}'।",
-                        "message_en": f"Recorded mouza is '{rec_mouza}', but application provided '{mouza}'.",
-                        "source": "সাব-রেজিস্ট্রি অফিস বালাম"
-                    })
+                sim = text_similarity(mouza, deed_record["mouza"])
+                if sim is not None:
+                    add_score("মৌজা", 4, sim, deed_record["mouza"], mouza)
 
-            # Check Plot ID
-            if plot_id and plot_id.lower() != deed_record["plot_id"].lower():
-                match_score -= 25
+            if upazila:
+                sim = text_similarity(upazila, deed_record["upazila"])
+                if sim is not None:
+                    add_score("উপজেলা", 4, sim, deed_record["upazila"], upazila)
+
+        # 3. Plot / Daag Number — 8%
+        if plot_id and deed_record:
+            sim = text_similarity(plot_id, deed_record["plot_id"])
+            if sim is not None:
+                add_score("দাগ / প্লট নম্বর", 8, sim,
+                          deed_record["plot_id"], plot_id)
+
+        # 4. Owner Name — 60%
+        if owner_name and deed_record:
+            rec_owner = deed_record["buyer_name"]
+            sim = text_similarity(owner_name, rec_owner)
+            if sim is not None:
+                add_score("মালিকের নাম", 60, sim, rec_owner, owner_name)
+
+        # 5. Land Area — 8%
+        if deed_record:
+            provided_area = input_data.get("area")
+            recorded_area = deed_record["area"]
+
+            sim = number_similarity(provided_area, recorded_area)
+            if sim is not None:
+                add_score("জমির পরিমাণ", 8, sim,
+                          recorded_area, provided_area)
+
+        # 6. Land Status — 8%
+        if prop_record:
+            land_status = str(prop_record["status"]).lower()
+
+            if land_status == "clear":
+                add_score("জমির অবস্থা", 8, 100, "clear", land_status)
+
+            else:
+                add_score("জমির অবস্থা", 8, 0, "clear", land_status)
+
                 discrepancies.append({
-                    "field": "প্লট / দাগ নম্বর",
-                    "field_en": "Plot / Daag Number",
+                    "field": "জমির অবস্থা",
+                    "field_en": "Land Status",
                     "severity": "high",
-                    "expected": deed_record["plot_id"],
-                    "provided": plot_id,
-                    "message_bn": f"দলিলে দাগ/প্লট নম্বর '{deed_record['plot_id']}', তবে প্রদত্ত নম্বর '{plot_id}'।",
-                    "message_en": f"Deed records plot '{deed_record['plot_id']}', but submitted plot is '{plot_id}'.",
-                    "source": "সাব-রেজিস্ট্রি অফিস বালাম"
+                    "message_bn": (
+                        "জমিটি বিতর্কিত বা অধিগ্রহণের আওতায় রয়েছে।"
+                        if land_status in ("disputed", "acquired")
+                        else f"জমির অবস্থা: {land_status}"
+                    ),
+                    "source": "ভূমি রেকর্ড"
                 })
 
-            # Check Khatian No
-            if khatian_no and khatian_no != deed_record["khatian_no"]:
-                match_score -= 15
+        # Khatian check — informational only; not part of the 100% formula
+        if khatian_no and deed_record:
+            if str(khatian_no).strip().lower() != str(deed_record["khatian_no"]).strip().lower():
                 discrepancies.append({
-                    "field": "খতিয়ান নম্বর",
+                    "field": "খতিয়ান নম্বর",
                     "field_en": "Khatian Number",
                     "severity": "medium",
                     "expected": deed_record["khatian_no"],
                     "provided": khatian_no,
-                    "message_bn": f"দলিলে খতিয়ান '{deed_record['khatian_no']}', তবে প্রদত্ত খতিয়ান '{khatian_no}'।",
-                    "message_en": f"Deed cites khatian '{deed_record['khatian_no']}', but submitted khatian is '{khatian_no}'.",
-                    "source": "ভূমি রেকর্ড ও খতিয়ান রেজিস্টার"
+                    "message_bn": "খতিয়ান নম্বরে অমিল পাওয়া গেছে।",
+                    "source": "ভূমি রেকর্ড"
                 })
 
-        # Check property status
-        if prop_record:
-            if prop_record["status"] == "disputed":
-                match_score -= 30
+        # Duplicate deed alert — informational; no extra weight deduction
+        if deed_no:
+            with conn() as c:
+                dup_check = c.execute(
+                    "SELECT plot_id FROM records WHERE deed_no = %s",
+                    (deed_no,)
+                ).fetchall()
+
+            plots_used = list(set(
+                x["plot_id"] for x in dup_check if x["plot_id"]
+            ))
+
+            if len(plots_used) > 1:
                 discrepancies.append({
-                    "field": "জমির স্বত্ব ও বিতর্ক",
-                    "field_en": "Land Title Dispute",
+                    "field": "দলিল নম্বর পুনরাবৃত্তি",
+                    "field_en": "Duplicate Deed Number Alert",
                     "severity": "high",
-                    "message_bn": "জমিটি দেওয়ানি আদালতের স্বত্ব মামলা বা মালিকানা বিরোধের আওতাভুক্ত হিসেবে চিহ্নিত।",
-                    "message_en": "Parcel is flagged under active civil court title litigation.",
-                    "source": "সহকারী কমিশনার (ভূমি) দপ্তর"
-                })
-            elif prop_record["status"] == "acquired":
-                match_score -= 40
-                discrepancies.append({
-                    "field": "সরকারি অধিগ্রহণ সতর্কতা",
-                    "field_en": "Government Acquisition",
-                    "severity": "high",
-                    "message_bn": "উক্ত জমিটি সরকারের উন্নয়ন প্রকল্পের জন্য অধিগ্রহণ প্রস্তাবের আওতাভুক্ত।",
-                    "message_en": "Parcel is under government acquisition notice for infrastructure project.",
-                    "source": "জেলা প্রশাসকের এল.এ শাখা"
+                    "message_bn": "একই দলিল নম্বর একাধিক প্লটে পাওয়া গেছে।",
+                    "source": "এআই অসঙ্গতি শনাক্তকরণ"
                 })
 
-        # Check duplicate deed across different plots in legacy records
-        with conn() as c:
-            dup_check = c.execute("SELECT plot_id, deed_no FROM records WHERE deed_no = %s", (deed_no,)).fetchall()
-            if len(dup_check) > 1:
-                plots_used = list(set([x["plot_id"] for x in dup_check]))
-                if len(plots_used) > 1:
-                    match_score -= 40
-                    discrepancies.append({
-                        "field": "দলিল নম্বর পুনরাবৃত্তি",
-                        "field_en": "Duplicate Deed Number Alert",
-                        "severity": "high",
-                        "message_bn": f"একই দলিল নম্বর একাধিক ভিন্ন দাগে ({', '.join(plots_used)}) ব্যবহার করার নমুনা পাওয়া গেছে।",
-                        "message_en": f"Same deed number registered against multiple distinct plots ({', '.join(plots_used)}).",
-                        "source": "এআই অসঙ্গতি শনাক্তকরণ ইঞ্জিন"
-                    })
-
+        # Normalize score against fields that could actually be checked
+        match_score = (
+            round(weighted_score / evaluated_weight * 100)
+            if evaluated_weight > 0 else 0
+        )
         match_score = max(0, min(100, match_score))
-        if match_score >= 85 and len(discrepancies) == 0:
+
+        if match_score >= 85 and not discrepancies:
             result_status = "MATCH"
         else:
             result_status = "POTENTIAL_INCONSISTENCY"
 
-    ref_id = f"LG-VR-2026-{secrets.token_hex(3).upper()}"
-    now_iso = datetime.now().isoformat()
-
-    extracted_summary = {
-        "deed_no": deed_no,
-        "reg_year": reg_year or (deed_record["reg_year"] if deed_record else 2024),
-        "district": district or (deed_record["district"] if deed_record else "ঢাকা"),
-        "upazila": upazila or (deed_record["upazila"] if deed_record else "মিরপুর"),
-        "mouza": mouza or (deed_record["mouza"] if deed_record else "পাইকপাড়া"),
-        "plot_id": plot_id or (deed_record["plot_id"] if deed_record else "DHK-MIR-001"),
-        "khatian_no": khatian_no or (deed_record["khatian_no"] if deed_record else "BS-1045"),
-        "owner_name": owner_name or (deed_record["buyer_name"] if deed_record else ""),
-        "recorded_seller": deed_record["seller_name"] if deed_record else None,
-        "recorded_buyer": deed_record["buyer_name"] if deed_record else None,
-        "recorded_area": deed_record["area"] if deed_record else (prop_record["area"] if prop_record else None),
-        "recorded_price": deed_record["price"] if deed_record else None,
-        "property_status": prop_record["status"] if prop_record else "clear",
-        "sub_registry_office": deed_record["sub_registry_office"] if deed_record else "মিরপুর সাব-রেজিস্ট্রি অফিস"
-    }
-
-    with conn() as c:
-        c.execute(
-            """INSERT INTO deed_verifications (verification_ref, user_id, deed_no, reg_year, district, upazila, mouza,
-               plot_id, khatian_no, owner_name, result_status, match_score, discrepancies, extracted_data, notes, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (ref_id, user_id, deed_no, reg_year, district, upazila, mouza, plot_id, khatian_no, owner_name,
-             result_status, match_score, json.dumps(discrepancies, ensure_ascii=False),
-             json.dumps(extracted_summary, ensure_ascii=False), notes, now_iso)
-        )
-
-    log_audit(user_name, "citizen" if not user_id else "user", "DEED_VERIFY", "P2_VERIFICATION", f"Verified deed {deed_no} (Status: {result_status}, Ref: {ref_id})")
-
-    return {
-        "verification_ref": ref_id,
-        "result_status": result_status,
-        "match_score": match_score,
-        "discrepancies": discrepancies,
-        "extracted_summary": extracted_summary,
-        "created_at": now_iso,
-        "verification_url": f"/verify-deed/{ref_id}",
-        "disclaimer_bn": "সতর্কবার্তা: এটি ডেমো ডেটাবেজভিত্তিক বিশ্লেষণ। এটি সরকারি বালাম বইয়ের চূড়ান্ত বা আইনি স্বত্ব সনদ নয়।",
-        "disclaimer_en": "Disclaimer: This is preliminary screening against synthetic demonstration records. It does not replace official Sub-Registry Office verification or legal counsel."
-    }
-
-
-def get_deed_verification_by_ref(ref: str):
-    init()
-    with conn() as c:
-        row_data = c.execute("SELECT * FROM deed_verifications WHERE verification_ref = %s", (ref,)).fetchone()
-        if not row_data:
-            return None
-        d = dict(row_data)
-        d["discrepancies"] = json.loads(d["discrepancies"]) if d["discrepancies"] else []
-        d["extracted_data"] = json.loads(d["extracted_data"]) if d["extracted_data"] else {}
-        return d
-
-
-def list_deed_verifications(limit=20):
-    init()
-    with conn() as c:
-        rows = c.execute("SELECT * FROM deed_verifications ORDER BY id DESC LIMIT %s", (limit,)).fetchall()
-        result = []
-        for r in rows:
-            d = dict(r)
-            d["discrepancies"] = json.loads(d["discrepancies"]) if d["discrepancies"] else []
-            d["extracted_data"] = json.loads(d["extracted_data"]) if d["extracted_data"] else {}
-            result.append(d)
-        return result
 
 
 # =====================================================================
