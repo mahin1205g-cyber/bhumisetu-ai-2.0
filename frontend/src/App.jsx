@@ -9,6 +9,7 @@ import LiveChatWidget from './components/LiveChatWidget';
 import LandingPage from './pages/LandingPage';
 import Dashboard from './pages/Dashboard';
 import DeedVerification from './pages/DeedVerification';
+import DeedSearch from './pages/DeedSearch';
 import VerificationResult from './pages/VerificationResult';
 import SmartMutation from './pages/SmartMutation';
 import ApplicationTracking from './pages/ApplicationTracking';
@@ -34,7 +35,7 @@ export default function App() {
     if (typeof window === 'undefined') return 'home';
     const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim();
     const validTabs = [
-      'home', 'dashboard', 'deed-verify', 'verification-result', 'mutation',
+      'home', 'dashboard', 'deed-verify', 'deed-search', 'verification-result', 'mutation',
       'mutation-track', 'officer-review', 'due-diligence', 'due-diligence-report',
       'properties', 'audit-logs', 'notifications', 'profile', 'admin',
       'help', 'disclaimer', 'login', 'register'
@@ -155,6 +156,13 @@ export default function App() {
             navigate={navigate}
             navigateBack={navigateBack}
             setVerificationResult={setVerificationResult}
+          />
+        );
+      case 'deed-search':
+        return (
+          <DeedSearch
+            setActiveTab={setActiveTab}
+            navigateBack={navigateBack}
           />
         );
       case 'verification-result':

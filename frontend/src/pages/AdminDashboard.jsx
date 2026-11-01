@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
-import { ShieldAlert, RotateCcw, Users, Database, CheckCircle2, RefreshCw, Cpu, Zap, Activity } from 'lucide-react';
+import { ShieldAlert, RotateCcw, Users, Database, CheckCircle2, RefreshCw, Cpu, Zap, Activity, Lock, Unlock, Clock } from 'lucide-react';
 
 export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateBack }) {
   const { lang, t, user } = useApp();
@@ -12,6 +12,10 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
   const [stats, setStats] = useState(null);
   const [engineInfo, setEngineInfo] = useState(null);
   const [benchData, setBenchData] = useState(null);
+  const [locks, setLocks] = useState([]);
+  const [locksLoading, setLocksLoading] = useState(false);
+  const [locksError, setLocksError] = useState('');
+  const [unlockMsg, setUnlockMsg] = useState('');
 
   const fetchStats = async () => {
     try {
@@ -25,9 +29,57 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
     } catch (e) {}
   };
 
+  const fetchLocks = async () => {
+    setLocksLoading(true);
+    setLocksError('');
+    try {
+      const data = await api.adminDeedSearchLocks(50);
+      setLocks(data?.locks || []);
+    } catch (err) {
+      setLocksError(err?.message || (lang === 'bn' ? 'লক তথ্য আনা যায়নি।' : 'Could not load lock records.'));
+    } finally {
+      setLocksLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchStats();
+    fetchLocks();
   }, []);
+
+  const handleUnlock = async (lock) => {
+    setUnlockMsg('');
+    setLocksError('');
+    try {
+      await api.adminUnlockDeedSearch({
+        subject_type: lock.subject_type,
+        subject_key: lock.subject_key
+      });
+      setUnlockMsg(lang === 'bn' ? 'লক সফলভাবে অপসারণ করা হয়েছে।' : 'Lock cleared successfully.');
+      await fetchLocks();
+    } catch (err) {
+      setLocksError(err?.message || (lang === 'bn' ? 'লক অপসারণ করা যায়নি।' : 'Could not clear the lock.'));
+    }
+  };
+
+  const describeSubject = (lock) => {
+    const key = String(lock.subject_key || '');
+    if (lock.subject_type === 'user') {
+      return lang === 'bn' ? `ব্যবহারকারী #${key}` : `User #${key}`;
+    }
+    if (lock.subject_type === 'session') {
+      return lang === 'bn' ? `সেশন ${key.slice(0, 8)}…` : `Session ${key.slice(0, 8)}…`;
+    }
+    return lang === 'bn' ? `আইপি হ্যাশ ${key.slice(0, 10)}…` : `IP hash ${key.slice(0, 10)}…`;
+  };
+
+  const formatRemaining = (seconds) => {
+    const total = Math.max(0, Number(seconds) || 0);
+    const hours = Math.floor(total / 3600);
+    const minutes = Math.floor((total % 3600) / 60);
+    if (lang === 'bn') return `${hours} ঘণ্টা ${minutes} মিনিট`;
+    return `${hours}h ${minutes}m`;
+  };
 
   const handleReset = async () => {
     if (!window.confirm(lang === 'bn' ? "আপনি কি সমস্ত ডেটা রিসেট করতে চান?" : "Are you sure you want to reset demo database?")) return;
@@ -120,7 +172,7 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
               <span className="text-gray-500">Database:</span>
-              <strong className="text-emerald-600">SQLite 3 (Relational)</strong>
+              <strong className="text-emerald-600">PostgreSQL (psycopg 3)</strong>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
               <span className="text-gray-500">ML Engine:</span>
@@ -138,6 +190,97 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
             </div>
           </div>
         </div>
+      </div>
+
+      {/* Deed-number search protection monitoring */}
+      <div className="gov-card p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2">
+              <Lock className="w-4 h-4 text-rose-600" />
+              <span>{lang === 'bn' ? 'দলিল অনুসন্ধান লক মনিটরিং' : 'Deed Search Lock Monitoring'}</span>
+            </h3>
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+              {lang === 'bn'
+                ? 'পরপর ৭ বার ভুল দলিল নম্বরের পর ৫ ঘণ্টার সুরক্ষা লক। লক অপসারণ অডিট লগে রেকর্ড হয়।'
+                : '5-hour protection lock after 7 consecutive invalid deed numbers. Unlocks are written to the audit log.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={fetchLocks}
+            disabled={locksLoading}
+            className="gov-btn-secondary text-xs py-2 px-3 flex items-center gap-1.5 flex-shrink-0"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${locksLoading ? 'animate-spin' : ''}`} />
+            <span>{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</span>
+          </button>
+        </div>
+
+        {locksError && (
+          <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-[11px] text-rose-700 dark:text-rose-300">
+            {locksError}
+          </div>
+        )}
+
+        {unlockMsg && (
+          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>{unlockMsg}</span>
+          </div>
+        )}
+
+        {locksLoading && locks.length === 0 ? (
+          <div className="flex items-center gap-2 text-xs text-gray-500 py-4">
+            <RefreshCw className="w-4 h-4 animate-spin" />
+            <span>{lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading...'}</span>
+          </div>
+        ) : locks.length === 0 ? (
+          <p className="text-xs text-gray-500 dark:text-gray-400 py-2">
+            {lang === 'bn' ? 'বর্তমানে কোনো লক রেকর্ড নেই।' : 'No lock records at the moment.'}
+          </p>
+        ) : (
+          <ul className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
+            {locks.map((lock) => (
+              <li key={`${lock.subject_type}-${lock.subject_key}`} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-bold text-gray-900 dark:text-white break-all">{describeSubject(lock)}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${lock.is_active ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
+                      {lock.is_active ? (lang === 'bn' ? 'সক্রিয় লক' : 'Active lock') : (lang === 'bn' ? 'নিষ্ক্রিয়' : 'Inactive')}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
+                    <span>
+                      {lang === 'bn' ? 'ব্যর্থ চেষ্টা:' : 'Failures:'} <strong>{lock.consecutive_failures}</strong>
+                    </span>
+                    {lock.is_active && (
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {formatRemaining(lock.remaining_seconds)}
+                      </span>
+                    )}
+                    {lock.updated_at && (
+                      <span className="truncate max-w-[220px]">
+                        {lang === 'bn' ? 'সর্বশেষ:' : 'Updated:'} {String(lock.updated_at).replace('T', ' ').slice(0, 16)}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                {lock.is_active && (
+                  <button
+                    type="button"
+                    onClick={() => handleUnlock(lock)}
+                    className="gov-btn-secondary text-[11px] py-1.5 px-3 flex items-center gap-1.5 flex-shrink-0 border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300"
+                  >
+                    <Unlock className="w-3.5 h-3.5" />
+                    <span>{lang === 'bn' ? 'লক অপসারণ' : 'Clear lock'}</span>
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {/* C++ Native Acceleration & Benchmark Card */}

@@ -3,7 +3,7 @@ import { useApp } from '../context/AppContext';
 import QRCodeCanvas from '../components/QRCodeCanvas';
 import {
   FileCheck2, CheckCircle2, AlertTriangle, AlertOctagon, Printer,
-  ArrowLeft, Download, ShieldCheck, ExternalLink, Info, QrCode, Cpu, Home
+  ArrowLeft, Download, ShieldCheck, ExternalLink, Info, QrCode, Cpu, Home, Search
 } from 'lucide-react';
 
 export default function VerificationResult({ result, setActiveTab, navigateBack }) {
@@ -83,6 +83,14 @@ export default function VerificationResult({ result, setActiveTab, navigateBack 
           >
             <ArrowLeft className="w-4 h-4" />
             <span>{lang === 'bn' ? '← দলিল যাচাই ফরম-এ ফিরে যান' : '← Back to Deed Verification'}</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('deed-search')}
+            className="gov-btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
+          >
+            <Search className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}</span>
           </button>
 
           <button
@@ -168,6 +176,40 @@ export default function VerificationResult({ result, setActiveTab, navigateBack 
             </div>
           </div>
         </div>
+
+        {isInsufficient && (
+          <div className="p-4 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40 space-y-3 no-print">
+            <div className="flex items-start gap-2.5">
+              <AlertOctagon className="w-5 h-5 text-slate-500 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 space-y-1">
+                <p className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                  {lang === 'bn' ? 'প্রদত্ত তথ্যের সাথে উপলব্ধ ডেটাবেজে মিল পাওয়া যায়নি' : 'No matching record was found in the available database'}
+                </p>
+                <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-400">
+                  {lang === 'bn'
+                    ? 'ডেটাবেজে রেকর্ড না পাওয়া মানে দলিলটি জাল, অবৈধ বা আইনগতভাবে অস্তিত্বহীন নয়। সঠিক তথ্য দিয়ে আবার চেষ্টা করুন অথবা দলিল নম্বর দিয়ে অনুসন্ধান করুন।'
+                    : 'A missing record does not mean the deed is fake, invalid, or legally nonexistent. Retry with correct details or search by deed number.'}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => setActiveTab('deed-verify')}
+                className="gov-btn-secondary text-xs justify-center py-2 px-4"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Try again'}</span>
+              </button>
+              <button
+                onClick={() => setActiveTab('deed-search')}
+                className="gov-btn-primary text-xs justify-center py-2 px-4"
+              >
+                <Search className="w-3.5 h-3.5" />
+                <span>{lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Structured Field-by-Field Comparison Table */}
         <div className="space-y-3">

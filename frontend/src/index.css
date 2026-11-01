@@ -98,7 +98,7 @@ body {
   background-color: var(--bg);
   color: var(--text-main);
   font-family: 'Hind Siliguri', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  line-height: 1.6;
+  line-height: 1.7;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -427,6 +427,51 @@ html.dark .gov-input:focus, html.dark .gov-select:focus {
     box-shadow: none !important;
     width: 100% !important;
   }
+}
+
+/* =====================================================================
+   PREMIUM SEARCH EXPERIENCE & TYPOGRAPHY POLISH
+   ===================================================================== */
+
+@keyframes resultIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-result-in {
+  animation: resultIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Collapsible advanced-search panel: animates height without layout jumps */
+.advanced-panel {
+  display: grid;
+  grid-template-rows: 0fr;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: grid-template-rows 0.28s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.2s ease;
+}
+
+.advanced-panel > form {
+  overflow: hidden;
+  min-height: 0;
+}
+
+.advanced-panel.is-open {
+  grid-template-rows: 1fr;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+}
+
+h1, h2, h3 {
+  text-wrap: balance;
 }
 
 /* =====================================================================

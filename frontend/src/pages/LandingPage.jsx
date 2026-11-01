@@ -13,6 +13,16 @@ export default function LandingPage({ setActiveTab }) {
 
   const features = [
     {
+      id: 'deed-search',
+      badge: lang === 'bn' ? 'দলিল অনুসন্ধান' : 'Deed Search',
+      title: lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number',
+      desc: lang === 'bn'
+        ? 'দলিল নম্বর, জেলা, উপজেলা, মৌজা, দাগ বা খতিয়ান নম্বর দিয়ে ভূমিসেতুতে সংরক্ষিত দলিল রেকর্ড খুঁজুন এবং উপলব্ধ বিস্তারিত তথ্য দেখুন।'
+        : 'Look up deed records stored in Bhumisetu by deed number, district, mouza, dag or khatian and review the available details.',
+      icon: Search,
+      cta: lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deeds'
+    },
+    {
       id: 'deed-verify',
       badge: lang === 'bn' ? 'দলিল ও বালাম যাচাই' : 'Deed Verification',
       title: lang === 'bn' ? 'ডিজিটাল দলিল ও মালিকানা যাচাই' : 'Deed & Ownership Verification',
@@ -114,6 +124,14 @@ export default function LandingPage({ setActiveTab }) {
             </button>
 
             <button
+              onClick={() => setActiveTab('deed-search')}
+              className="gov-btn-secondary px-7 py-3 text-sm font-semibold shadow-xs hover:border-[#047857]/40 transition flex items-center gap-2"
+            >
+              <Search className="w-4 h-4 text-[#047857]" />
+              <span>{lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}</span>
+            </button>
+
+            <button
               onClick={() => setActiveTab('dashboard')}
               className="gov-btn-secondary px-7 py-3 text-sm font-semibold shadow-xs hover:border-[#047857]/40 transition"
             >
@@ -185,7 +203,7 @@ export default function LandingPage({ setActiveTab }) {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           {features.map(f => {
             const Icon = f.icon;
             return (

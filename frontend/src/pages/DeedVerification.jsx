@@ -4,7 +4,7 @@ import { api } from '../api';
 import PageHeader from '../components/PageHeader';
 import {
   FileCheck2, UploadCloud, Search, AlertTriangle, CheckCircle,
-  Sparkles, RefreshCw, Info, Cpu, CheckCircle2
+  Sparkles, RefreshCw, Info, Cpu, CheckCircle2, ArrowRight
 } from 'lucide-react';
 
 export default function DeedVerification({ setActiveTab, setVerificationResult, navigateBack }) {
@@ -184,6 +184,30 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
         onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
         fallbackTab="dashboard"
       />
+
+      <button
+        type="button"
+        onClick={() => setActiveTab && setActiveTab('deed-search')}
+        className="w-full flex items-center justify-between gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/30 hover:border-[#047857] transition text-left group"
+      >
+        <span className="flex items-start gap-2.5 min-w-0">
+          <Search className="w-4 h-4 text-[#047857] dark:text-emerald-400 mt-0.5 flex-shrink-0" />
+          <span className="min-w-0">
+            <span className="block text-xs font-bold text-emerald-900 dark:text-emerald-200">
+              {lang === 'bn' ? 'শুধু দলিল নম্বর দিয়ে খুঁজতে চান?' : 'Only have a deed number?'}
+            </span>
+            <span className="block text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
+              {lang === 'bn'
+                ? 'জেলা, উপজেলা, মৌজা বা দাগ নম্বর দিয়েও দলিল রেকর্ড অনুসন্ধান করতে পারবেন।'
+                : 'Search stored deed records by district, upazila, mouza, dag or khatian as well.'}
+            </span>
+          </span>
+        </span>
+        <span className="flex items-center gap-1 text-[11px] font-bold text-[#047857] dark:text-emerald-300 flex-shrink-0">
+          <span>{lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}</span>
+          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </span>
+      </button>
 
       {/* Staged Multi-Phase Verification Overlay */}
       {loading && (

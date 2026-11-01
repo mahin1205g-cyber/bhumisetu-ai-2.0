@@ -33,7 +33,7 @@ async function request(endpoint, options = {}) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const requestOptions = { ...options, headers };
+  const requestOptions = { ...options, headers, credentials: "include" };
   const body = options.body;
 
   if (body !== undefined && body !== null && !(body instanceof FormData)) {
@@ -73,6 +73,7 @@ async function request(endpoint, options = {}) {
   if (!response.ok) {
     const detail =
       responseData?.detail ||
+      responseData?.message_bn ||
       responseData?.message ||
       responseData?.error ||
       `Request failed (${response.status})`;
@@ -81,7 +82,10 @@ async function request(endpoint, options = {}) {
       : typeof detail === "string"
         ? detail
         : JSON.stringify(detail);
-    throw new Error(message);
+    const error = new Error(message);
+    error.status = response.status;
+    error.payload = responseData;
+    throw error;
   }
 
   return responseData;
@@ -154,6 +158,31 @@ export const api = {
     request(`/verification/report/${encode(ref)}`),
 
   listVerificationReports: () => request("/verification/reports"),
+
+  searchDeedByNumber: (deedNo) =>
+    request("/deeds/search-by-number", {
+      method: "POST",
+      body: { deed_no: deedNo },
+    }),
+
+  advancedDeedSearch: (data) =>
+    request("/deeds/advanced-search", {
+      method: "POST",
+      body: data,
+    }),
+
+  getDeedDetail: (deedId) => request(`/deeds/${encode(deedId)}`),
+
+  getDeedSearchProtection: () => request("/deeds/search-protection/status"),
+
+  adminDeedSearchLocks: (limit = 50) =>
+    request(`/admin/deed-search/locks?limit=${encode(limit)}`),
+
+  adminUnlockDeedSearch: (data) =>
+    request("/admin/deed-search/unlock", {
+      method: "POST",
+      body: data,
+    }),
 
   // P4: E-Namjari / mutation
   applyMutation: (data, userId) =>

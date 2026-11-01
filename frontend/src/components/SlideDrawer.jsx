@@ -46,6 +46,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
         { id: 'home', label: t('navHome'), icon: Home, badge: null },
         { id: 'dashboard', label: t('navDashboard'), icon: LayoutDashboard, badge: null },
         { id: 'deed-verify', label: t('navDeedVerify'), icon: FileCheck2, badge: null },
+        { id: 'deed-search', label: lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number', icon: Search, badge: lang === 'bn' ? 'নতুন' : 'New', badgeColor: 'bg-emerald-600 text-white' },
         { id: 'mutation', label: t('navMutation'), icon: GitBranchPlus, badge: null },
         { id: 'due-diligence', label: t('navDueDiligence'), icon: AlertOctagon, badge: null },
         { id: 'properties', label: t('navProperties'), icon: Layers, badge: 'O(log N)' }

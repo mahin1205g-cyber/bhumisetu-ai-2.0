@@ -40,6 +40,11 @@ export default function Footer({ setActiveTab }) {
             </h4>
             <ul className="space-y-1.5 text-[#64748B] dark:text-gray-400">
               <li>
+                <button onClick={() => setActiveTab('deed-search')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
+                  • {lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}
+                </button>
+              </li>
+              <li>
                 <button onClick={() => setActiveTab('deed-verify')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
                   • {t('navDeedVerify')}
                 </button>

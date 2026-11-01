@@ -18,11 +18,11 @@ from typing import Optional, List
 
 
 
-from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, status
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, status, Request, Response, Cookie
 
 from fastapi.middleware.cors import CORSMiddleware
 
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, JSONResponse
 
 from fastapi.staticfiles import StaticFiles
 
@@ -85,6 +85,16 @@ except ImportError:
     except ImportError:
 
         chat_service = None
+
+
+
+try:
+
+    import deed_search
+
+except ImportError:
+
+    from backend import deed_search
 
 
 
@@ -234,6 +244,50 @@ class VerifyOTPRequest(BaseModel):
     code: str = Field(min_length=4)
 
 
+
+
+
+class DeedNumberSearchRequest(BaseModel):
+
+    deed_no: str = Field(default="", max_length=120)
+
+
+
+class DeedAdvancedSearchRequest(BaseModel):
+
+    district: Optional[str] = Field(default="", max_length=120)
+
+    upazila: Optional[str] = Field(default="", max_length=120)
+
+    sub_registry_office: Optional[str] = Field(default="", max_length=120)
+
+    reg_year: Optional[str] = Field(default="", max_length=8)
+
+    deed_type: Optional[str] = Field(default="", max_length=80)
+
+    seller_name: Optional[str] = Field(default="", max_length=120)
+
+    buyer_name: Optional[str] = Field(default="", max_length=120)
+
+    mouza: Optional[str] = Field(default="", max_length=120)
+
+    plot_id: Optional[str] = Field(default="", max_length=80)
+
+    khatian_no: Optional[str] = Field(default="", max_length=80)
+
+    page: Optional[int] = 1
+
+    page_size: Optional[int] = 10
+
+
+
+class DeedSearchUnlockRequest(BaseModel):
+
+    user_id: Optional[int] = None
+
+    subject_type: Optional[str] = None
+
+    subject_key: Optional[str] = None
 
 
 
@@ -910,6 +964,381 @@ def get_verification_report(ref: str):
         raise HTTPException(status_code=404, detail="ভেরিফিকেশন রিপোর্ট পাওয়া যায়নি (Report not found)")
 
     return rep
+
+
+
+
+
+def _deed_search_identity(authorization: Optional[str], cookie_token: Optional[str], response: Response):
+
+    user = extract_user_from_auth_header(authorization)
+
+    user_id = user.get("id") if user else None
+
+    role = user.get("role") if user else None
+
+    session_token = deed_search.issue_session_token(cookie_token)
+
+    deed_search.set_session_cookie(response, session_token)
+
+    return user, user_id, role, session_token
+
+
+
+def _lock_response(payload: dict, status_code: int = 429):
+
+    headers = {}
+
+    remaining = payload.get("remaining_seconds")
+
+    if remaining:
+        headers["Retry-After"] = str(int(remaining))
+
+    return JSONResponse(status_code=status_code, content=payload, headers=headers)
+
+
+
+
+
+@app.post("/api/deeds/search-by-number")
+
+def search_deed_by_number(
+
+    req: DeedNumberSearchRequest,
+
+    request: Request,
+
+    response: Response,
+
+    authorization: Optional[str] = Header(None),
+
+    bs_deed_search_sid: Optional[str] = Cookie(None),
+
+):
+
+    user, user_id, role, session_token = _deed_search_identity(authorization, bs_deed_search_sid, response)
+
+    ip = deed_search.client_ip(request)
+
+    rate = deed_search.check_rate_limit(ip)
+
+    if rate:
+
+        return _lock_response(rate)
+
+    lock = deed_search.check_lock(user_id, session_token, ip)
+
+    if lock:
+
+        return _lock_response(lock)
+
+    deed_no = (req.deed_no or "").strip()
+
+    if not deed_no:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="অনুগ্রহ করে দলিল নম্বর লিখুন। / Please enter a deed number.",
+
+        )
+
+    records = deed_search.lookup_by_deed_number(deed_no)
+
+    if not records:
+
+        miss = deed_search.record_failure(user_id, session_token, ip, deed_no)
+
+        payload = {
+
+            "found": False,
+
+            "count": 0,
+
+            "results": [],
+
+            "message_bn": deed_search.NOT_FOUND_MESSAGE_BN,
+
+            "scope_note_bn": deed_search.SCOPE_NOTE_BN,
+
+            "scope_note_en": deed_search.SCOPE_NOTE_EN,
+
+            "data_source": "application_database",
+
+            "is_official_registry": False,
+
+            "consecutive_failures": miss.get("consecutive_failures", 0),
+
+            "remaining_attempts": miss.get("remaining_attempts", 0),
+
+            "locked": bool(miss.get("locked")),
+
+        }
+
+        if miss.get("locked"):
+
+            payload.update(miss)
+
+            payload["found"] = False
+
+            payload["message_bn"] = deed_search.LOCK_MESSAGE_BN
+
+            return _lock_response(payload)
+
+        return payload
+
+    deed_search.record_success(user_id, session_token, ip, deed_no)
+
+    return {
+
+        "found": True,
+
+        "count": len(records),
+
+        "results": [deed_search.public_deed_fields(row, role) for row in records],
+
+        "scope_note_bn": deed_search.SCOPE_NOTE_BN,
+
+        "scope_note_en": deed_search.SCOPE_NOTE_EN,
+
+        "data_source": "application_database",
+
+        "is_official_registry": False,
+
+        "is_synthetic_demo_record": all(deed_search.is_demo_record(row) for row in records),
+
+        "locked": False,
+
+        "consecutive_failures": 0,
+
+    }
+
+
+
+
+
+@app.post("/api/deeds/advanced-search")
+
+def advanced_deed_search(
+
+    req: DeedAdvancedSearchRequest,
+
+    request: Request,
+
+    response: Response,
+
+    authorization: Optional[str] = Header(None),
+
+    bs_deed_search_sid: Optional[str] = Cookie(None),
+
+):
+
+    user, user_id, role, session_token = _deed_search_identity(authorization, bs_deed_search_sid, response)
+
+    filters = req.model_dump()
+
+    usable = {
+
+        k: v for k, v in filters.items()
+
+        if k not in ("page", "page_size", "deed_type") and str(v or "").strip()
+
+    }
+
+    unsupported = []
+
+    if filters.get("deed_type") and str(filters.get("deed_type")).strip():
+
+        unsupported.append("deed_type")
+
+    if not usable and unsupported:
+
+        return {
+
+                "found": False,
+
+                "total": 0,
+
+                "page": 1,
+
+                "page_size": req.page_size or 10,
+
+                "pages": 1,
+
+                "results": [],
+
+                "unsupported_fields": unsupported,
+
+                "message_bn": "দলিলের ধরন এই ডেটাবেজে সংরক্ষিত নেই বলে সেই শর্তটি প্রয়োগ করা যায়নি। অন্যান্য তথ্য দিয়ে অনুসন্ধান করুন।",
+
+                "scope_note_bn": deed_search.SCOPE_NOTE_BN,
+
+                "scope_note_en": deed_search.SCOPE_NOTE_EN,
+
+                "data_source": "application_database",
+
+                "is_official_registry": False,
+
+            }
+
+    if not usable:
+
+        raise HTTPException(
+
+            status_code=400,
+
+            detail="অনুগ্রহ করে অন্তত একটি অনুসন্ধান তথ্য দিন। / Provide at least one search field.",
+
+        )
+
+    result = deed_search.search_deeds(filters, page=req.page or 1, page_size=req.page_size or 10)
+
+    rows = result["records"]
+
+    return {
+
+        "found": bool(rows),
+
+        "total": result["total"],
+
+        "page": result["page"],
+
+        "page_size": result["page_size"],
+
+        "pages": result["pages"],
+
+        "results": [deed_search.public_deed_fields(row, role) for row in rows],
+
+        "message_bn": None if rows else "প্রদত্ত তথ্যের সাথে মিলিয়ে উপলব্ধ ডেটাবেজে কোনো দলিল পাওয়া যায়নি।",
+
+        "scope_note_bn": deed_search.SCOPE_NOTE_BN,
+
+        "scope_note_en": deed_search.SCOPE_NOTE_EN,
+
+        "data_source": "application_database",
+
+        "is_official_registry": False,
+
+        "is_synthetic_demo_record": all(deed_search.is_demo_record(row) for row in rows),
+
+        "unsupported_fields": unsupported,
+
+    }
+
+
+
+
+
+@app.get("/api/deeds/search-protection/status")
+
+def deed_search_protection_status(
+
+    request: Request,
+
+    response: Response,
+
+    authorization: Optional[str] = Header(None),
+
+    bs_deed_search_sid: Optional[str] = Cookie(None),
+
+):
+
+    user, user_id, role, session_token = _deed_search_identity(authorization, bs_deed_search_sid, response)
+
+    status_payload = deed_search.protection_status(user_id, session_token, deed_search.client_ip(request))
+
+    return status_payload
+
+
+
+
+
+@app.get("/api/deeds/{deed_id}")
+
+def get_deed_detail(
+
+    deed_id: int,
+
+    request: Request,
+
+    response: Response,
+
+    authorization: Optional[str] = Header(None),
+
+    bs_deed_search_sid: Optional[str] = Cookie(None),
+
+):
+
+    user, user_id, role, session_token = _deed_search_identity(authorization, bs_deed_search_sid, response)
+
+    row = deed_search.get_deed_by_id(deed_id)
+
+    if not row:
+
+        raise HTTPException(status_code=404, detail="দলিলটি উপলব্ধ ডেটাবেজে পাওয়া যায়নি।")
+
+    return {
+
+        "found": True,
+
+        "result": deed_search.public_deed_fields(row, role),
+
+        "scope_note_bn": deed_search.SCOPE_NOTE_BN,
+
+        "scope_note_en": deed_search.SCOPE_NOTE_EN,
+
+        "data_source": "application_database",
+
+        "is_official_registry": False,
+
+        "is_synthetic_demo_record": deed_search.is_demo_record(row),
+
+    }
+
+
+
+
+
+@app.get("/api/admin/deed-search/locks")
+
+def admin_list_deed_search_locks(
+
+    authorization: Optional[str] = Header(None),
+
+    limit: int = 50,
+
+):
+
+    user = extract_user_from_auth_header(authorization)
+
+    if not user or user.get("role") != "admin":
+
+        raise HTTPException(status_code=403, detail="শুধুমাত্র প্রশাসক এই তথ্য দেখতে পারেন।")
+
+    return {"locks": deed_search.list_locks(limit=limit)}
+
+
+
+
+
+@app.post("/api/admin/deed-search/unlock")
+
+def admin_unlock_deed_search(
+
+    req: DeedSearchUnlockRequest,
+
+    authorization: Optional[str] = Header(None),
+
+):
+
+    user = extract_user_from_auth_header(authorization)
+
+    if not user or user.get("role") != "admin":
+
+        raise HTTPException(status_code=403, detail="শুধুমাত্র প্রশাসক লক অগ্রাহ্য করতে পারেন।")
+
+    return deed_search.admin_unlock(req.subject_type, req.subject_key, req.user_id)
 
 
 
