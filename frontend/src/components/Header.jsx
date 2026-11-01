@@ -4,7 +4,8 @@ import { api } from '../api';
 import BhumiSathiLogo from './BhumiSathiLogo';
 import {
   Menu, Search, Shield, Moon, Sun, Globe, Bell, User, LogOut, CheckCircle,
-  AlertTriangle, Info, Check, ChevronDown, PhoneCall, Zap, X, ArrowRight
+  AlertTriangle, Info, Check, ChevronDown, PhoneCall, Zap, X, ArrowRight,
+  Home, LayoutDashboard, FileCheck2, GitBranchPlus
 } from 'lucide-react';
 
 export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelectedTracking }) {
@@ -36,14 +37,15 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleSearch = async (e) => {
+  const handleSearch = async (e, queryOverride) => {
     if (e) e.preventDefault();
-    if (!searchQuery.trim()) return;
+    const query = (queryOverride ?? searchQuery).trim();
+    if (!query) return;
 
     setIsSearching(true);
     setShowSearchResults(true);
     try {
-      const data = await api.searchBinary(searchQuery.trim(), searchCategory, 10);
+      const data = await api.searchBinary(query, searchCategory, 10);
       setSearchResults(data.results || []);
       setSearchMetrics({
         timeMs: data.time_ms || 0.1,
@@ -82,11 +84,26 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
     }
   };
 
+  const navItems = [
+    { id: 'home', label: lang === 'bn' ? 'হোম' : 'Home', icon: Home },
+    { id: 'dashboard', label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', icon: LayoutDashboard },
+    { id: 'deed-verify', label: lang === 'bn' ? 'দলিল যাচাই' : 'Verify Deed', icon: FileCheck2 },
+    { id: 'deed-search', label: lang === 'bn' ? 'দলিল খুঁজুন' : 'Deed Search', icon: Search },
+    { id: 'mutation', label: lang === 'bn' ? 'ই-নামজারি' : 'E-Namjari', icon: GitBranchPlus }
+  ];
+
+  const isNavActive = (id) =>
+    activeTab === id ||
+    (id === 'deed-verify' && activeTab === 'verification-result') ||
+    (id === 'mutation' && activeTab === 'mutation-track');
+
   return (
-    <header className="sticky top-0 z-40 select-none bg-white dark:bg-[#0C1210] border-b border-[#E2E8F0] dark:border-[#1E2E28] shadow-xs transition-colors duration-200">
-      {/* 1. Top Government Helper Bar (Clean Off-White #F7FAF8, Crisp Contrast) */}
-      <div className="bg-[#F7FAF8] dark:bg-[#111A16] text-[#64748B] dark:text-[#94A3B8] text-[11px] py-1 border-b border-[#E2E8F0] dark:border-[#1E2E28]">
-        <div className="gov-container flex items-center justify-between">
+    <header className="sticky top-0 z-40 select-none bg-transparent px-2.5 sm:px-4 pt-2.5 sm:pt-3 pb-1 transition-colors duration-200">
+      <div className="gov-container">
+        <div className="glass-nav px-2 sm:px-3.5 py-2 sm:py-2.5">
+          {/* 1. Government helper strip (desktop) */}
+          <div className="hidden md:flex items-center justify-between text-[10.5px] text-[#54706A] dark:text-[#9FB8AE] px-1 pb-1.5 mb-1.5 border-b border-white/45 dark:border-white/[0.06]">
+            <div className="w-full flex items-center justify-between gap-3">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-[#17212B] dark:text-[#F8FAF9]">
               {lang === 'bn' ? 'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার' : "Government of the People's Republic of Bangladesh"}
@@ -112,15 +129,15 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
         </div>
       </div>
 
-      {/* 2. Main Navigation Bar (Clean White Surface, Crisp Typography) */}
-      <div className="bg-white dark:bg-[#0C1210] text-[#17212B] dark:text-[#F8FAF9] py-2.5">
-        <div className="gov-container flex flex-wrap items-center justify-between gap-3 sm:gap-4">
+      {/* 2. Main Navigation Row */}
+      <div className="text-[#17212B] dark:text-[#F8FAF9]">
+        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           {/* Left: Hamburger Slide-Window Button + Bhumisetu Brand Logo */}
           <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             {/* Hamburger Button */}
             <button
               onClick={onOpenDrawer}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F7FAF8] dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:bg-slate-100 dark:hover:bg-[#1A2823] text-[#17212B] dark:text-[#F8FAF9] transition focus:outline-none"
+              className="glass-control flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[#17212B] dark:text-[#F8FAF9] focus:outline-none"
               title="Open Navigation Menu"
             >
               <Menu className="w-4 h-4 text-[#047857] dark:text-emerald-400" />
@@ -136,7 +153,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
             >
               <BhumiSathiLogo className="w-9 h-9 sm:w-10 sm:h-10" size={40} />
 
-              <div className="leading-tight hidden min-[390px]:block">
+              <div className="leading-tight hidden min-[430px]:block">
                 <div className="flex items-center gap-1.5">
                   <span className="font-extrabold text-lg sm:text-xl tracking-tight text-[#17212B] dark:text-white group-hover:text-[#047857] dark:group-hover:text-emerald-400 transition duration-200">
                     {lang === 'bn' ? 'ভূমিসেতু' : 'Bhumisetu'}
@@ -155,12 +172,12 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
           {/* Center: Clean Instant Search Bar */}
           {activeTab !== 'login' && activeTab !== 'register' ? (
             <div ref={searchRef} className="relative min-w-0 order-last basis-full w-full xl:order-none xl:w-auto xl:basis-0 xl:grow xl:max-w-xl xl:mx-1">
-              <form onSubmit={handleSearch} className="flex items-center rounded-lg border border-[#E2E8F0] dark:border-[#1E2E28] overflow-hidden focus-within:ring-2 focus-within:ring-[#047857]/20 focus-within:border-[#047857] bg-white dark:bg-[#14201C] transition">
+              <form onSubmit={handleSearch} className="glass-search flex items-center rounded-xl overflow-hidden">
                 {/* Category Dropdown */}
                 <select
                   value={searchCategory}
                   onChange={(e) => setSearchCategory(e.target.value)}
-                  className="bg-[#F7FAF8] dark:bg-[#192722] hover:bg-slate-100 text-gray-700 dark:text-gray-300 text-xs font-medium px-2.5 py-2 border-r border-[#E2E8F0] dark:border-[#1E2E28] outline-none cursor-pointer hidden md:block"
+                  className="bg-transparent hover:bg-white/45 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 text-xs font-medium px-2.5 py-2 border-r border-white/50 dark:border-white/10 outline-none cursor-pointer hidden md:block"
                 >
                   <option value="all">{lang === 'bn' ? 'সব রেকর্ড' : 'All'}</option>
                   <option value="deed">{lang === 'bn' ? 'দলিল (Deed)' : 'Deeds'}</option>
@@ -175,9 +192,10 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                     type="text"
                     value={searchQuery}
                     onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      if (e.target.value.length >= 2) {
-                        handleSearch();
+                      const value = e.target.value;
+                      setSearchQuery(value);
+                      if (value.length >= 2) {
+                        handleSearch(null, value);
                       } else {
                         setShowSearchResults(false);
                       }
@@ -209,7 +227,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 {/* Search Button */}
                 <button
                   type="submit"
-                  className="bg-[#047857] hover:bg-[#065F46] text-white px-3 sm:px-4 py-2 transition flex items-center justify-center font-bold"
+                  className="glass-primary bg-[#047857] hover:bg-[#065F46] text-white px-3 sm:px-4 py-2 transition flex items-center justify-center font-bold flex-shrink-0"
                   title="Search using O(log N) Binary Search Algorithm"
                 >
                   <Search className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
@@ -218,9 +236,9 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
 
               {/* Live Binary Search Dropdown Results */}
               {showSearchResults && searchQuery.trim().length >= 2 && (
-                <div className="absolute left-0 right-0 mt-1.5 bg-white dark:bg-[#14201C] rounded-lg shadow-xl border border-[#E2E8F0] dark:border-[#1E2E28] overflow-hidden z-50 text-xs">
+                <div className="glass-popover absolute left-0 right-0 mt-2 rounded-xl overflow-hidden z-50 text-xs">
                   {/* Benchmark Performance Header */}
-                  <div className="bg-[#F7FAF8] dark:bg-[#192722] px-3 py-1.5 border-b border-[#E2E8F0] dark:border-[#1E2E28] flex items-center justify-between text-[11px]">
+                  <div className="bg-white/45 dark:bg-white/[0.04] px-3 py-1.5 border-b border-white/50 dark:border-white/10 flex items-center justify-between text-[11px]">
                     <div className="flex items-center gap-1.5 text-[#047857] dark:text-emerald-400 font-semibold font-mono">
                       <Zap className="w-3.5 h-3.5 text-[#F5B544] fill-[#F5B544]" />
                       <span>{searchMetrics?.algorithm || 'Binary Search B-Tree O(log N)'}</span>
@@ -240,7 +258,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                         <div
                           key={idx}
                           onClick={() => handleSelectResult(item)}
-                          className="p-2.5 hover:bg-[#F0FDF4] dark:hover:bg-[#192722] cursor-pointer flex items-center justify-between transition group"
+                          className="p-2.5 hover:bg-white/55 dark:hover:bg-emerald-400/10 cursor-pointer flex items-center justify-between transition group"
                         >
                           <div>
                             <div className="font-bold text-[#17212B] dark:text-white group-hover:text-[#047857] dark:group-hover:text-emerald-400">
@@ -270,19 +288,10 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
 
           {/* Right Controls: Language, Theme, Notifications, Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-            <button
-              onClick={() => setActiveTab('deed-search')}
-              className="hidden lg:flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#F0FDF4] dark:bg-emerald-950/40 border border-[#D1FAE5] dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/70 text-xs font-semibold text-[#047857] dark:text-emerald-300 transition"
-              title={lang === 'bn' ? 'দলিল নম্বর দিয়ে রেকর্ড খুঁজুন' : 'Search records by deed number'}
-            >
-              <Search className="w-3.5 h-3.5" />
-              <span>{lang === 'bn' ? 'দলিল খুঁজুন' : 'Deed Search'}</span>
-            </button>
-
             {/* Language Switcher */}
             <button
               onClick={toggleLang}
-              className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-lg bg-[#F7FAF8] dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:bg-slate-100 dark:hover:bg-[#1A2823] text-xs font-semibold text-[#17212B] dark:text-[#F8FAF9] transition"
+              className="glass-control flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold text-[#17212B] dark:text-[#F8FAF9]"
               title="Toggle Language"
               aria-label="Toggle Language"
             >
@@ -293,7 +302,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
             {/* Dark Mode Toggle */}
             <button
               onClick={toggleTheme}
-              className="p-1.5 rounded-lg bg-[#F7FAF8] dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:bg-slate-100 dark:hover:bg-[#1A2823] text-gray-700 dark:text-gray-300 transition"
+              className="glass-control p-1.5 rounded-xl text-gray-700 dark:text-gray-300"
               title="Toggle Dark / Light Mode"
             >
               {theme === 'dark' ? (
@@ -307,7 +316,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
             <div className="relative hidden sm:block">
               <button
                 onClick={() => setShowNotifs(!showNotifs)}
-                className="p-1.5 rounded-lg bg-[#F7FAF8] dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:bg-slate-100 dark:hover:bg-[#1A2823] text-gray-700 dark:text-gray-300 relative transition"
+                className="glass-control p-1.5 rounded-xl text-gray-700 dark:text-gray-300 relative"
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
@@ -319,7 +328,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
               </button>
 
               {showNotifs && (
-                <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white dark:bg-[#14201C] text-gray-900 dark:text-gray-100 rounded-xl shadow-xl border border-[#E2E8F0] dark:border-[#1E2E28] p-3 z-50">
+                <div className="glass-popover absolute right-0 mt-2 w-80 sm:w-96 rounded-xl p-3 z-50 text-gray-900 dark:text-gray-100">
                   <div className="flex items-center justify-between pb-2 border-b border-[#E2E8F0] dark:border-[#1E2E28]">
                     <span className="font-bold text-sm">
                       {lang === 'bn' ? 'বিজ্ঞপ্তি ও নোটিফিকেশন' : 'Notifications'} ({notifications.length})
@@ -368,7 +377,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 {user ? (
                   <div
                     onClick={() => setShowUserMenu(!showUserMenu)}
-                    className="flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-lg bg-[#F7FAF8] dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:bg-slate-100 cursor-pointer select-none transition"
+                    className="glass-control flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl cursor-pointer select-none"
                   >
                     <div className="w-6 h-6 rounded-full bg-[#047857] text-white font-bold text-xs flex items-center justify-center shadow-xs">
                       {user.role === 'admin' ? 'M' : (user.name ? user.name[0] : 'U')}
@@ -386,7 +395,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 ) : (
                   <button
                     onClick={() => setActiveTab('login')}
-                    className="gov-btn-primary text-xs py-1.5 px-3.5 shadow-xs"
+                    className="gov-btn-primary glass-primary text-xs py-1.5 px-3.5 shadow-xs"
                   >
                     <User className="w-3.5 h-3.5" />
                     <span>{t('navLogin')}</span>
@@ -394,7 +403,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 )}
 
                 {showUserMenu && user && (
-                  <div className="absolute right-0 mt-2 w-56 bg-white dark:bg-[#14201C] text-gray-900 dark:text-gray-100 rounded-xl shadow-xl border border-[#E2E8F0] dark:border-[#1E2E28] p-2 z-50">
+                  <div className="glass-popover absolute right-0 mt-2 w-56 rounded-xl p-2 z-50 text-gray-900 dark:text-gray-100">
                     <div className="p-2 border-b border-[#E2E8F0] dark:border-[#1E2E28]">
                       <div className="font-bold text-xs truncate">{user.role === 'admin' ? '' : user.name}</div>
                       <div className="text-[11px] text-gray-500 truncate">{user.email}</div>
@@ -436,6 +445,34 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
 
           </div>
         </div>
+
+        {/* 3. Desktop quick navigation */}
+        <div className="hidden xl:flex items-center justify-between gap-3 mt-2 pt-2 border-t border-white/45 dark:border-white/[0.06]">
+          <nav
+            aria-label={lang === 'bn' ? 'প্রধান নেভিগেশন' : 'Primary navigation'}
+            className="flex items-center gap-1"
+          >
+            {navItems.map(({ id, label, icon: Icon }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setActiveTab(id)}
+                aria-current={isNavActive(id) ? 'page' : undefined}
+                className={`glass-nav-item ${isNavActive(id) ? 'is-active' : ''}`}
+              >
+                <Icon className="w-3.5 h-3.5" aria-hidden="true" />
+                <span>{label}</span>
+              </button>
+            ))}
+          </nav>
+
+          <span className="hidden xl:inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#33544A] dark:text-[#A7C4B8]">
+            <Shield className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400" aria-hidden="true" />
+            <span>{lang === 'bn' ? 'নিরাপদ ও যাচাইকৃত ভূমি সেবা' : 'Secure, verified land services'}</span>
+          </span>
+        </div>
+      </div>
+      </div>
       </div>
     </header>
   );

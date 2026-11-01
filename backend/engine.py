@@ -140,7 +140,7 @@ def init():
         khatian_no TEXT,
         owner_name TEXT,
         result_status TEXT NOT NULL,
-        match_score INTEGER NOT NULL,
+        match_score INTEGER,
         discrepancies TEXT,
         extracted_data TEXT,
         notes TEXT,
@@ -255,6 +255,8 @@ def init():
             c.execute("CREATE INDEX IF NOT EXISTS idx_mutation_status ON mutation_applications(status)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_mutation_user ON mutation_applications(user_id)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_verif_ref ON deed_verifications(verification_ref)")
+            # RECORD_NOT_FOUND results carry no score, so allow NULL for older schemas.
+            c.execute("ALTER TABLE deed_verifications ALTER COLUMN match_score DROP NOT NULL")
             c.execute("CREATE INDEX IF NOT EXISTS idx_dd_ref ON due_diligence_reports(report_ref)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
@@ -651,19 +653,35 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
         except (ValueError, TypeError):
             return 0.0
 
+    submitted_summary = {
+        "deed_no": deed_no or None,
+        "reg_year": reg_year or None,
+        "district": district or None,
+        "upazila": upazila or None,
+        "mouza": mouza or None,
+        "plot_id": plot_id or None,
+        "khatian_no": khatian_no or None,
+        "owner_name": owner_name or None,
+    }
+
     if not deed_record and not prop_record:
-        result_status = "INSUFFICIENT_DATA"
-        match_score = 25
-        discrepancies.append({
-            "field": "দলিল নম্বর ও প্লট রেকর্ড",
-            "field_en": "Deed & Plot Record",
-            "severity": "high",
-            "message_bn": f"দলিল '{deed_no}' অথবা প্লট '{plot_id}' ডাটাবেজে পাওয়া যায়নি।",
-            "message_en": "Deed or plot record not found.",
-            "source": "ডেমো রেজিস্ট্রি"
-        })
+        result_status = "RECORD_NOT_FOUND"
+        match_score = None
+        extracted_summary = None
 
     else:
+        if not deed_record:
+            discrepancies.append({
+                "field": "দলিল রেকর্ড",
+                "field_en": "Deed Record",
+                "severity": "high",
+                "expected": None,
+                "provided": deed_no or None,
+                "message_bn": "প্রদত্ত দলিল নম্বর ও নিবন্ধন সালের সঙ্গে মিলে এমন কোনো দলিল রেকর্ড ডেমো ডাটাবেজে পাওয়া যায়নি।",
+                "message_en": "No deed record in the demo database matched the submitted deed number and registration year.",
+                "source": "ডেমো রেজিস্ট্রি"
+            })
+
         # 1. Deed Number — 8%
         if deed_no and deed_record:
             add_score("দলিল নম্বর", 8, 100, deed_record["deed_no"], deed_no)
@@ -760,39 +778,46 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
                     "source": "এআই অসঙ্গতি শনাক্তকরণ"
                 })
 
-        # Normalize score against fields that could actually be checked
-        match_score = (
-            round(weighted_score / evaluated_weight * 100)
-            if evaluated_weight > 0 else 0
-        )
-        match_score = max(0, min(100, match_score))
-
-        if match_score >= 85 and not discrepancies:
-            result_status = "MATCH"
-        else:
+        if not deed_record:
+            # Core deed/ownership checks cannot run without a registry deed,
+            # so a normalized percentage would overstate what was verified.
+            match_score = None
             result_status = "POTENTIAL_INCONSISTENCY"
+        else:
+            # Normalize score against fields that could actually be checked
+            match_score = (
+                round(weighted_score / evaluated_weight * 100)
+                if evaluated_weight > 0 else 0
+            )
+            match_score = max(0, min(100, match_score))
+
+            if match_score >= 85 and not discrepancies:
+                result_status = "MATCH"
+            else:
+                result_status = "POTENTIAL_INCONSISTENCY"
+
+        extracted_summary = {
+            "deed_no": deed_record["deed_no"] if deed_record else None,
+            "reg_year": deed_record["reg_year"] if deed_record else None,
+            "district": deed_record["district"] if deed_record else (prop_record["district"] if prop_record else None),
+            "upazila": deed_record["upazila"] if deed_record else (prop_record["upazila"] if prop_record else None),
+            "mouza": deed_record["mouza"] if deed_record else (prop_record["mouza"] if prop_record else None),
+            "plot_id": deed_record["plot_id"] if deed_record else (prop_record["plot_id"] if prop_record else None),
+            "khatian_no": deed_record["khatian_no"] if deed_record else (prop_record["khatian_no"] if prop_record else None),
+            "owner_name": deed_record["buyer_name"] if deed_record else (prop_record["current_owner"] if prop_record else None),
+            "recorded_seller": deed_record["seller_name"] if deed_record else None,
+            "recorded_buyer": deed_record["buyer_name"] if deed_record else None,
+            "recorded_area": deed_record["area"] if deed_record else (prop_record["area"] if prop_record else None),
+            "recorded_price": deed_record["price"] if deed_record else None,
+            "property_status": prop_record["status"] if prop_record else None,
+            "sub_registry_office": deed_record["sub_registry_office"] if deed_record else None,
+            "record_found": bool(deed_record),
+            "property_found": bool(prop_record),
+            "data_source": "application_database",
+        }
 
     ref_id = f"LG-VR-2026-{secrets.token_hex(3).upper()}"
     now_iso = datetime.now().isoformat()
-
-    extracted_summary = {
-        "deed_no": deed_record["deed_no"] if deed_record else (deed_no or None),
-        "reg_year": deed_record["reg_year"] if deed_record else (reg_year or None),
-        "district": deed_record["district"] if deed_record else (district or None),
-        "upazila": deed_record["upazila"] if deed_record else (upazila or None),
-        "mouza": deed_record["mouza"] if deed_record else (mouza or None),
-        "plot_id": deed_record["plot_id"] if deed_record else (plot_id or None),
-        "khatian_no": deed_record["khatian_no"] if deed_record else (khatian_no or None),
-        "owner_name": owner_name or (deed_record["buyer_name"] if deed_record else None),
-        "recorded_seller": deed_record["seller_name"] if deed_record else None,
-        "recorded_buyer": deed_record["buyer_name"] if deed_record else None,
-        "recorded_area": deed_record["area"] if deed_record else (prop_record["area"] if prop_record else None),
-        "recorded_price": deed_record["price"] if deed_record else None,
-        "property_status": prop_record["status"] if prop_record else None,
-        "sub_registry_office": deed_record["sub_registry_office"] if deed_record else None,
-        "record_found": bool(deed_record),
-        "data_source": "application_database",
-    }
 
     with conn() as c:
         c.execute(
@@ -807,17 +832,26 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
     log_audit(user_name, "citizen" if not user_id else "user", "DEED_VERIFY", "P2_VERIFICATION",
               f"Verified deed {deed_no} (Status: {result_status}, Ref: {ref_id})")
 
-    return {
+    payload = {
         "verification_ref": ref_id,
         "result_status": result_status,
         "match_score": match_score,
         "discrepancies": discrepancies,
         "extracted_summary": extracted_summary,
+        "submitted_summary": submitted_summary,
+        "record_found": bool(deed_record),
+        "property_found": bool(prop_record),
         "created_at": now_iso,
         "verification_url": f"/verify-deed/{ref_id}",
         "disclaimer_bn": "সতর্কবার্তা: এটি ডেমো ডেটাবেজভিত্তিক বিশ্লেষণ। এটি সরকারি বালাম বইয়ের চূড়ান্ত বা আইনি স্বত্ব সনদ নয়।",
         "disclaimer_en": "Disclaimer: This is preliminary screening against synthetic demonstration records. It does not replace official Sub-Registry Office verification or legal counsel."
     }
+
+    if result_status == "RECORD_NOT_FOUND":
+        payload["message_bn"] = "আপনার দেওয়া দলিল নম্বরটি আমাদের ডেমো ডাটাবেজে খুঁজে পাওয়া যায়নি।"
+        payload["message_en"] = "The submitted deed number was not found in our demo database."
+
+    return payload
 
 
 def get_deed_verification_by_ref(ref: str):

@@ -293,7 +293,7 @@ class DeedSearchUnlockRequest(BaseModel):
 
 class DeedVerifyRequest(BaseModel):
 
-    deed_no: str
+    deed_no: Optional[str] = ""
 
     reg_year: Optional[int] = 2025
 

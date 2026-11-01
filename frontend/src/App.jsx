@@ -304,7 +304,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen flex flex-col bg-[var(--bg)] text-[var(--text-main)] transition-colors duration-200">
+    <div className="min-h-screen flex flex-col bg-transparent text-[var(--text-main)] transition-colors duration-200">
       {/* Slide Drawer (Opened via Menu button in Header) */}
       <SlideDrawer
         isOpen={isDrawerOpen}
