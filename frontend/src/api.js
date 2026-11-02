@@ -28,12 +28,33 @@ async function request(endpoint, options = {}) {
   const headers = new Headers(options.headers || {});
   headers.set("Accept", "application/json");
 
+  const { timeoutMs = 0, signal: callerSignal, ...fetchOptions } = options;
+  const controller = timeoutMs > 0 ? new AbortController() : null;
+  let timedOut = false;
+  let timeoutId;
+  const abortFromCaller = () => controller?.abort(callerSignal?.reason);
+  if (controller && callerSignal) {
+    if (callerSignal.aborted) abortFromCaller();
+    else callerSignal.addEventListener("abort", abortFromCaller, { once: true });
+  }
+  if (controller) {
+    timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+  }
+
   const token = getToken();
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const requestOptions = { ...options, headers, credentials: "include" };
+  const requestOptions = {
+    ...fetchOptions,
+    headers,
+    credentials: "include",
+    ...(controller ? { signal: controller.signal } : callerSignal ? { signal: callerSignal } : {}),
+  };
   const body = options.body;
 
   if (body !== undefined && body !== null && !(body instanceof FormData)) {
@@ -41,54 +62,71 @@ async function request(endpoint, options = {}) {
     requestOptions.body = JSON.stringify(body);
   }
 
-  let response;
   try {
-    response = await fetch(`${BASE_URL}${endpoint}`, requestOptions);
-  } catch (error) {
-    throw new Error(
-      "Backend-এর সাথে সংযোগ করা যাচ্ছে না। Backend URL, deployment এবং CORS configuration পরীক্ষা করুন।"
-    );
-  }
-
-  const contentType = response.headers.get("content-type") || "";
-  const isJson = contentType.includes("application/json");
-  let responseData = null;
-
-  if (isJson) {
+    let response;
     try {
-      responseData = await response.json();
+      response = await fetch(`${BASE_URL}${endpoint}`, requestOptions);
     } catch {
-      throw new Error("Backend থেকে সঠিক JSON response পাওয়া যায়নি।");
-    }
-  } else {
-    const responseText = await response.text().catch(() => "");
-    if (responseText.trimStart().startsWith("<")) {
-      throw new Error(
-        `API endpoint-এর বদলে HTML পাওয়া গেছে (${response.status})। VITE_API_URL এবং backend route পরীক্ষা করুন।`
+      if (timedOut) {
+        const error = new Error("Dashboard request timed out. Please try again.");
+        error.code = "REQUEST_TIMEOUT";
+        throw error;
+      }
+      const error = new Error(
+        "Backend-এর সাথে সংযোগ করা যাচ্ছে না। Backend URL, deployment এবং CORS configuration পরীক্ষা করুন।"
       );
+      error.code = "BACKEND_UNAVAILABLE";
+      throw error;
     }
-    responseData = responseText ? { detail: responseText } : null;
-  }
 
-  if (!response.ok) {
-    const detail =
-      responseData?.detail ||
-      responseData?.message_bn ||
-      responseData?.message ||
-      responseData?.error ||
-      `Request failed (${response.status})`;
-    const message = Array.isArray(detail)
-      ? detail.map((item) => item.msg || JSON.stringify(item)).join(", ")
-      : typeof detail === "string"
-        ? detail
-        : JSON.stringify(detail);
-    const error = new Error(message);
-    error.status = response.status;
-    error.payload = responseData;
-    throw error;
-  }
+    const contentType = response.headers.get("content-type") || "";
+    const isJson = contentType.includes("application/json");
+    let responseData = null;
 
-  return responseData;
+    if (isJson) {
+      try {
+        responseData = await response.json();
+      } catch {
+        if (timedOut) {
+          const error = new Error("Dashboard request timed out. Please try again.");
+          error.code = "REQUEST_TIMEOUT";
+          throw error;
+        }
+        throw new Error("Backend থেকে সঠিক JSON response পাওয়া যায়নি।");
+      }
+    } else {
+      const responseText = await response.text().catch(() => "");
+      if (responseText.trimStart().startsWith("<")) {
+        throw new Error(
+          `API endpoint-এর বদলে HTML পাওয়া গেছে (${response.status})। VITE_API_URL এবং backend route পরীক্ষা করুন।`
+        );
+      }
+      responseData = responseText ? { detail: responseText } : null;
+    }
+
+    if (!response.ok) {
+      const detail =
+        responseData?.detail ||
+        responseData?.message_bn ||
+        responseData?.message ||
+        responseData?.error ||
+        `Request failed (${response.status})`;
+      const message = Array.isArray(detail)
+        ? detail.map((item) => item.msg || JSON.stringify(item)).join(", ")
+        : typeof detail === "string"
+          ? detail
+          : JSON.stringify(detail);
+      const error = new Error(message);
+      error.status = response.status;
+      error.payload = responseData;
+      throw error;
+    }
+
+    return responseData;
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+    callerSignal?.removeEventListener("abort", abortFromCaller);
+  }
 }
 
 const encode = (value) => encodeURIComponent(String(value));
@@ -121,8 +159,54 @@ export const api = {
 
   getMe: () => request("/auth/me"),
 
+  getProfilePicture: async (userId, version) => {
+    const headers = new Headers({ Accept: "image/webp" });
+    const token = getToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(`${BASE_URL}/users/${encode(userId)}/profile-picture?v=${encode(version)}`, {
+      headers,
+      credentials: "include",
+    });
+    if (!response.ok) {
+      let detail = "Could not load profile picture";
+      try {
+        const payload = await response.json();
+        detail = payload?.detail || detail;
+      } catch {
+        // Keep the useful fallback for non-JSON error responses.
+      }
+      const error = new Error(detail);
+      error.status = response.status;
+      throw error;
+    }
+    return response.blob();
+  },
+
+  uploadProfilePicture: (formData, onProgress) => new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", `${BASE_URL}/profile-picture`);
+    xhr.withCredentials = true;
+    xhr.setRequestHeader("Accept", "application/json");
+    const token = getToken();
+    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.upload.addEventListener("progress", (event) => {
+      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+    });
+    xhr.addEventListener("load", () => {
+      let payload = {};
+      try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* handled below */ }
+      if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
+      else reject(new Error(payload.detail || `Upload failed (${xhr.status})`));
+    });
+    xhr.addEventListener("error", () => reject(new Error("Could not connect to the server")));
+    xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+    xhr.send(formData);
+  }),
+
+  removeProfilePicture: () => request("/profile-picture", { method: "DELETE" }),
+
   // Dashboard and seed
-  getDashboardStats: () => request("/dashboard/stats"),
+  getDashboardStats: () => request("/dashboard/stats", { timeoutMs: 20000 }),
 
   // P2: Deed verification
   verifyDeed: (data, userId) =>

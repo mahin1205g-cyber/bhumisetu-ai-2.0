@@ -31,6 +31,8 @@ export default function Login({ setActiveTab, navigateBack }) {
   const [resetToken, setResetToken] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     if (recoveryLockSeconds <= 0) return undefined;
@@ -69,6 +71,10 @@ export default function Login({ setActiveTab, navigateBack }) {
     setRecoveryIdentity({ username: '', full_name: '', phone: '', nid: '' });
     setRecoveredUsername('');
     setResetToken('');
+    setNewPassword('');
+    setConfirmPassword('');
+    setShowNewPassword(false);
+    setShowConfirmPassword(false);
     setRecoveryLockSeconds(0);
     setError('');
     setSuccess('');
@@ -157,6 +163,7 @@ export default function Login({ setActiveTab, navigateBack }) {
       setRecoveryStep(0);
       setRecovering(false);
       setResetToken(''); setNewPassword(''); setConfirmPassword('');
+      setShowNewPassword(false); setShowConfirmPassword(false);
     } catch (err) {
       setError(err.message);
     } finally { setLoading(false); }
@@ -196,7 +203,7 @@ export default function Login({ setActiveTab, navigateBack }) {
       {(error || (recovering && recoveryLockSeconds > 0) || (!recovering && loginLockSeconds > 0)) && <div role="alert" className="p-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs">{recovering && recoveryLockSeconds > 0 ? lockoutMessage() : !recovering && loginLockSeconds > 0 ? loginLockoutMessage() : error}</div>}
       {success && <div role="status" className="p-3 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs">{success}</div>}
 
-      <div className="gov-card p-6 sm:p-7">
+      <div className="gov-card login-card p-4 sm:p-7">
         {recovering ? (
           <div className="space-y-4">
             <h2 className="font-bold text-sm text-[#17212B] dark:text-white">{recoveryType === 'password' ? (lang === 'bn' ? 'পাসওয়ার্ড পুনরুদ্ধার' : 'Recover password') : (lang === 'bn' ? 'ইউজারনেম খুঁজুন' : 'Find username')}</h2>
@@ -207,10 +214,10 @@ export default function Login({ setActiveTab, navigateBack }) {
             {recoveryStep === 0 && <form onSubmit={handleRecoveryStart} className="space-y-3">
               <p className="text-xs text-gray-500">{recoveryType === 'password' ? (lang === 'bn' ? 'অ্যাকাউন্টের ইউজারনেম, নিবন্ধিত মোবাইল ও NID দিন।' : 'Enter the account username, registered mobile number, and NID.') : (lang === 'bn' ? 'অ্যাকাউন্টে দেওয়া পূর্ণ নাম, নিবন্ধিত মোবাইল ও NID দিন।' : 'Enter the account full name, registered mobile number, and NID.')}</p>
               {recoveryType === 'password'
-                ? <Input className="gov-input" autoComplete="username" placeholder={lang === 'bn' ? 'ইউজারনেম' : 'Username'} value={recoveryIdentity.username} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, username: e.target.value })} required />
-                : <Input className="gov-input" autoComplete="name" placeholder={lang === 'bn' ? 'পূর্ণ নাম' : 'Full name'} value={recoveryIdentity.full_name} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, full_name: e.target.value })} required />}
-              <Input className="gov-input" type="tel" inputMode="tel" autoComplete="tel" placeholder={lang === 'bn' ? 'মোবাইল নম্বর' : 'Mobile number'} value={recoveryIdentity.phone} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, phone: e.target.value })} required />
-              <Input className="gov-input" inputMode="numeric" placeholder="NID (10, 13, or 17 digits)" value={recoveryIdentity.nid} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, nid: e.target.value.replace(/[^0-9]/g, '').slice(0, 17) })} pattern="(?:[0-9]{10}|[0-9]{13}|[0-9]{17})" maxLength={17} required />
+                ? <Input className="gov-input" autoComplete="username" aria-label={lang === 'bn' ? 'ইউজারনেম' : 'Username'} placeholder={lang === 'bn' ? 'ইউজারনেম' : 'Username'} value={recoveryIdentity.username} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, username: e.target.value })} required />
+                : <Input className="gov-input" autoComplete="name" aria-label={lang === 'bn' ? 'পূর্ণ নাম' : 'Full name'} placeholder={lang === 'bn' ? 'পূর্ণ নাম' : 'Full name'} value={recoveryIdentity.full_name} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, full_name: e.target.value })} required />}
+              <Input className="gov-input" type="tel" inputMode="tel" autoComplete="tel" aria-label={lang === 'bn' ? 'নিবন্ধিত মোবাইল নম্বর' : 'Registered mobile number'} placeholder={lang === 'bn' ? 'মোবাইল নম্বর' : 'Mobile number'} value={recoveryIdentity.phone} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, phone: e.target.value })} required />
+              <Input className="gov-input" inputMode="numeric" aria-label="NID number" placeholder="NID (10, 13, or 17 digits)" value={recoveryIdentity.nid} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, nid: e.target.value.replace(/[^0-9]/g, '').slice(0, 17) })} pattern="(?:[0-9]{10}|[0-9]{13}|[0-9]{17})" maxLength={17} required />
               <Button className="w-full gov-btn-primary text-xs" disabled={loading || recoveryLockSeconds > 0}>{loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Checking...') : recoveryType === 'password' ? (lang === 'bn' ? 'পরিচয় যাচাই করুন' : 'Verify identity') : (lang === 'bn' ? 'ইউজারনেম খুঁজুন' : 'Find username')}</Button>
             </form>}
             {recoveryType === 'username' && recoveryStep === 1 && <div className="space-y-3">
@@ -219,8 +226,18 @@ export default function Login({ setActiveTab, navigateBack }) {
             </div>}
             {recoveryType === 'password' && recoveryStep === 1 && <form onSubmit={handlePasswordReset} className="space-y-3">
               <p className="text-xs text-gray-500">{lang === 'bn' ? 'নতুন পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের দিন।' : 'Choose a new password with at least 8 characters.'}</p>
-              <Input className="gov-input" type="password" autoComplete="new-password" minLength={8} maxLength={256} placeholder={lang === 'bn' ? 'নতুন পাসওয়ার্ড' : 'New password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
-              <Input className="gov-input" type="password" autoComplete="new-password" minLength={8} maxLength={256} placeholder={lang === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+              <div className="relative">
+                <Input className="gov-input pr-12" type={showNewPassword ? 'text' : 'password'} autoComplete="new-password" aria-label={lang === 'bn' ? 'নতুন পাসওয়ার্ড' : 'New password'} minLength={8} maxLength={256} placeholder={lang === 'bn' ? 'নতুন পাসওয়ার্ড' : 'New password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+                <Button type="button" className="password-visibility-toggle absolute right-1 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-800 dark:hover:text-white" onClick={() => setShowNewPassword((visible) => !visible)} aria-label={showNewPassword ? (lang === 'bn' ? 'নতুন পাসওয়ার্ড লুকান' : 'Hide new password') : (lang === 'bn' ? 'নতুন পাসওয়ার্ড দেখান' : 'Show new password')} aria-pressed={showNewPassword}>
+                  {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
+              <div className="relative">
+                <Input className="gov-input pr-12" type={showConfirmPassword ? 'text' : 'password'} autoComplete="new-password" aria-label={lang === 'bn' ? 'নতুন পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm new password'} minLength={8} maxLength={256} placeholder={lang === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+                <Button type="button" className="password-visibility-toggle absolute right-1 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-800 dark:hover:text-white" onClick={() => setShowConfirmPassword((visible) => !visible)} aria-label={showConfirmPassword ? (lang === 'bn' ? 'নিশ্চিতকরণ পাসওয়ার্ড লুকান' : 'Hide confirmation password') : (lang === 'bn' ? 'নিশ্চিতকরণ পাসওয়ার্ড দেখান' : 'Show confirmation password')} aria-pressed={showConfirmPassword}>
+                  {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </Button>
+              </div>
               <Button className="w-full gov-btn-primary text-xs" disabled={loading}>{loading ? (lang === 'bn' ? 'পরিবর্তন হচ্ছে...' : 'Resetting...') : (lang === 'bn' ? 'নতুন পাসওয়ার্ড সেট করুন' : 'Reset password')}</Button>
             </form>}
             <Button type="button" className="text-xs text-gray-500 underline" onClick={() => { setRecovering(false); setRecoveryStep(0); setRecoveryLockSeconds(0); setError(''); setSuccess(''); }}>{lang === 'bn' ? 'লগইনে ফিরে যান' : 'Back to login'}</Button>
@@ -229,23 +246,23 @@ export default function Login({ setActiveTab, navigateBack }) {
           <>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
-              {lang === 'bn' ? 'ব্যবহারকারীর নাম অথবা ইমেইল' : 'Username or Email'}
+            <label htmlFor="login-identifier" className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
+              {lang === 'bn' ? 'ইউজারনেম অথবা ইমেইল' : 'Username or Email'}
             </label>
-            <div className="relative"><User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <Input type="text" name="identifier" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
-                placeholder={lang === 'bn' ? 'ব্যবহারকারীর নাম অথবা ইমেইল' : 'Username or Email'}
+            <div className="relative"><User className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input id="login-identifier" type="text" name="identifier" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
+                placeholder={lang === 'bn' ? 'ইউজারনেম অথবা ইমেইল' : 'Username or Email'}
                 autoComplete="username" className="gov-input pl-9" required /></div>
           </div>
           <div>
-            <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
+            <label htmlFor="login-password" className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'}
             </label>
-            <div className="relative"><Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <Input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password" className="gov-input pl-9 pr-9" required />
-              <Button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">{showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</Button>
+            <div className="relative"><Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <Input id="login-password" type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password" className="gov-input pl-9 pr-12" required />
+              <Button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? (lang === 'bn' ? 'পাসওয়ার্ড লুকান' : 'Hide password') : (lang === 'bn' ? 'পাসওয়ার্ড দেখান' : 'Show password')}
+                aria-pressed={showPassword} className="password-visibility-toggle absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">{showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</Button>
             </div>
           </div>
           <Button type="submit" disabled={loading} className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow-xs">

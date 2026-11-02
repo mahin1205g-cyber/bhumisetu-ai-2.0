@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
+import ProfileAvatar from '../components/ProfileAvatar';
 import {
   Search, GitBranchPlus, Clock, CheckCircle2, XCircle, AlertCircle,
   FileText, User, MapPin, Calendar, RefreshCw, ArrowRight, UploadCloud,
@@ -12,7 +13,7 @@ import {
 
 export default function ApplicationTracking({ initialTrackingNo, setActiveTab, navigateBack }) {
   const { lang, t, user } = useApp();
-  const [trackingNo, setTrackingNo] = useState(initialTrackingNo || 'MUT-2026-DHK-4821');
+  const [trackingNo, setTrackingNo] = useState(initialTrackingNo || '');
   const [appData, setAppData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -53,8 +54,6 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
     if (initialTrackingNo) {
       setTrackingNo(initialTrackingNo);
       fetchApplication(initialTrackingNo);
-    } else {
-      fetchApplication('MUT-2026-DHK-4821');
     }
   }, [initialTrackingNo]);
 
@@ -145,13 +144,14 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
       {/* Quick Search & Preset Pills */}
       <div className="gov-card p-5 space-y-3">
         <form onSubmit={handleSearch} className="flex gap-2">
-          <div className="relative flex-1">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <Input
               type="text"
+              aria-label={lang === 'bn' ? 'নামজারি ট্র্যাকিং নম্বর দিয়ে অনুসন্ধান' : 'Search by mutation tracking number'}
               value={trackingNo}
               onChange={(e) => setTrackingNo(e.target.value)}
-              placeholder="e.g. MUT-2026-DHK-4821"
+              placeholder={lang === 'bn' ? 'ট্র্যাকিং নম্বর লিখুন' : 'Enter tracking number'}
               className="gov-input pl-9 font-mono"
               required
             />
@@ -317,10 +317,11 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
               <form onSubmit={handleResubmit} className="space-y-4 text-xs pt-1">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
-                    <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    <label htmlFor="correction-phone" className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                       {lang === 'bn' ? 'আবেদনকারীর যোগাযোগ নম্বর' : 'Applicant Phone'}
                     </label>
                     <Input
+                      id="correction-phone"
                       type="text"
                       value={correctionPhone}
                       onChange={(e) => setCorrectionPhone(e.target.value)}
@@ -329,10 +330,11 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                     />
                   </div>
                   <div>
-                    <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                    <label htmlFor="correction-address" className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                       {lang === 'bn' ? 'বর্তমান যোগাযোগের ঠিকানা' : 'Contact Address'}
                     </label>
                     <Input
+                      id="correction-address"
                       type="text"
                       value={correctionAddress}
                       onChange={(e) => setCorrectionAddress(e.target.value)}
@@ -365,6 +367,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                   <div className="flex gap-2">
                     <Input
                       type="text"
+                      aria-label={lang === 'bn' ? 'নতুন সংযুক্ত নথির নাম' : 'Name of additional document'}
                       value={newDocName}
                       onChange={(e) => setNewDocName(e.target.value)}
                       placeholder={lang === 'bn' ? 'যেমন: বায়া দলিল নং-D-4091 এর স্পষ্ট কপি' : 'e.g. Clear Baya Deed Copy'}
@@ -382,10 +385,11 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
 
                 {/* Applicant Remarks / Explanation */}
                 <div>
-                  <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  <label htmlFor="correction-notes" className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     {lang === 'bn' ? 'সংশোধনের বিবরণ ও ব্যাখ্যা' : 'Applicant Explanation / Notes'} *
                   </label>
                   <Input as="textarea"
+                    id="correction-notes"
                     rows="3"
                     value={correctionNotes}
                     onChange={(e) => setCorrectionNotes(e.target.value)}
@@ -427,7 +431,10 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
               <div>
                 <span className="text-gray-500 block">{lang === 'bn' ? 'আবেদনকারী' : 'Applicant'}</span>
-                <span className="font-semibold text-gray-900 dark:text-white">{appData.applicant_name}</span>
+                <span className="inline-flex items-center gap-2 font-semibold text-gray-900 dark:text-white">
+                  <ProfileAvatar user={{ id: appData.user_id, username: appData.username, profile_picture: appData.profile_picture }} className="h-8 w-8 text-[11px]" />
+                  {appData.applicant_name}
+                </span>
               </div>
               <div>
                 <span className="text-gray-500 block">{t('plotNo')}</span>

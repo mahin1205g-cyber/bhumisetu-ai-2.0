@@ -98,19 +98,19 @@ export default function PageHeader({
         </div>
 
         {/* Optional Action Buttons (Print, Refresh, Actions) */}
-        {actions && <div className="flex items-center gap-2">{actions}</div>}
+        {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
       </div>
 
       {/* Main Page Title Header */}
       <div className="pt-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div className="space-y-1">
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             {Icon && (
               <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-400 border border-emerald-500/20">
                 <Icon className="w-5 h-5" />
               </div>
             )}
-            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h1 className="min-w-0 break-words text-xl sm:text-2xl font-bold tracking-tight text-slate-900 dark:text-white">
               {title}
             </h1>
             {badge && (

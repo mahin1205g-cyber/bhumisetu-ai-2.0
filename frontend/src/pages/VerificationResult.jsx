@@ -296,6 +296,7 @@ export default function VerificationResult({ result, setActiveTab, navigateBack 
               value={`[ভূমিসাথী — ডিজিটাল সনদপত্র / BhumiSathi AI]\nরেফারেন্স: ${verification_ref || 'LG-VR-2026'}\nদলিল নং: ${extracted_summary?.deed_no || 'D-8492'} (${extracted_summary?.reg_year || 2023})\nমৌজা: ${extracted_summary?.mouza || 'পাইকপাড়া'}, দাগ: ${extracted_summary?.plot_id || 'DHK-MIR-002'}\nস্ট্যাটাস: ${result_status === 'MATCH' ? '১০০% তথ্যের মিল (VALID)' : 'গরমিল চিহ্নিত (FLAGGED)'}\nস্কোর: ${match_score || 100}%\nকর্তৃপক্ষ: সাব-রেজিস্ট্রি বালাম ও খতিয়ান ক্রস-ম্যাচ\nলিংক: ${typeof window !== 'undefined' ? window.location.origin : ''}/#verify/${verification_ref || 'LG-VR-2026'}`}
               size={100}
               label={verification_ref}
+              lang={lang}
               title={lang === 'bn' ? 'ডিজিটাল দলিল যাচাই সনদ কিউআর' : 'Deed Verification QR Certificate'}
             />
             <div className="space-y-1 text-xs">

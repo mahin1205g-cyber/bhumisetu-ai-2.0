@@ -4,6 +4,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import BhumiSathiLogo from './BhumiSathiLogo';
+import ProfileAvatar from './ProfileAvatar';
 import {
   Menu, Search, Shield, Moon, Sun, Globe, Bell, User, LogOut, CheckCircle,
   AlertTriangle, Info, Check, ChevronDown, PhoneCall, Zap, X, ArrowRight,
@@ -34,7 +35,6 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
   const [searchMetrics, setSearchMetrics] = useState(null);
   const searchRef = useRef(null);
   const profileName = String(user?.name ?? '').trim() || String(user?.username ?? '').trim();
-  const profileInitial = Array.from(profileName)[0]?.toLocaleUpperCase() || 'U';
   const profileRole = PROFILE_ROLE_LABELS[user?.role]?.[lang] || user?.role || '';
 
   // Close search dropdown when clicking outside
@@ -46,6 +46,17 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  useEffect(() => {
+    const closePopovers = (event) => {
+      if (event.key !== 'Escape') return;
+      setShowSearchResults(false);
+      setShowNotifs(false);
+      setShowUserMenu(false);
+    };
+    window.addEventListener('keydown', closePopovers);
+    return () => window.removeEventListener('keydown', closePopovers);
   }, []);
 
   const handleSearch = async (e, queryOverride) => {
@@ -60,7 +71,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
       setSearchResults(data.results || []);
       setSearchMetrics({
         timeMs: data.time_ms || 0.1,
-        algorithm: data.algorithm || 'Binary Search B-Tree O(log N)',
+        algorithm: data.algorithm || 'PostgreSQL indexed search',
         count: data.count || 0
       });
     } catch (err) {
@@ -156,9 +167,11 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
             </Button>
 
             {/* Brand Logo & Bhumisetu Identity */}
-            <div
+            <Button
+              type="button"
               onClick={() => setActiveTab('home')}
-              className="flex items-center gap-2.5 cursor-pointer group"
+              aria-label={lang === 'bn' ? 'ভূমিসেতু হোম পেজ' : 'Bhumisetu home page'}
+              className="flex items-center gap-2.5 cursor-pointer group p-0 text-left"
             >
               <BhumiSathiLogo className="w-9 h-9 sm:w-10 sm:h-10" size={40} />
 
@@ -175,7 +188,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                   {lang === 'bn' ? 'নিরাপদ ভূমি সিদ্ধান্তের নির্ভরযোগ্য ডিজিটাল সেতু' : 'Your Trusted Bridge for Safer Land Decisions'}
                 </div>
               </div>
-            </div>
+            </Button>
           </div>
 
           {/* Center: Clean Instant Search Bar */}
@@ -184,6 +197,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
               <form onSubmit={handleSearch} className="glass-search flex items-center rounded-xl overflow-hidden">
                 {/* Category Dropdown */}
                 <Input as="select"
+                  aria-label={lang === 'bn' ? 'অনুসন্ধানের রেকর্ডের ধরন' : 'Search record type'}
                   value={searchCategory}
                   onChange={(e) => setSearchCategory(e.target.value)}
                   className="bg-transparent hover:bg-white/45 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 text-xs font-medium px-2.5 py-2 border-r border-white/50 dark:border-white/10 outline-none cursor-pointer hidden md:block"
@@ -199,6 +213,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 <div className="relative flex-1 min-w-0">
                   <Input
                     type="text"
+                    aria-label={lang === 'bn' ? 'ভূমি রেকর্ড অনুসন্ধান' : 'Search land records'}
                     value={searchQuery}
                     onChange={(e) => {
                       const value = e.target.value;
@@ -214,8 +229,8 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                     }}
                     placeholder={
                       lang === 'bn'
-                        ? 'দলিল নং, দাগ নং, খতিয়ান বা নামজারি ট্র্যাকিং দিয়ে খুঁজুন... (O(log N))'
-                        : 'Search Deeds, Plots, Khatians, or Mutation Tracking (O(log N))...'
+                        ? 'দলিল নং, দাগ নং, খতিয়ান বা নামজারি ট্র্যাকিং দিয়ে খুঁজুন...'
+                        : 'Search deeds, plots, khatians, or mutation tracking...'
                     }
                     className="w-full py-2 px-3 bg-transparent text-[#17212B] dark:text-[#F8FAF9] text-xs outline-none placeholder:text-gray-400 font-medium"
                   />
@@ -226,6 +241,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                         setSearchQuery('');
                         setShowSearchResults(false);
                       }}
+                      aria-label={lang === 'bn' ? 'অনুসন্ধান মুছুন' : 'Clear search'}
                       className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                     >
                       <X className="w-3.5 h-3.5" />
@@ -237,7 +253,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 <Button
                   type="submit"
                   className="glass-primary bg-[#047857] hover:bg-[#065F46] text-white px-3 sm:px-4 py-2 transition flex items-center justify-center font-bold flex-shrink-0"
-                  title="Search using O(log N) Binary Search Algorithm"
+                  title={lang === 'bn' ? 'ডেটাবেসভিত্তিক রেকর্ড অনুসন্ধান' : 'Search database records'}
                 >
                   <Search className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
                 </Button>
@@ -250,7 +266,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                   <div className="bg-white/45 dark:bg-white/[0.04] px-3 py-1.5 border-b border-white/50 dark:border-white/10 flex items-center justify-between text-[11px]">
                     <div className="flex items-center gap-1.5 text-[#047857] dark:text-emerald-400 font-semibold font-mono">
                       <Zap className="w-3.5 h-3.5 text-[#F5B544] fill-[#F5B544]" />
-                      <span>{searchMetrics?.algorithm || 'Binary Search B-Tree O(log N)'}</span>
+                      <span>{searchMetrics?.algorithm || 'PostgreSQL indexed search'}</span>
                     </div>
                     <span className="text-gray-500 font-mono text-[10px]">
                       ⏱ {searchMetrics?.timeMs || 0.12}ms
@@ -264,10 +280,11 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                       </div>
                     ) : (
                       searchResults.map((item, idx) => (
-                        <div
+                        <Button
+                          type="button"
                           key={idx}
                           onClick={() => handleSelectResult(item)}
-                          className="p-2.5 hover:bg-white/55 dark:hover:bg-emerald-400/10 cursor-pointer flex items-center justify-between transition group"
+                          className="w-full p-2.5 hover:bg-white/55 dark:hover:bg-emerald-400/10 cursor-pointer flex items-center justify-between text-left transition group"
                         >
                           <div>
                             <div className="font-bold text-[#17212B] dark:text-white group-hover:text-[#047857] dark:group-hover:text-emerald-400">
@@ -284,7 +301,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                             </span>
                             <ArrowRight className="w-3.5 h-3.5 text-gray-400 group-hover:translate-x-1 transition" />
                           </div>
-                        </div>
+                        </Button>
                       ))
                     )}
                   </div>
@@ -313,6 +330,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
               onClick={toggleTheme}
               className="glass-control p-1.5 rounded-xl text-gray-700 dark:text-gray-300"
               title="Toggle Dark / Light Mode"
+              aria-label={lang === 'bn' ? (theme === 'dark' ? 'লাইট থিম চালু করুন' : 'ডার্ক থিম চালু করুন') : (theme === 'dark' ? 'Switch to light theme' : 'Switch to dark theme')}
             >
               {theme === 'dark' ? (
                 <Sun className="w-4 h-4 text-amber-400" />
@@ -327,6 +345,9 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                 onClick={() => setShowNotifs(!showNotifs)}
                 className="glass-control p-1.5 rounded-xl text-gray-700 dark:text-gray-300 relative"
                 title="Notifications"
+                aria-label={lang === 'bn' ? 'বিজ্ঞপ্তি' : 'Notifications'}
+                aria-haspopup="true"
+                aria-expanded={showNotifs}
               >
                 <Bell className="w-4 h-4" />
                 {unreadCount > 0 && (
@@ -354,10 +375,11 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                       </div>
                     ) : (
                       notifications.map((n) => (
-                        <div
+                        <Button
+                          type="button"
                           key={n.id}
                           onClick={() => handleMarkRead(n.id)}
-                          className={`p-2.5 text-xs transition cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/60 rounded ${
+                          className={`w-full p-2.5 text-xs text-left transition cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-800/60 rounded ${
                             !n.is_read ? 'bg-emerald-50/60 dark:bg-emerald-950/30' : ''
                           }`}
                         >
@@ -372,7 +394,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                           <p className="text-gray-600 dark:text-gray-300 mt-0.5 leading-snug">
                             {lang === 'bn' ? n.message_bn : n.message_en}
                           </p>
-                        </div>
+                        </Button>
                       ))
                     )}
                   </div>
@@ -384,13 +406,15 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
             {activeTab !== 'login' && activeTab !== 'register' && (
               <div className="relative">
                 {user ? (
-                  <div
+                  <Button
+                    type="button"
                     onClick={() => setShowUserMenu(!showUserMenu)}
+                    aria-label={lang === 'bn' ? `${profileName || 'ব্যবহারকারী'}-এর প্রোফাইল মেনু` : `${profileName || 'User'} profile menu`}
+                    aria-haspopup="true"
+                    aria-expanded={showUserMenu}
                     className="glass-control flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl cursor-pointer select-none"
                   >
-                    <div className="w-6 h-6 rounded-full bg-[#047857] text-white font-bold text-xs flex items-center justify-center shadow-xs">
-                      {profileInitial}
-                    </div>
+                    <ProfileAvatar user={user} className="h-6 w-6 text-[10px] shadow-xs" />
                     <div className="text-left hidden lg:block leading-tight">
                       <div className="text-[10px] text-gray-500 dark:text-gray-400">
                         {profileRole}
@@ -400,7 +424,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                       </div>
                     </div>
                     <ChevronDown className="w-3 h-3 text-gray-400" />
-                  </div>
+                  </Button>
                 ) : (
                   <Button
                     onClick={() => setActiveTab('login')}

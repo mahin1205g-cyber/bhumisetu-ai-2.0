@@ -2,10 +2,11 @@ import Button from '../components/Button';
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
+import ProfilePictureEditor from '../components/ProfilePictureEditor';
 import { User, Shield, Mail, Phone, CreditCard, Award, Moon, Sun, Globe } from 'lucide-react';
 
 export default function UserProfile({ setActiveTab, navigateBack }) {
-  const { user, lang, toggleLang, theme, toggleTheme, switchDemoRole, t } = useApp();
+  const { user, lang, toggleLang, theme, toggleTheme, t } = useApp();
 
   return (
     <div className="gov-container py-6 space-y-6 max-w-3xl">
@@ -31,9 +32,7 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
       <div className="gov-card p-6 space-y-6">
         {/* Profile Card Header */}
         <div className="flex flex-wrap items-center gap-4 border-b border-gray-100 dark:border-gray-800 pb-5">
-          <div className="w-16 h-16 rounded-full bg-[#0b462d] border-2 border-[#c59b27] text-[#ffd700] text-2xl font-black flex items-center justify-center shadow">
-            {user?.role === 'admin' ? 'M' : (user?.name ? user.name[0] : 'U')}
-          </div>
+          <ProfilePictureEditor />
 
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -43,21 +42,13 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#fef9e7] text-[#c59b27] border border-[#c59b27]/30 dark:bg-amber-950/40 dark:text-amber-300">
                 {user?.role === 'officer' ? (lang === 'bn' ? 'সহকারী কমিশনার (ভূমি) / AC Land' : 'AC Land Officer') : user?.role === 'admin' ? (lang === 'bn' ? 'প্রধান সিস্টেম অ্যাডমিনিস্ট্রেটর' : 'System Admin') : (lang === 'bn' ? 'সাধারণ নাগরিক' : 'Citizen')}
               </span>
-              <span className="text-[11px] text-gray-400">ID: #{user?.id || 1}</span>
+              <span className="text-[11px] text-gray-400">ID: #{user?.id ?? '—'}</span>
             </div>
           </div>
         </div>
 
         {/* Credentials Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 space-y-1">
-            <span className="text-gray-500 flex items-center gap-1.5">
-              <User className="w-3.5 h-3.5 text-emerald-600" />
-              {lang === 'bn' ? 'ইউজারনেম' : 'Username'}
-            </span>
-            <strong className="text-gray-900 dark:text-white block font-mono">{user?.username || '—'}</strong>
-          </div>
-
           <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 space-y-1">
             <span className="text-gray-500 flex items-center gap-1.5">
               <User className="w-3.5 h-3.5 text-emerald-600" />

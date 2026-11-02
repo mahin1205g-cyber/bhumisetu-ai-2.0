@@ -10,6 +10,7 @@ import re
 import io
 
 import json
+import logging
 
 import secrets
 import base64
@@ -33,7 +34,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from pydantic import BaseModel, Field
+from psycopg import OperationalError
 from psycopg.errors import UniqueViolation
+from PIL import Image, UnidentifiedImageError
+import warnings
 
 
 
@@ -130,6 +134,23 @@ app = FastAPI(
 )
 
 
+@app.exception_handler(OperationalError)
+async def database_connection_error(request: Request, exc: OperationalError):
+    """Report transient PostgreSQL transport failures as retryable responses."""
+    logging.getLogger(__name__).warning(
+        "PostgreSQL connection failed while handling %s (%s)",
+        request.url.path,
+        type(exc).__name__,
+    )
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={
+            "detail": "ডেটাবেজ সংযোগে সাময়িক সমস্যা হয়েছে। আবার চেষ্টা করুন। (Database connection is temporarily unavailable. Please retry.)"
+        },
+        headers={"Retry-After": "1"},
+    )
+
+
 
 # Enable CORS — restricted to configured origins (CORS_ORIGINS env var, comma-separated)
 
@@ -150,6 +171,47 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type", "Accept"],
 
 )
+
+
+# Store normalized profile photos in PostgreSQL so they survive serverless
+# function restarts and deployments.
+PROFILE_PICTURE_MAX_BYTES = 5 * 1024 * 1024
+PROFILE_PICTURE_MIME_FORMATS = {
+    "image/jpeg": "JPEG",
+    "image/png": "PNG",
+    "image/webp": "WEBP",
+}
+
+
+def _normalize_profile_picture(data: bytes, content_type: str) -> bytes:
+    declared_type = (content_type or "").split(";", 1)[0].strip().lower()
+    expected_format = PROFILE_PICTURE_MIME_FORMATS.get(declared_type)
+    if not expected_format:
+        raise HTTPException(status_code=415, detail="Use a JPEG, PNG, or WebP image")
+
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("error", Image.DecompressionBombWarning)
+            with Image.open(io.BytesIO(data)) as source:
+                if source.format != expected_format:
+                    raise HTTPException(status_code=415, detail="Image content does not match its file type")
+                if source.width < 1 or source.height < 1 or source.width * source.height > 25_000_000:
+                    raise HTTPException(status_code=413, detail="Image dimensions are too large")
+                source.verify()
+            with Image.open(io.BytesIO(data)) as source:
+                source.load()
+                normalized = source.convert("RGBA" if "A" in source.getbands() else "RGB")
+                normalized.thumbnail((512, 512), Image.Resampling.LANCZOS)
+                output = io.BytesIO()
+                normalized.save(output, format="WEBP", quality=88, method=5)
+                normalized_data = output.getvalue()
+                if len(normalized_data) > PROFILE_PICTURE_MAX_BYTES:
+                    raise HTTPException(status_code=413, detail="Profile picture output is too large")
+                return normalized_data
+    except HTTPException:
+        raise
+    except (UnidentifiedImageError, OSError, ValueError, Image.DecompressionBombError, Image.DecompressionBombWarning) as exc:
+        raise HTTPException(status_code=415, detail="The uploaded file is not a valid image") from exc
 
 
 @app.middleware("http")
@@ -1086,10 +1148,77 @@ def get_current_user(authorization: Optional[str] = Header(None)):
         "id": user["id"],
         "name": user.get("name") or "",
         "username": user.get("username") or "",
+        "profile_picture": user.get("profile_picture"),
         "email": user.get("email") or "",
         "role": user.get("role") or "",
         "designation": user.get("designation") or "",
     }
+
+
+@app.put("/api/profile-picture")
+async def upload_profile_picture(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
+    user = extract_user_from_auth_header(authorization)
+    if not user:
+        await file.close()
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    try:
+        data = await file.read(PROFILE_PICTURE_MAX_BYTES + 1)
+    finally:
+        await file.close()
+    if not data:
+        raise HTTPException(status_code=400, detail="Choose an image to upload")
+    if len(data) > PROFILE_PICTURE_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="Profile pictures must be 5 MB or smaller")
+
+    normalized = _normalize_profile_picture(data, file.content_type or "")
+    picture_version = secrets.token_hex(16)
+    updated_at = datetime.now(timezone.utc).isoformat()
+    with engine.conn() as c:
+        account = c.execute("SELECT id FROM users WHERE id=%s", (user["id"],)).fetchone()
+        if not account:
+            raise HTTPException(status_code=401, detail="Authenticated account no longer exists")
+        c.execute(
+            """INSERT INTO profile_pictures(user_id, image_data, updated_at) VALUES (%s, %s, %s)
+               ON CONFLICT (user_id) DO UPDATE SET image_data=EXCLUDED.image_data, updated_at=EXCLUDED.updated_at""",
+            (user["id"], normalized, updated_at),
+        )
+        c.execute("UPDATE users SET profile_picture=%s WHERE id=%s", (picture_version, user["id"]))
+    return {"profile_picture": picture_version}
+
+
+@app.delete("/api/profile-picture")
+def delete_profile_picture(authorization: Optional[str] = Header(None)):
+    user = extract_user_from_auth_header(authorization)
+    if not user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    with engine.conn() as c:
+        row = c.execute("SELECT id FROM users WHERE id=%s", (user["id"],)).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Authenticated account no longer exists")
+        c.execute("UPDATE users SET profile_picture=NULL WHERE id=%s", (user["id"],))
+        c.execute("DELETE FROM profile_pictures WHERE user_id=%s", (user["id"],))
+    return {"profile_picture": None}
+
+
+@app.get("/api/users/{user_id}/profile-picture")
+def get_profile_picture(user_id: int, authorization: Optional[str] = Header(None)):
+    viewer = extract_user_from_auth_header(authorization)
+    if not viewer:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    with engine.conn() as c:
+        picture = c.execute(
+            """SELECT u.profile_picture, p.image_data FROM users u
+               JOIN profile_pictures p ON p.user_id=u.id WHERE u.id=%s""",
+            (user_id,),
+        ).fetchone()
+    if not picture or not picture.get("profile_picture"):
+        raise HTTPException(status_code=404, detail="Profile picture not found")
+    return Response(
+        content=bytes(picture["image_data"]),
+        media_type="image/webp",
+        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+    )
 
 
 
@@ -1659,7 +1788,7 @@ def admin_list_users(
             f"SELECT COUNT(*) AS total FROM users WHERE (name ILIKE %s OR email ILIKE %s OR username ILIKE %s) {role_clause}", params
         ).fetchone()["total"]
         rows = c.execute(
-            f"""SELECT id,name,username,email,phone,role,nid,designation,created_at FROM users
+            f"""SELECT id,name,username,email,phone,role,nid,designation,created_at,profile_picture FROM users
                 WHERE (name ILIKE %s OR email ILIKE %s OR username ILIKE %s) {role_clause}
                 ORDER BY id DESC LIMIT %s OFFSET %s""",
             params + [limit, offset],
@@ -2359,10 +2488,8 @@ def get_dashboard_stats(authorization: Optional[str] = Header(None)):
 def search_binary(q: str = "", category: str = "all", limit: int = 25):
 
     """
-
-    Sub-millisecond Binary Search & B-Tree indexed search across deeds, plots, khatians, and tracking records.
-
-    Scales smoothly to 100M - 500M records with O(log N) lookup complexity.
+    Search land records through PostgreSQL queries and available indexes.
+    Actual latency depends on data size, indexes, query pattern, and database resources.
 
     """
 

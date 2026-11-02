@@ -285,10 +285,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
           <form onSubmit={handleVerify} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-deed-no" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('deedNo')} <span className="text-rose-500">*</span>
                 </label>
                 <Input
+                  id="verify-deed-no"
                   type="text"
                   name="deed_no"
                   value={formData.deed_no}
@@ -300,10 +301,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-reg-year" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('regYear')} <span className="text-rose-500">*</span>
                 </label>
                 <Input
+                  id="verify-reg-year"
                   type="number"
                   name="reg_year"
                   value={formData.reg_year}
@@ -318,10 +320,10 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-district" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('district')}
                 </label>
-                <Input as="select" name="district" value={formData.district} onChange={handleChange} className="gov-select">
+                <Input id="verify-district" as="select" name="district" value={formData.district} onChange={handleChange} className="gov-select">
                   <option value="ঢাকা">ঢাকা (Dhaka)</option>
                   <option value="চট্টগ্রাম">চট্টগ্রাম (Chattogram)</option>
                   <option value="রাজশাহী">রাজশাহী (Rajshahi)</option>
@@ -330,10 +332,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-upazila" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('upazila')}
                 </label>
                 <Input
+                  id="verify-upazila"
                   type="text"
                   name="upazila"
                   value={formData.upazila}
@@ -344,10 +347,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-mouza" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('mouza')}
                 </label>
                 <Input
+                  id="verify-mouza"
                   type="text"
                   name="mouza"
                   value={formData.mouza}
@@ -360,10 +364,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-plot-id" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('plotNo')}
                 </label>
                 <Input
+                  id="verify-plot-id"
                   type="text"
                   name="plot_id"
                   value={formData.plot_id}
@@ -374,10 +379,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-khatian-no" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('khatianNo')}
                 </label>
                 <Input
+                  id="verify-khatian-no"
                   type="text"
                   name="khatian_no"
                   value={formData.khatian_no}
@@ -388,10 +394,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="verify-owner-name" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'মালিক / গ্রহীতার নাম' : 'Owner / Transferee Name'}
                 </label>
                 <Input
+                  id="verify-owner-name"
                   type="text"
                   name="owner_name"
                   value={formData.owner_name}
@@ -403,10 +410,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="verify-notes" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'অতিরিক্ত মন্তব্য বা পর্যবেক্ষণ (ঐচ্ছিক)' : 'Additional Notes (Optional)'}
               </label>
               <Input as="textarea"
+                id="verify-notes"
                 name="notes"
                 value={formData.notes}
                 onChange={handleChange}

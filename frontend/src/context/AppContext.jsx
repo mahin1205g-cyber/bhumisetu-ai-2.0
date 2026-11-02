@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { translations } from '../translations';
 import { api, setToken } from '../api';
+import { clearProfilePictureCache } from '../utils/profilePictureCache';
 
 const AppContext = createContext();
 
@@ -94,6 +95,7 @@ export function AppProvider({ children }) {
   };
 
   const logoutUser = () => {
+    clearProfilePictureCache();
     setUser(null);
     setToken(null);
   };

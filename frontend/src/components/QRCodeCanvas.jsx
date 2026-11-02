@@ -1,12 +1,15 @@
 import Button from './Button';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { Download, Copy, Check, ExternalLink, X, ShieldCheck, QrCode } from 'lucide-react';
 
-export default function QRCodeCanvas({ value, size = 120, label = "", title = "ডিজিটাল যাচাই সনদ কিউআর" }) {
+export default function QRCodeCanvas({ value, size = 120, label = "", title = "ডিজিটাল যাচাই সনদ কিউআর", lang = 'bn' }) {
   const [dataUrl, setDataUrl] = useState('');
   const [modalOpen, setModalOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const triggerRef = useRef(null);
+  const dialogRef = useRef(null);
+  const closeRef = useRef(null);
 
   useEffect(() => {
     if (!value) return;
@@ -23,6 +26,35 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
       .then(url => setDataUrl(url))
       .catch(err => console.error('QR code generation error:', err));
   }, [value, size]);
+
+  useEffect(() => {
+    if (!modalOpen) return undefined;
+    closeRef.current?.focus();
+    const returnFocusTo = triggerRef.current;
+    return () => {
+      if (returnFocusTo?.isConnected) returnFocusTo.focus();
+    };
+  }, [modalOpen]);
+
+  const handleDialogKeyDown = (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      setModalOpen(false);
+      return;
+    }
+    if (event.key !== 'Tab' || !dialogRef.current) return;
+    const focusable = Array.from(dialogRef.current.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+    if (!focusable.length) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
 
   const handleCopy = () => {
     if (value) {
@@ -44,9 +76,14 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
 
   return (
     <>
-      <div
+      <Button
+        type="button"
+        ref={triggerRef}
         onClick={() => setModalOpen(true)}
-        className="flex flex-col items-center gap-1.5 p-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm inline-block cursor-pointer hover:border-emerald-500 hover:shadow-md transition group select-none"
+        aria-label={lang === 'bn'
+          ? `${title}: ${label || 'কিউআর কোড'}। প্রিভিউ খুলুন।`
+          : `${title}: ${label || 'QR code'}. Open preview.`}
+        className="w-fit flex flex-col items-center gap-1.5 p-2 bg-white dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm cursor-pointer hover:border-emerald-500 hover:shadow-md transition group select-none"
         title="ক্লিক করে বড় করুন / কিউআর কোড ডাউনলোড করুন"
       >
         <div className="relative overflow-hidden rounded bg-white flex items-center justify-center p-1">
@@ -54,6 +91,7 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
             <img
               src={dataUrl}
               alt="Verifiable QR Code"
+              decoding="async"
               style={{ width: `${size}px`, height: `${size}px` }}
               className="object-contain block"
             />
@@ -79,14 +117,17 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
             {label}
           </span>
         )}
-      </div>
+      </Button>
 
       {/* Interactive QR Code Modal */}
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in no-print">
-          <div className="bg-white dark:bg-[#131c27] text-gray-900 dark:text-gray-100 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4 relative">
+          <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="qr-preview-title" onKeyDown={handleDialogKeyDown} className="bg-white dark:bg-[#131c27] text-gray-900 dark:text-gray-100 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4 relative">
             <Button
+              ref={closeRef}
+              type="button"
               onClick={() => setModalOpen(false)}
+              aria-label={lang === 'bn' ? 'কিউআর প্রিভিউ বন্ধ করুন' : 'Close QR preview'}
               className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
             >
               <X className="w-5 h-5" />
@@ -94,7 +135,7 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
 
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-sm">
               <ShieldCheck className="w-5 h-5 text-[#0b462d] dark:text-emerald-400" />
-              <span>{title}</span>
+              <span id="qr-preview-title">{title}</span>
             </div>
 
             <div className="flex justify-center p-3 bg-white rounded-xl border border-gray-200 shadow-inner">
@@ -102,6 +143,7 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
                 <img
                   src={dataUrl}
                   alt="High Resolution QR Code"
+                  decoding="async"
                   className="w-48 h-48 object-contain"
                 />
               )}

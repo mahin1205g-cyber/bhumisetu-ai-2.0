@@ -1,5 +1,5 @@
 """BhumiSathi High-Performance C++ Core Bridge
-Exposes compiled C++ algorithms for sub-millisecond deed matching,
+Exposes compiled C++ algorithms for deed matching,
 graph cycle/fraud detection, binary search, and benchmark execution.
 Features automatic fallback to pure Python when native library is absent.
 """
@@ -170,7 +170,7 @@ def detect_fraud_graph(transfers: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 
 def fast_search(records: List[Dict[str, Any]], query: str, limit: int = 25) -> Dict[str, Any]:
-    """Sub-millisecond indexed binary search across land records."""
+    """Indexed binary search across the records provided by the caller."""
     if _is_available and _cpp_lib:
         try:
             payload = json.dumps(records, ensure_ascii=False).encode("utf-8")

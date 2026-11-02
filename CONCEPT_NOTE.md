@@ -61,14 +61,14 @@ P2: দলিল ক্রস-চেক       P4: স্মার্ট ই-ন�
 │                     FRONTEND LAYER (React 18 + Vite)            │
 │  - Tailwind CSS Government Design System (ডিপ গ্রিন & গোল্ড)    │
 │  - বহুভাষিক ইন্টারফেস (বাংলা ডিফল্ট + ইংরেজি) ও ডার্ক মোড        │
-│  - ক্লায়েন্ট-সাইড অফলাইন রেজিলিয়েন্ট ডেমো ফলব্যাক ইঞ্জিন        │
+│  - API-ভিত্তিক UI ও স্পষ্টভাবে চিহ্নিত demo preset              │
 └───────────────────────────────┬─────────────────────────────────┘
-                                │ REST API / JSON (O(log N))
+                                │ REST API / JSON (PostgreSQL)
 ┌───────────────────────────────▼─────────────────────────────────┐
 │                     BACKEND LAYER (FastAPI / Python)            │
 │  - RESTful APIs (Auth, Verification, Mutation, Due Diligence)   │
-│  - PBKDF2-HMAC-SHA256 পাসওয়ার্ড এনক্রিপশন ও RBAC রোলস         │
-│  - হাই-পারফরম্যান্স B-Tree বাইনারি সার্চ (O(log N) স্কেলেবিলিটি) │
+│  - Argon2id password hashing, signed tokens ও RBAC রোলস       │
+│  - PostgreSQL query ও উপলভ্য database index                  │
 └───────────────────────────────┬─────────────────────────────────┘
                                 │
 ┌───────────────────────────────▼─────────────────────────────────┐
@@ -76,13 +76,13 @@ P2: দলিল ক্রস-চেক       P4: স্মার্ট ই-ন�
 │  - AI Anomaly Engine: Scikit-learn (Isolation Forest)           │
 │  - Rule-Based Conflict & Discrepancy Engine                     │
 │  - OCR Text Extraction: PyPDF & Regular Expression Engine       │
-│  - SQLite 3 Relational DB (Deeds, Properties, Verifications)    │
+│  - PostgreSQL relational DB (users, profile pictures, records) │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 - **ফ্রন্টএন্ড:** React 18, Vite 6, Tailwind CSS, Lucide React Icons, Canvas QR Code.
-- **ব্যাকএন্ড:** Python 3.13, FastAPI, SQLite 3, B-Tree Disk Indexing (১০০-৫০০ মিলিয়ন ডেটায় ক্র্যাশ-মুক্ত অনুসন্ধান)।
-- **নিরাপত্তা:** রো-লেভেল অডিট লগিং, সল্টেড পাসওয়ার্ড হ্যাশিং, ক্রস-অরিজিন রিসোর্স শেয়ারিং (CORS) ফিল্টার।
+- **ব্যাকএন্ড:** Python 3.13, FastAPI, PostgreSQL/Neon, PostgreSQL query ও উপলভ্য index.
+- **নিরাপত্তা:** Argon2id password hashing (পুরোনো hash-এর জন্য legacy verification), signed auth tokens, audit logging ও CORS origin filter.
 
 ---
 
@@ -124,3 +124,33 @@ P2: দলিল ক্রস-চেক       P4: স্মার্ট ই-ন�
 ### মেন্টরদের তথ্য:
 - **প্রধান মেন্টর:** (মেন্টর/শিক্ষকের নাম), পদবি ও বিভাগ, ড্যাফোডিল ইন্টারন্যাশনাল ইউনিভার্সিটি। ইমেইল: `mentor@daffodilvarsity.edu.bd`
 - **সহকারী মেন্টর / ডোমেইন এক্সপার্ট:** ভূমি আইন ও আইসিটি বিশেষজ্ঞ।
+
+---
+
+## ৮. বর্তমান বাস্তবায়ন আপডেট (৩ নভেম্বর ২০২৬)
+
+### অ্যাকাউন্ট ও প্রোফাইল
+
+- Login-এ username-কেন্দ্রিক label, password visibility toggle এবং username recovery flow রাখা হয়েছে। Search input-এর icon/input spacing ঠিক করা হয়েছে।
+- নাগরিক, কর্মকর্তা ও অ্যাডমিন—সব role-এ একই profile avatar component ব্যবহৃত হয়। ছবি না থাকলে username থেকে deterministic initial ও background color তৈরি হয়।
+- Profile page থেকে JPG, PNG বা WebP ছবি (সর্বোচ্চ ৫ MB) নির্বাচন, 1:1 crop/reposition, upload progress, save, cancel ও remove করা যায়।
+- Backend MIME/content validation করে ছবিকে 512px WebP-তে normalize করে। ছবির bytes PostgreSQL-এর `profile_pictures` table-এ থাকে; `users.profile_picture`-এ opaque version token থাকে। তাই logout/login, backend restart ও redeploy-এর পরও ছবি পাওয়া যায়।
+- Upload ও remove কেবল signed-in account-এর নিজের ছবিতে কাজ করে। ছবি দেখার endpoint-এও authentication প্রয়োজন। Header, drawer, dashboard, profile, admin user list এবং mutation applicant view-তে avatar দেখানো হয়।
+
+### Rendering, UI ও dashboard
+
+- Adaptive performance monitor browser-এর বাস্তব frame interval মাপে; 120 Hz display capability-কে 120 FPS guarantee হিসেবে ধরে না। Reduced-motion preference এবং hidden tab state সম্মান করা হয়।
+- Dashboard loading/error state ও retry flow উন্নত করা হয়েছে; dashboard summary একই database connection-এ গণনা করা হয়।
+- Application tracker আর নিজে থেকে fixed demo tracking ID খোঁজে না; ব্যবহারকারী নম্বর লিখে অনুসন্ধান করেন অথবা চিহ্নিত demo preset বেছে নেন।
+- Search, login/recovery, registration, profile এবং dashboard layout-এ responsive spacing ও interaction polish যোগ করা হয়েছে।
+- যাচাইহীন 100M–500M record capacity, sub-millisecond latency এবং সবসময় C++ acceleration-এর static দাবি সরানো হয়েছে।
+
+### Demo data সম্পর্কে
+
+`DEMO`, `DEMO_PROPERTIES`, `DEMO_DEEDS`, `DEMO_MUTATIONS` এবং form preset-গুলো ইচ্ছাকৃত synthetic demonstration data। এগুলো app-এর demo workflow ও local validation চালাতে ব্যবহৃত হয় এবং official land record নয়। তাই placeholder/profile fallback ও অসমর্থিত performance claim সরানো হলেও, আবশ্যক demo fixtures রাখা হয়েছে।
+
+### যাচাই
+
+- Frontend production build সফল হয়েছে।
+- Profile picture, auth token, dashboard stats ও deed-search মিলিয়ে database-free 28টি Python test পাস করেছে; adaptive performance-এর 5টি Node test পাস করেছে।
+- PostgreSQL integration test চালাতে `DATABASE_URL` লাগে; test environment-এ সেটি না থাকায় সেগুলো database-এ চালানো হয়নি।

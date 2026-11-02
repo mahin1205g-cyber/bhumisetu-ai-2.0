@@ -71,7 +71,11 @@ export default function LiveChatWidget({ setActiveTab }) {
 
   // Auto-scroll to bottom of conversation
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    messagesEndRef.current?.scrollIntoView({
+      behavior: reducedMotion || isStreaming ? 'auto' : 'smooth',
+      block: 'end',
+    });
   };
 
   useEffect(() => {
@@ -413,13 +417,13 @@ export default function LiveChatWidget({ setActiveTab }) {
   };
 
   return (
-    <div className="fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end">
+    <div className="live-chat-dock fixed bottom-5 right-5 sm:bottom-6 sm:right-6 z-50 flex flex-col items-end">
       {/* Live Chat Modal Popup (ChatGPT-Style UI) */}
       {isOpen && (
         <div
-          className={`mb-4 flex flex-col bg-white dark:bg-[#111915] border border-gray-300 dark:border-emerald-800/60 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 animate-fade-up ${
+          className={`live-chat-panel mb-4 flex flex-col bg-white dark:bg-[#111915] border border-gray-300 dark:border-emerald-800/60 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 animate-fade-up ${
             isMaximized
-              ? 'w-[95vw] sm:w-[85vw] max-w-4xl h-[88vh]'
+              ? 'live-chat-maximized max-w-4xl h-[88vh]'
               : 'w-[92vw] sm:w-[420px] h-[580px] max-h-[85vh]'
           }`}
           style={{
@@ -741,24 +745,28 @@ export default function LiveChatWidget({ setActiveTab }) {
       <div className="flex items-center gap-3 select-none">
         {/* Pill Bubble: "✖ লাইভ চ্যাট 👋" */}
         {showPill && !isOpen && (
-          <div className="flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs sm:text-sm font-bold px-3.5 py-2 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 animate-float-gentle transition hover:shadow-2xl">
+          <div className="live-chat-pill flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs sm:text-sm font-bold px-3.5 py-2 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 animate-float-gentle transition hover:shadow-2xl">
             <Button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation();
                 setShowPill(false);
               }}
               className="text-gray-400 hover:text-gray-700 dark:hover:text-white p-0.5 rounded transition"
+              aria-label={lang === 'bn' ? 'লাইভ চ্যাট বার্তা লুকান' : 'Dismiss live chat hint'}
               title={lang === 'bn' ? 'লুকান' : 'Dismiss'}
             >
               <X className="w-3.5 h-3.5" />
             </Button>
-            <span
+            <Button
+              type="button"
               onClick={() => setIsOpen(true)}
-              className="cursor-pointer flex items-center gap-1.5 hover:text-[#0b462d] dark:hover:text-emerald-400 transition"
+              aria-label={lang === 'bn' ? 'লাইভ চ্যাট খুলুন' : 'Open live chat'}
+              className="flex items-center gap-1.5 p-0 text-left hover:text-[#0b462d] dark:hover:text-emerald-400 transition"
             >
               <span>{lang === 'bn' ? 'লাইভ চ্যাট' : 'Live Chat'}</span>
               <span className="text-sm">👋</span>
-            </span>
+            </Button>
           </div>
         )}
 

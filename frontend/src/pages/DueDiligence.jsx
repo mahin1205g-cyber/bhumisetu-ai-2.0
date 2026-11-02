@@ -224,10 +224,11 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="dd-seller-name" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('sellerName')} <span className="text-rose-500">*</span>
                 </label>
                 <Input
+                  id="dd-seller-name"
                   type="text"
                   name="seller_name"
                   value={form.seller_name}
@@ -239,10 +240,11 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="dd-seller-nid" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'বিক্রেতার এনআইডি (ঐচ্ছিক)' : 'Seller NID (Optional)'}
                 </label>
                 <Input
+                  id="dd-seller-nid"
                   type="text"
                   name="seller_nid"
                   value={form.seller_nid}
@@ -262,8 +264,8 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('district')}</label>
-                <Input as="select" name="district" value={form.district} onChange={handleChange} className="gov-select">
+                <label htmlFor="dd-district" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('district')}</label>
+                <Input id="dd-district" as="select" name="district" value={form.district} onChange={handleChange} className="gov-select">
                   <option value="ঢাকা">ঢাকা (Dhaka)</option>
                   <option value="চট্টগ্রাম">চট্টগ্রাম (Chattogram)</option>
                   <option value="রাজশাহী">রাজশাহী (Rajshahi)</option>
@@ -272,39 +274,39 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('upazila')}</label>
-                <Input type="text" name="upazila" value={form.upazila} onChange={handleChange} className="gov-input" />
+                <label htmlFor="dd-upazila" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('upazila')}</label>
+                <Input id="dd-upazila" type="text" name="upazila" value={form.upazila} onChange={handleChange} className="gov-input" />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('mouza')}</label>
-                <Input type="text" name="mouza" value={form.mouza} onChange={handleChange} className="gov-input" required />
+                <label htmlFor="dd-mouza" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('mouza')}</label>
+                <Input id="dd-mouza" type="text" name="mouza" value={form.mouza} onChange={handleChange} className="gov-input" required />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('plotNo')} *</label>
-                <Input type="text" name="plot_no" value={form.plot_no} onChange={handleChange} placeholder="DHK-MIR-001" className="gov-input" required />
+                <label htmlFor="dd-plot-no" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('plotNo')} *</label>
+                <Input id="dd-plot-no" type="text" name="plot_no" value={form.plot_no} onChange={handleChange} placeholder="DHK-MIR-001" className="gov-input" required />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('khatianNo')}</label>
-                <Input type="text" name="khatian_no" value={form.khatian_no} onChange={handleChange} placeholder="BS-1045" className="gov-input" />
+                <label htmlFor="dd-khatian-no" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('khatianNo')}</label>
+                <Input id="dd-khatian-no" type="text" name="khatian_no" value={form.khatian_no} onChange={handleChange} placeholder="BS-1045" className="gov-input" />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="dd-recorded-area" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'খতিয়ানের মোট জমি' : 'Recorded Area'}
                 </label>
-                <Input type="number" step="0.01" name="recorded_area" value={form.recorded_area} onChange={handleChange} className="gov-input" />
+                <Input id="dd-recorded-area" type="number" step="0.01" name="recorded_area" value={form.recorded_area} onChange={handleChange} className="gov-input" />
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="dd-proposed-area" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'বিক্রির প্রস্তাবিত পরিমাণ' : 'Proposed Sale Area'} *
                 </label>
-                <Input type="number" step="0.01" name="proposed_area" value={form.proposed_area} onChange={handleChange} className="gov-input" required />
+                <Input id="dd-proposed-area" type="number" step="0.01" name="proposed_area" value={form.proposed_area} onChange={handleChange} className="gov-input" required />
               </div>
             </div>
           </div>
@@ -319,10 +321,12 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
               {docOptions.map((doc, idx) => {
                 const isChecked = form.documents_held.includes(doc);
                 return (
-                  <div
+                  <Button
+                    type="button"
                     key={idx}
                     onClick={() => handleDocToggle(doc)}
-                    className={`p-2.5 rounded-lg border text-xs cursor-pointer flex items-center justify-between transition ${
+                    aria-pressed={isChecked}
+                    className={`w-full p-2.5 rounded-lg border text-xs text-left cursor-pointer flex items-center justify-between transition ${
                       isChecked
                         ? 'border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/40 font-semibold text-emerald-900 dark:text-emerald-200'
                         : 'border-gray-200 dark:border-gray-800 text-gray-600 dark:text-gray-400'
@@ -334,7 +338,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
                     }`}>
                       {isChecked ? '✓' : ''}
                     </span>
-                  </div>
+                  </Button>
                 );
               })}
             </div>
@@ -353,6 +357,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
             <label className="relative inline-flex items-center cursor-pointer">
               <Input
                 type="checkbox"
+                aria-label={lang === 'bn' ? 'আদালতের মামলা বা জমি বিরোধ আছে' : 'Known court case or land dispute'}
                 name="has_court_dispute"
                 checked={form.has_court_dispute}
                 onChange={handleChange}

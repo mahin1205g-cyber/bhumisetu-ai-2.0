@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
+import ProfileAvatar from '../components/ProfileAvatar';
 import {
   ClipboardCheck, CheckCircle2, XCircle, AlertCircle, Eye,
   Search, RefreshCw, Filter, FileText, ArrowRight, ShieldCheck,
@@ -202,8 +203,10 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                       {app.tracking_no}
                     </td>
                     <td className="py-3 px-4 font-semibold text-gray-900 dark:text-white">
-                      {app.applicant_name}
-                      <span className="block text-[10px] text-gray-400 font-normal">{app.applicant_phone}</span>
+                      <div className="flex items-center gap-2">
+                        <ProfileAvatar user={{ id: app.user_id, username: app.username, profile_picture: app.profile_picture }} className="h-8 w-8 text-[11px]" />
+                        <span>{app.applicant_name}<span className="block text-[10px] text-gray-400 font-normal">{app.applicant_phone}</span></span>
+                      </div>
                     </td>
                     <td className="py-3 px-4">
                       <span className="font-mono font-medium">{app.plot_no}</span>
@@ -326,7 +329,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                   <span>{lang === 'bn' ? 'স্মার্ট রেকর্ড ও অসঙ্গতি বিশ্লেষণ (Automated Audit)' : 'Automated Anomaly & Title Check'}</span>
                 </span>
                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  C++ Accelerated (O(log N))
+                  {lang === 'bn' ? 'স্বয়ংক্রিয় রেকর্ড যাচাই' : 'Automated record checks'}
                 </span>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 text-[11px]">
@@ -409,11 +412,12 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
             </h4>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="officer-remarks" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'কর্মকর্তার মন্তব্য / আদেশের কারণ' : 'Official Remarks / Order'}
                 {(actionModal.type === 'reject' || actionModal.type === 'info') && <span className="text-rose-500"> *</span>}
               </label>
               <Input as="textarea"
+                id="officer-remarks"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
                 rows="3"

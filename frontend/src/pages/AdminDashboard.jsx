@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
+import ProfileAvatar from '../components/ProfileAvatar';
 import { ShieldAlert, Users, RefreshCw, Cpu, Zap, Activity, Search } from 'lucide-react';
 
 export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateBack }) {
@@ -155,9 +156,9 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
         <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="font-bold text-sm text-gray-900 dark:text-white">{lang === 'bn' ? 'ব্যবহারকারী ব্যবস্থাপনা' : 'User Management'}</h2>
           <div className="flex flex-wrap gap-2">
-            <label className="relative">
-              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
-              <Input className="gov-input pl-8 text-xs" value={accountQuery} onChange={(e) => { setAccountQuery(e.target.value); setAccountOffset(0); }} placeholder={lang === 'bn' ? 'নাম, ইউজারনেম বা ইমেইল খুঁজুন' : 'Search name, username, or email'} />
+            <label className="relative w-full sm:w-auto sm:min-w-[240px] max-w-full">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+              <Input className="gov-input pl-8 text-xs" aria-label={lang === 'bn' ? 'নাম, ইউজারনেম বা ইমেইল দিয়ে অ্যাকাউন্ট খুঁজুন' : 'Search accounts by name, username, or email'} value={accountQuery} onChange={(e) => { setAccountQuery(e.target.value); setAccountOffset(0); }} placeholder={lang === 'bn' ? 'নাম, ইউজারনেম বা ইমেইল খুঁজুন' : 'Search name, username, or email'} />
             </label>
             <Input as="select" className="gov-input text-xs" value={accountRole} onChange={(e) => { setAccountRole(e.target.value); setAccountOffset(0); }}>
               <option value="all">{lang === 'bn' ? 'সব ভূমিকা' : 'All roles'}</option>
@@ -178,9 +179,9 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
         </form>
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
-            <thead><tr className="border-b dark:border-slate-700 text-gray-500"><th className="p-2">ID</th><th className="p-2">{lang === 'bn' ? 'নাম' : 'Name'}</th><th className="p-2">Username</th><th className="p-2">Email</th><th className="p-2">{lang === 'bn' ? 'মোবাইল' : 'Phone'}</th><th className="p-2">Role</th><th className="p-2">Created</th></tr></thead>
-            <tbody>{accounts.map((account) => <tr key={account.id} className="border-b dark:border-slate-800"><td className="p-2">{account.id}</td><td className="p-2">{account.name}</td><td className="p-2">{account.username}</td><td className="p-2">{account.email}</td><td className="p-2">{account.phone}</td><td className="p-2">{account.role}</td><td className="p-2">{account.created_at?.slice(0, 10)}</td></tr>)}
-              {!accountLoading && accounts.length === 0 && <tr><td colSpan="7" className="p-4 text-center text-gray-500">{lang === 'bn' ? 'কোনো ব্যবহারকারী পাওয়া যায়নি।' : 'No users found.'}</td></tr>}
+            <thead><tr className="border-b dark:border-slate-700 text-gray-500"><th className="p-2">ID</th><th className="p-2">{lang === 'bn' ? 'ছবি' : 'Photo'}</th><th className="p-2">{lang === 'bn' ? 'নাম' : 'Name'}</th><th className="p-2">Username</th><th className="p-2">Email</th><th className="p-2">{lang === 'bn' ? 'মোবাইল' : 'Phone'}</th><th className="p-2">Role</th><th className="p-2">Created</th></tr></thead>
+            <tbody>{accounts.map((account) => <tr key={account.id} className="border-b dark:border-slate-800"><td className="p-2">{account.id}</td><td className="p-2"><ProfileAvatar user={account} className="h-8 w-8 text-xs" /></td><td className="p-2">{account.name}</td><td className="p-2">{account.username}</td><td className="p-2">{account.email}</td><td className="p-2">{account.phone}</td><td className="p-2">{account.role}</td><td className="p-2">{account.created_at?.slice(0, 10)}</td></tr>)}
+              {!accountLoading && accounts.length === 0 && <tr><td colSpan="8" className="p-4 text-center text-gray-500">{lang === 'bn' ? 'কোনো ব্যবহারকারী পাওয়া যায়নি।' : 'No users found.'}</td></tr>}
             </tbody>
           </table>
         </div>
@@ -231,8 +232,8 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
             </h3>
             <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 max-w-2xl leading-relaxed">
               {lang === 'bn'
-                ? 'জাতীয় ভূমি রেজিস্ট্রি স্কেলিং ও জালিয়াতি রোধে C++ ইঞ্জিনে বাংলা ফাজি ম্যাচিং, গ্রাফ ট্রাভার্সাল (A → B → C → A সাইকেল ডিটেকশন) এবং O(log N) বাইনারি সার্চ সমন্বিত রয়েছে।'
-                : 'Accelerates Bengali fuzzy matching, ownership DAG cycle detection, and O(log N) binary search for 100M+ national land records.'}
+                ? 'C++ ইঞ্জিন উপলভ্য থাকলে বাংলা ফাজি ম্যাচিং ও মালিকানা-গ্রাফ বিশ্লেষণে সহায়তা করে। নিচের লাইভ বেঞ্চমার্ক এই পরিবেশের বর্তমান ফল দেখায়।'
+                : 'When available, the C++ engine assists Bengali fuzzy matching and ownership-graph analysis. The live benchmark below reports this environment’s measured results.'}
             </p>
           </div>
 

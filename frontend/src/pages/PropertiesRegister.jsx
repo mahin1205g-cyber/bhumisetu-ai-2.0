@@ -1,10 +1,11 @@
 import Input from '../components/Input';
 import Button from '../components/Button';
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import { FastRecordIndex } from '../utils/fastSearch';
 import PageHeader from '../components/PageHeader';
+import ParcelViewer from '../components/ParcelViewer';
 import {
   Layers, Search, Filter, Eye, RefreshCw, AlertTriangle, CheckCircle2,
   Zap, ChevronLeft, ChevronRight, ArrowRight, ShieldCheck, FileText
@@ -16,9 +17,43 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [selectedProp, setSelectedProp] = useState(null);
+  const detailDialogRef = useRef(null);
+  const detailCloseRef = useRef(null);
   const [loading, setLoading] = useState(true);
 
-  // Pagination for crash-proof high performance (100M-500M user scale)
+  useEffect(() => {
+    if (!selectedProp) return undefined;
+    const returnFocusTo = document.activeElement;
+    detailCloseRef.current?.focus();
+
+    const handleDialogKeyDown = (event) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setSelectedProp(null);
+        return;
+      }
+      if (event.key !== 'Tab' || !detailDialogRef.current) return;
+      const focusable = Array.from(detailDialogRef.current.querySelectorAll('button:not([disabled]), a[href], input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'));
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleDialogKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleDialogKeyDown);
+      if (returnFocusTo?.isConnected) returnFocusTo.focus();
+    };
+  }, [selectedProp]);
+
+  // Paginate results to keep the table responsive as records grow.
   const [currentPage, setCurrentPage] = useState(1);
   const pageSize = 10;
 
@@ -92,10 +127,10 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
         subtitle={
           lang === 'bn'
             ? 'নিবন্ধিত জমির দাগ, খতিয়ান, বর্তমান মালিকানা ও স্বত্ব স্ট্যাটাস উচ্চগতির বাইনারি সার্চ দিয়ে অনুসন্ধান করুন।'
-            : 'Explore registered land parcels, current owners, and title status via O(log N) Binary Search.'
+            : 'Explore registered land parcels, current owners, and title status using database-backed search.'
         }
         icon={Layers}
-        badge="Binary Search O(log N)"
+        badge={lang === 'bn' ? 'ডেটাবেস অনুসন্ধান' : 'Database search'}
         badgeColor="emerald"
         breadcrumbs={[
           { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
@@ -116,16 +151,17 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
       {/* Fast Binary Search Bar & Filters */}
       <div className="gov-card p-4 space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="relative flex-1 min-w-[260px]">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+          <div className="relative flex-1 min-w-0 sm:min-w-[260px]">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <Input
               type="text"
+              aria-label={lang === 'bn' ? 'দাগ, মৌজা, খতিয়ান বা মালিক দিয়ে খুঁজুন' : 'Search by plot, mouza, khatian, or owner'}
               value={search}
               onChange={(e) => {
                 setSearch(e.target.value);
                 setCurrentPage(1);
               }}
-              placeholder={lang === 'bn' ? 'দাগ নং, মৌজা, খতিয়ান বা মালিকের নাম দিয়ে খুঁজুন (O(log N))...' : 'Search by Plot, Mouza, Khatian or Owner (O(log N))...'}
+              placeholder={lang === 'bn' ? 'দাগ নং, মৌজা, খতিয়ান বা মালিকের নাম দিয়ে খুঁজুন...' : 'Search by plot, mouza, khatian, or owner...'}
               className="gov-input pl-9 py-2.5 text-xs font-medium"
             />
           </div>
@@ -140,10 +176,12 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
             ].map((st) => (
               <Button
                 key={st.id}
+                type="button"
                 onClick={() => {
                   setStatusFilter(st.id);
                   setCurrentPage(1);
                 }}
+                aria-pressed={statusFilter === st.id}
                 className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
                   statusFilter === st.id
                     ? 'bg-[#131921] text-[#febd69] dark:bg-[#febd69] dark:text-gray-950 shadow-sm'
@@ -293,10 +331,10 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
       {/* Selected Property Detail Modal */}
       {selectedProp && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-[#131c27] rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-2xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div ref={detailDialogRef} role="dialog" aria-modal="true" aria-labelledby="property-detail-title" className="bg-white dark:bg-[#131c27] rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 max-w-4xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
               <div>
-                <h3 className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <h3 id="property-detail-title" className="text-base font-bold text-gray-900 dark:text-white flex items-center gap-2">
                   <span>প্লট বিস্তারিত: {selectedProp.plot_id}</span>
                   <span className="text-xs px-2 py-0.5 rounded bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 font-mono">
                     খতিয়ান: {selectedProp.khatian_no}
@@ -307,7 +345,10 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
                 </p>
               </div>
               <Button
+                ref={detailCloseRef}
+                type="button"
                 onClick={() => setSelectedProp(null)}
+                aria-label={lang === 'bn' ? 'প্লটের বিস্তারিত বন্ধ করুন' : 'Close parcel details'}
                 className="text-gray-400 hover:text-gray-600 font-bold text-lg"
               >
                 ✕
@@ -329,6 +370,8 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
               </div>
             </div>
 
+            <ParcelViewer property={selectedProp} lang={lang} />
+
             {/* Deeds connected to this parcel */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-gray-900 dark:text-white uppercase tracking-wider">
@@ -348,6 +391,7 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
                         </div>
                       </div>
                       <Button
+                        type="button"
                         onClick={() => {
                           setSelectedProp(null);
                           if (setVerificationResult) {
@@ -368,6 +412,7 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
 
             <div className="pt-2 flex justify-end">
               <Button
+                type="button"
                 onClick={() => setSelectedProp(null)}
                 className="gov-btn-secondary text-xs"
               >

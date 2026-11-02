@@ -2,6 +2,7 @@ import Button from './Button';
 import React, { useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import BhumiSathiLogo from './BhumiSathiLogo';
+import ProfileAvatar from './ProfileAvatar';
 import {
   X, User, ChevronRight, Home, LayoutDashboard, FileCheck2, GitBranchPlus,
   AlertOctagon, Layers, Search, History, Bell, Shield, ShieldAlert,
@@ -50,7 +51,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
         { id: 'deed-search', label: lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number', icon: Search, badge: lang === 'bn' ? 'নতুন' : 'New', badgeColor: 'bg-emerald-600 text-white' },
         { id: 'mutation', label: t('navMutation'), icon: GitBranchPlus, badge: null },
         { id: 'due-diligence', label: t('navDueDiligence'), icon: AlertOctagon, badge: null },
-        { id: 'properties', label: t('navProperties'), icon: Layers, badge: 'O(log N)' }
+        { id: 'properties', label: t('navProperties'), icon: Layers, badge: lang === 'bn' ? 'সূচীকৃত' : 'Indexed' }
       ]
     },
     {
@@ -124,13 +125,15 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
 
         {/* User Greeting Bar */}
         <div className="bg-white/35 dark:bg-white/[0.03] text-[#17212B] dark:text-white px-5 py-3 flex items-center justify-between border-b border-white/50 dark:border-white/[0.06] select-none">
-          <div
+          <Button
+            type="button"
             onClick={() => handleNav(user ? 'profile' : 'login')}
-            className="flex items-center gap-3 cursor-pointer group"
+            aria-label={lang === 'bn' ? 'প্রোফাইল খুলুন' : 'Open profile'}
+            className="flex items-center gap-3 cursor-pointer group text-left p-0"
           >
-            <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-[#047857] dark:text-emerald-300 font-bold shadow-xs">
-              <User className="w-4 h-4" />
-            </div>
+            {user
+              ? <ProfileAvatar user={user} className="h-9 w-9 border border-emerald-200 text-sm shadow-xs dark:border-emerald-800" />
+              : <div className="w-9 h-9 rounded-full bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 flex items-center justify-center text-[#047857] dark:text-emerald-300 font-bold shadow-xs"><User className="w-4 h-4" /></div>}
             <div>
               <div className="text-[11px] text-[#64748B] dark:text-gray-400 font-medium leading-none mb-0.5">
                 {lang === 'bn' ? 'স্বাগতম' : 'Hello'}
@@ -144,18 +147,15 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                 </div>
               )}
             </div>
-          </div>
+          </Button>
         </div>
 
         {/* Scalability & Algorithm Badge */}
-        <div className="bg-emerald-50/45 dark:bg-emerald-950/20 px-4 py-2 text-[11px] text-[#065F46] dark:text-emerald-300 flex items-center justify-between border-b border-white/50 dark:border-white/[0.06]">
+        <div className="bg-emerald-50/45 dark:bg-emerald-950/20 px-4 py-2 text-[11px] text-[#065F46] dark:text-emerald-300 flex items-center border-b border-white/50 dark:border-white/[0.06]">
           <div className="flex items-center gap-1.5 font-semibold">
             <Zap className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400" />
-            <span>{lang === 'bn' ? 'বাইনারি সার্চ অ্যালগরিদম সক্রিয়' : 'Binary Search O(log N) Engine'}</span>
+            <span>{lang === 'bn' ? 'ডেটাবেসভিত্তিক রেকর্ড অনুসন্ধান' : 'Database-backed record search'}</span>
           </div>
-          <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/60 text-[#047857] dark:text-emerald-300 px-1.5 py-0.5 rounded font-mono font-semibold">
-            500M Scale
-          </span>
         </div>
 
         {/* Scrollable Categories List */}

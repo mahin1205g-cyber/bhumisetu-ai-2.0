@@ -279,9 +279,10 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
         <div className="pt-6 border-t-2 border-gray-200 dark:border-gray-800 flex flex-wrap items-center justify-between gap-6">
           <div className="flex items-center gap-4">
             <QRCodeCanvas
-              value={`[ভূমিসাথী — নাগরিক প্রাক-ক্রয় স্বত্ব যাচাই / Due Diligence]\nরিপোর্ট রেফারেন্স: ${report_ref || 'LG-DD-2026'}\nঝুঁকি মূল্যায়ন স্তর: ${risk_level || 'HIGH'}\nমোট ঝুঁকি স্কোর: ${risk_score || 0}/100\nশনাক্তকৃত ঝুঁকি সূচক: ${(indicators || []).length} টি\nমডেল: Isolation Forest Anomaly Detection O(log N)\nযাচাই লিংক: ${typeof window !== 'undefined' ? window.location.origin : ''}/#due-diligence/${report_ref || 'LG-DD-2026'}`}
+              value={`[ভূমিসাথী — নাগরিক প্রাক-ক্রয় স্বত্ব যাচাই / Due Diligence]\nরিপোর্ট রেফারেন্স: ${report_ref || '—'}\nঝুঁকি মূল্যায়ন স্তর: ${risk_level || '—'}\nমোট ঝুঁকি স্কোর: ${risk_score ?? '—'}/100\nশনাক্তকৃত ঝুঁকি সূচক: ${Array.isArray(indicators) ? indicators.length : '—'} টি\nমডেল: Isolation Forest risk screening\nযাচাই লিংক: ${typeof window !== 'undefined' ? window.location.origin : ''}/#due-diligence/${report_ref || ''}`}
               size={100}
               label={report_ref}
+              lang={lang}
               title={lang === 'bn' ? 'ডিউ ডিলিজেন্স যাচাই সনদ কিউআর' : 'Due Diligence QR Certificate'}
             />
             <div className="space-y-1 text-xs">

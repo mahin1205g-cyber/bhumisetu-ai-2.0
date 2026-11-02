@@ -1,11 +1,7 @@
 /**
- * High-Performance Binary Search, LRU Cache & High-Load Scalability Engine (O(log N))
- * Designed to handle 100M - 500M records without UI freezing, latency, or memory crashes.
+ * Binary Search and LRU cache helpers for sorted in-memory records.
  *
- * Mathematical Complexity:
- * - Linear Search: O(N) -> 500,000,000 comparisons (seconds, browser crash)
- * - Binary Search: O(log N) -> <= 29 comparisons (< 0.05ms)
- * - LRU Cache Hit: O(1) -> 1 operation (< 0.001ms)
+ * Binary search is O(log N) over the supplied sorted array; cache lookup is O(1).
  */
 
 /**
@@ -43,7 +39,7 @@ class FastLRUCache {
   }
 }
 
-// Global query cache for instant sub-millisecond response
+// Global query cache for repeated search inputs
 export const queryCache = new FastLRUCache(2000);
 
 /**

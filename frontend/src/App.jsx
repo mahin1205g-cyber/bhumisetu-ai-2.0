@@ -1,35 +1,92 @@
 import Button from './components/Button';
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from './context/AppContext';
 import Header from './components/Header';
 import SlideDrawer from './components/SlideDrawer';
 import Footer from './components/Footer';
 import LiveChatWidget from './components/LiveChatWidget';
+import { useAdaptivePerformance } from './hooks/useAdaptivePerformance';
 
 // Pages
-import LandingPage from './pages/LandingPage';
-import Dashboard from './pages/Dashboard';
-import DeedVerification from './pages/DeedVerification';
-import DeedSearch from './pages/DeedSearch';
-import VerificationResult from './pages/VerificationResult';
-import SmartMutation from './pages/SmartMutation';
-import ApplicationTracking from './pages/ApplicationTracking';
-import OfficerReview from './pages/OfficerReview';
-import DueDiligence from './pages/DueDiligence';
-import DueDiligenceReport from './pages/DueDiligenceReport';
-import PropertiesRegister from './pages/PropertiesRegister';
-import AuditHistory from './pages/AuditHistory';
-import NotificationsPage from './pages/NotificationsPage';
-import UserProfile from './pages/UserProfile';
-import AdminDashboard from './pages/AdminDashboard';
-import HelpFAQ from './pages/HelpFAQ';
-import DisclaimerPolicy from './pages/DisclaimerPolicy';
-import Login from './pages/Login';
-import Register from './pages/Register';
-import NotFoundPage from './pages/NotFoundPage';
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const DeedVerification = lazy(() => import('./pages/DeedVerification'));
+const DeedSearch = lazy(() => import('./pages/DeedSearch'));
+const VerificationResult = lazy(() => import('./pages/VerificationResult'));
+const SmartMutation = lazy(() => import('./pages/SmartMutation'));
+const ApplicationTracking = lazy(() => import('./pages/ApplicationTracking'));
+const OfficerReview = lazy(() => import('./pages/OfficerReview'));
+const DueDiligence = lazy(() => import('./pages/DueDiligence'));
+const DueDiligenceReport = lazy(() => import('./pages/DueDiligenceReport'));
+const PropertiesRegister = lazy(() => import('./pages/PropertiesRegister'));
+const AuditHistory = lazy(() => import('./pages/AuditHistory'));
+const NotificationsPage = lazy(() => import('./pages/NotificationsPage'));
+const UserProfile = lazy(() => import('./pages/UserProfile'));
+const AdminDashboard = lazy(() => import('./pages/AdminDashboard'));
+const HelpFAQ = lazy(() => import('./pages/HelpFAQ'));
+const DisclaimerPolicy = lazy(() => import('./pages/DisclaimerPolicy'));
+const Login = lazy(() => import('./pages/Login'));
+const Register = lazy(() => import('./pages/Register'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
+
+function PageLoading({ lang }) {
+  return (
+    <div className="gov-container py-12 text-center" role="status" aria-live="polite">
+      <span className="inline-flex items-center gap-2 text-sm text-gray-600 dark:text-gray-300">
+        <span className="page-loading-indicator" aria-hidden="true" />
+        {lang === 'bn' ? 'পাতা লোড হচ্ছে…' : 'Loading page…'}
+      </span>
+    </div>
+  );
+}
+
+function ScrollRevealContent({ children, pageKey, reducedMotion }) {
+  const contentRef = useRef(null);
+
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root || reducedMotion || !('IntersectionObserver' in window)) return undefined;
+
+    const targets = Array.from(root.querySelectorAll('section, [data-scroll-reveal]'));
+    if (!targets.length) return undefined;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.remove('scroll-reveal-pending');
+        entry.target.classList.add('scroll-reveal-visible');
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -36px 0px' });
+
+    targets.forEach((element, index) => {
+      element.style.setProperty('--scroll-reveal-delay', `${(index % 4) * 45}ms`);
+      element.classList.add('scroll-reveal-pending');
+      observer.observe(element);
+    });
+
+    return () => {
+      observer.disconnect();
+      targets.forEach((element) => {
+        element.classList.remove('scroll-reveal-pending', 'scroll-reveal-visible');
+        element.style.removeProperty('--scroll-reveal-delay');
+      });
+    };
+  }, [pageKey, reducedMotion]);
+
+  return <div ref={contentRef}>{children}</div>;
+}
 
 export default function App() {
   const { user, lang } = useApp();
+  const adaptivePerformance = useAdaptivePerformance();
+
+  useEffect(() => {
+    document.documentElement.dataset.performanceProfile = adaptivePerformance.profile;
+    return () => {
+      delete document.documentElement.dataset.performanceProfile;
+    };
+  }, [adaptivePerformance.profile]);
 
   // Helper to extract tab id from window.location.hash
   const getTabFromHash = () => {
@@ -48,8 +105,7 @@ export default function App() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
   const [dueDiligenceResult, setDueDiligenceResult] = useState(null);
-  const [selectedTracking, setSelectedTracking] = useState('MUT-2026-DHK-4821');
-  const mainContentRef = useRef(null);
+  const [selectedTracking, setSelectedTracking] = useState('');
 
   // In-memory history stack for safe back navigation
   const historyStackRef = useRef([getTabFromHash()]);
@@ -123,37 +179,6 @@ export default function App() {
     return () => {
       window.removeEventListener('hashchange', handleHashSync);
       window.removeEventListener('popstate', handleHashSync);
-    };
-  }, [activeTab]);
-
-  useEffect(() => {
-    const root = mainContentRef.current;
-    if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return undefined;
-
-    const targets = Array.from(root.querySelectorAll('section, [data-scroll-reveal]'));
-    if (!targets.length) return undefined;
-
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach((entry) => {
-        if (!entry.isIntersecting) return;
-        entry.target.classList.remove('scroll-reveal-pending');
-        entry.target.classList.add('scroll-reveal-visible');
-        observer.unobserve(entry.target);
-      });
-    }, { threshold: 0.08, rootMargin: '0px 0px -36px 0px' });
-
-    targets.forEach((element, index) => {
-      element.style.setProperty('--scroll-reveal-delay', `${(index % 4) * 45}ms`);
-      element.classList.add('scroll-reveal-pending');
-      observer.observe(element);
-    });
-
-    return () => {
-      observer.disconnect();
-      targets.forEach((element) => {
-        element.classList.remove('scroll-reveal-pending', 'scroll-reveal-visible');
-        element.style.removeProperty('--scroll-reveal-delay');
-      });
     };
   }, [activeTab]);
 
@@ -352,6 +377,9 @@ export default function App() {
 
   return (
     <div className="min-h-screen flex flex-col bg-transparent text-[var(--text-main)] transition-colors duration-200">
+      <a href="#main-content" className="skip-link">
+        {lang === 'bn' ? 'মূল কনটেন্টে যান' : 'Skip to main content'}
+      </a>
       {/* Slide Drawer (Opened via Menu button in Header) */}
       <SlideDrawer
         isOpen={isDrawerOpen}
@@ -369,10 +397,14 @@ export default function App() {
       />
 
       {/* Main Page Content with Smooth Transition */}
-      <main ref={mainContentRef} className="flex-1">
-        <div key={activeTab} className="page-transition-enter">
-          {renderContent()}
-        </div>
+      <main id="main-content" tabIndex="-1" className="flex-1">
+        <Suspense fallback={<PageLoading lang={lang} />}>
+          <div key={activeTab} className="page-transition-enter">
+            <ScrollRevealContent pageKey={activeTab} reducedMotion={adaptivePerformance.reducedMotion}>
+              {renderContent()}
+            </ScrollRevealContent>
+          </div>
+        </Suspense>
       </main>
 
       {/* Modern Footer with Creator Credits */}

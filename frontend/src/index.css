@@ -101,6 +101,10 @@ html.dark {
   box-sizing: border-box;
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background-color: #F6FBF8;
@@ -145,7 +149,6 @@ html.dark body {
 
 .animate-smooth-enter {
   animation: smoothEntrance 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  will-change: opacity, transform;
 }
 
 @keyframes pageTransitionEnter {
@@ -154,7 +157,7 @@ html.dark body {
 }
 
 .page-transition-enter {
-  animation: pageTransitionEnter 220ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: pageTransitionEnter var(--page-transition-duration, 220ms) cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Slowly flowing liquid waves */
@@ -184,12 +187,10 @@ html.dark body {
 
 .animate-liquid-wave-1 {
   animation: liquidWaveSlow 14s ease-in-out infinite;
-  will-change: transform;
 }
 
 .animate-liquid-wave-2 {
   animation: liquidWaveSecondary 18s ease-in-out infinite;
-  will-change: transform;
 }
 
 /* Subtle glow orb */
@@ -206,7 +207,6 @@ html.dark body {
 
 .animate-glow-pulse {
   animation: glowPulse 6s ease-in-out infinite;
-  will-change: opacity, transform;
 }
 
 /* =====================================================================
@@ -254,7 +254,7 @@ html.dark .gov-card:hover {
   border: 1px solid var(--border);
   border-radius: var(--radius-card-premium);
   box-shadow: var(--shadow-card);
-  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.22s ease, box-shadow 0.22s ease;
 }
 
 .card-premium:hover, .card-3d-premium:hover {
@@ -301,7 +301,7 @@ html.dark .card-premium:hover, html.dark .card-3d-premium:hover {
   align-items: center;
   gap: 0.45rem;
   box-shadow: 0 1px 2px rgba(4, 120, 87, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.18);
-  transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
   user-select: none;
 }
 
@@ -342,7 +342,7 @@ html.dark .gov-btn-primary:hover {
   box-shadow: var(--glass-shadow-control, var(--shadow-xs));
   -webkit-backdrop-filter: blur(var(--glass-blur-control, 8px)) saturate(145%);
   backdrop-filter: blur(var(--glass-blur-control, 8px)) saturate(145%);
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
   user-select: none;
 }
 
@@ -381,7 +381,7 @@ html.dark .gov-btn-secondary:hover {
   align-items: center;
   gap: 0.45rem;
   box-shadow: 0 1px 2px rgba(245, 181, 68, 0.25);
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
   user-select: none;
 }
 
@@ -398,6 +398,7 @@ html.dark .gov-btn-secondary:hover {
 /* Inputs & Form Controls */
 .gov-input, .gov-select {
   width: 100%;
+  min-height: 44px;
   padding: 0.6rem 0.85rem;
   background-color: #FFFFFF;
   color: var(--text-main);
@@ -409,6 +410,12 @@ html.dark .gov-btn-secondary:hover {
   box-shadow: inset 0 1px 1px rgba(0, 0, 0, 0.02);
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
+
+/* Keep decorative leading icons and trailing password actions outside text. */
+.gov-input.pl-8 { padding-left: 2rem; }
+.gov-input.pl-9 { padding-left: 2.25rem; }
+.gov-input.pr-9 { padding-right: 2.25rem; }
+.gov-input.pr-12 { padding-right: 3rem; }
 
 .gov-input:focus, .gov-select:focus {
   border-color: #047857;
@@ -522,6 +529,37 @@ h1, h2, h3 {
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+.skip-link {
+  position: fixed;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 100;
+  padding: 0.65rem 0.9rem;
+  color: #FFFFFF;
+  background: #065F46;
+  border-radius: 0.5rem;
+  font-weight: 700;
+  transform: translateY(-160%);
+  transition: transform 120ms ease-out;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.page-loading-indicator {
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 9999px;
+  animation: pageLoadingSpin 700ms linear infinite;
+}
+
+@keyframes pageLoadingSpin {
+  to { transform: rotate(360deg); }
 }
 
 /* =====================================================================
@@ -856,6 +894,97 @@ svg[class*="absolute"][class*="left-"] {
   visibility: hidden;
 }
 
+svg[class*="absolute"][class*="left-"] {
+  pointer-events: none;
+}
+
+.password-visibility-toggle {
+  width: 44px;
+  min-width: 44px;
+  height: 44px;
+  min-height: 44px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.5rem;
+}
+
+/* Page content and overlays must not widen the document on small screens. */
+#root {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
+}
+
+.live-chat-maximized {
+  width: min(95vw, calc(100vw - 2.5rem));
+}
+
+@media (min-width: 640px) {
+  .live-chat-maximized {
+    width: 85vw;
+  }
+}
+
+@media (max-width: 639px) {
+  .gov-container {
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+  }
+
+  .gov-input,
+  .gov-select {
+    font-size: 16px;
+  }
+
+  .ui-button {
+    min-height: 44px;
+  }
+
+  .glass-control {
+    min-width: 44px;
+    min-height: 44px;
+  }
+
+  .glass-drawer {
+    width: min(320px, calc(100vw - 1rem));
+  }
+
+  .gov-card {
+    min-width: 0;
+  }
+
+  body {
+    background-attachment: scroll;
+  }
+
+  .live-chat-dock {
+    right: max(0.75rem, env(safe-area-inset-right));
+    bottom: max(0.75rem, env(safe-area-inset-bottom));
+  }
+
+  .live-chat-pill {
+    display: none;
+  }
+
+  .live-chat-panel {
+    max-height: calc(100dvh - 4rem - env(safe-area-inset-bottom));
+  }
+
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .ui-button,
+  .glass-control {
+    min-height: 44px;
+  }
+
+  .glass-control {
+    min-width: 44px;
+  }
+}
+
 :root {
   --ui-button-radius: 0.75rem;
   --ui-button-primary: #047857;
@@ -1070,5 +1199,161 @@ html.dark .ui-button--secondary:hover:not(:disabled) {
     translate: none !important;
     transition: none !important;
   }
+}
+
+/* Phase 8: low-cost schematic parcel viewer and progressive WebXR surface. */
+.parcel-plan {
+  position: absolute;
+  left: 50%;
+  top: 47%;
+  width: min(88%, 580px);
+  height: 78%;
+  transform: translate(-50%, -48%);
+  transform-style: preserve-3d;
+  transition: transform 180ms ease-out;
+}
+
+.parcel-plan-3d {
+  transform-style: preserve-3d;
+}
+
+.parcel-plan svg {
+  overflow: visible;
+}
+
+.parcel-marker {
+  filter: drop-shadow(0 2px 2px rgba(15, 23, 42, 0.3));
+}
+
+.parcel-xr-overlay-root {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  pointer-events: none;
+}
+
+.parcel-xr-panel {
+  position: absolute;
+  top: max(1rem, env(safe-area-inset-top));
+  left: max(1rem, env(safe-area-inset-left));
+  right: max(1rem, env(safe-area-inset-right));
+  max-width: 32rem;
+  margin-inline: auto;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 0.9rem;
+  padding: 0.8rem 0.9rem;
+  color: #10251b;
+  background: rgba(248, 255, 250, 0.9);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(12px);
+  pointer-events: auto;
+}
+
+.parcel-xr-canvas {
+  position: fixed;
+  inset: 0 auto auto 0;
+  z-index: 119;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .parcel-plan {
+    transition: none;
+  }
+}
+
+@media (max-width: 639px) {
+  :root {
+    --glass-blur-nav: 8px;
+    --glass-blur-control: 6px;
+    --glass-blur-search: 8px;
+    --glass-blur-overlay: 8px;
+    --glass-blur-drawer: 8px;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-nav,
+  .glass-control,
+  .glass-pill,
+  .glass-search,
+  .glass-popover,
+  .glass-drawer,
+  .ui-button--secondary,
+  .parcel-xr-panel {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background-image: none !important;
+  }
+
+  .glass-nav,
+  .glass-popover,
+  .glass-drawer,
+  .parcel-xr-panel {
+    background-color: var(--bg-card) !important;
+  }
+
+  .glass-control,
+  .glass-pill,
+  .glass-search,
+  .ui-button--secondary {
+    background-color: var(--ui-button-secondary-surface) !important;
+  }
+}
+
+/* Adaptive rendering keeps browser scheduling in control; profiles only tune
+   decorative work and never set a target frame rate. */
+html[data-performance-profile="balanced"] {
+  --page-transition-duration: 200ms;
+}
+
+html[data-performance-profile="high"] {
+  --page-transition-duration: 220ms;
+}
+
+html[data-performance-profile="power_saver"] {
+  --page-transition-duration: 130ms;
+  --glass-blur-nav: 0px;
+  --glass-blur-control: 0px;
+  --glass-blur-search: 0px;
+  --glass-blur-overlay: 0px;
+  --glass-blur-drawer: 0px;
+}
+
+html[data-performance-profile="power_saver"] body {
+  background-attachment: scroll;
+}
+
+html[data-performance-profile="power_saver"] .glass-nav,
+html[data-performance-profile="power_saver"] .glass-control,
+html[data-performance-profile="power_saver"] .glass-pill,
+html[data-performance-profile="power_saver"] .glass-search,
+html[data-performance-profile="power_saver"] .glass-popover,
+html[data-performance-profile="power_saver"] .glass-drawer,
+html[data-performance-profile="power_saver"] .gov-btn-primary,
+html[data-performance-profile="power_saver"] .gov-btn-secondary,
+html[data-performance-profile="power_saver"] .ui-button--primary,
+html[data-performance-profile="power_saver"] .ui-button--secondary,
+html[data-performance-profile="power_saver"] .backdrop-blur-sm,
+html[data-performance-profile="power_saver"] .parcel-xr-panel {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-performance-profile="power_saver"] .animate-liquid-wave-1,
+html[data-performance-profile="power_saver"] .animate-liquid-wave-2 {
+  animation: none;
+}
+
+html[data-performance-profile="power_saver"] .animate-glow-pulse {
+  display: none;
+}
+
+html[data-performance-profile="power_saver"] .scroll-reveal-visible {
+  transition-duration: 130ms;
+  transition-delay: 0ms;
 }
 

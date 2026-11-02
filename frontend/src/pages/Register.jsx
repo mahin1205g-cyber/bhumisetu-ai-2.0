@@ -22,6 +22,7 @@ export default function Register({ setActiveTab, navigateBack }) {
   });
 
   const [showPassword, setShowPassword] = useState(false);
+  const [showPasswordConfirmation, setShowPasswordConfirmation] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
@@ -163,12 +164,13 @@ export default function Register({ setActiveTab, navigateBack }) {
       <div className="gov-card p-6 space-y-4">
         <form onSubmit={handleRegister} className="space-y-4">
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="register-name" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'পূর্ণ নাম' : 'Full Name'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
-              <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <User className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
+                id="register-name"
                 type="text"
                 name="name"
                 value={form.name}
@@ -181,12 +183,12 @@ export default function Register({ setActiveTab, navigateBack }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="register-username" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'ইউজারনেম' : 'Username'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
-              <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <Input type="text" name="username" value={form.username} onChange={handleChange}
+              <User className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <Input id="register-username" type="text" name="username" value={form.username} onChange={handleChange}
                 autoComplete="username" minLength={4} maxLength={30} pattern="[A-Za-z0-9_.]{4,30}"
                 placeholder="citizen01" className="gov-input pl-9"
                 aria-invalid={Boolean(fieldErrors.username) || ['invalid', 'taken'].includes(usernameStatus.state)} required />
@@ -207,12 +209,13 @@ export default function Register({ setActiveTab, navigateBack }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="register-email" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'ইমেইল ঠিকানা' : 'Email Address'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
-              <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
+                id="register-email"
                 type="email"
                 name="email"
                 value={form.email}
@@ -225,14 +228,15 @@ export default function Register({ setActiveTab, navigateBack }) {
             {fieldErrors.email && <p className="mt-1 text-[11px] text-rose-600">{fieldErrors.email}</p>}
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="register-phone" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'মোবাইল' : 'Mobile'}
               </label>
               <div className="relative">
-                <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
+                  id="register-phone"
                   type="text"
                   name="phone"
                   value={form.phone}
@@ -250,12 +254,13 @@ export default function Register({ setActiveTab, navigateBack }) {
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              <label htmlFor="register-nid" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'জাতীয় পরিচয়পত্র (NID)' : 'National ID (NID)'}
               </label>
               <div className="relative">
-                <CreditCard className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <CreditCard className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
                 <Input
+                  id="register-nid"
                   type="text"
                   name="nid"
                   value={form.nid}
@@ -275,18 +280,19 @@ export default function Register({ setActiveTab, navigateBack }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="register-password" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
+                id="register-password"
                 type={showPassword ? 'text' : 'password'}
                 name="password"
                 value={form.password}
                 onChange={handleChange}
                 placeholder={lang === 'bn' ? 'কমপক্ষে ৮ অক্ষর' : 'At least 8 characters'}
-                className="gov-input pl-9 pr-9"
+                className="gov-input pl-9 pr-12"
                 minLength={8}
                 maxLength={256}
                 required
@@ -294,7 +300,9 @@ export default function Register({ setActiveTab, navigateBack }) {
               <Button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
+                className="password-visibility-toggle absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label={showPassword ? (lang === 'bn' ? 'পাসওয়ার্ড লুকান' : 'Hide password') : (lang === 'bn' ? 'পাসওয়ার্ড দেখান' : 'Show password')}
+                aria-pressed={showPassword}
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </Button>
@@ -304,21 +312,31 @@ export default function Register({ setActiveTab, navigateBack }) {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="register-password-confirmation" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm Password'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
-              <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
               <Input
-                type="password"
+                id="register-password-confirmation"
+                type={showPasswordConfirmation ? 'text' : 'password'}
                 name="password_confirmation"
                 value={form.password_confirmation}
                 onChange={handleChange}
-                className="gov-input pl-9"
+                className="gov-input pl-9 pr-12"
                 minLength={8}
                 maxLength={256}
                 required
               />
+              <Button
+                type="button"
+                onClick={() => setShowPasswordConfirmation((visible) => !visible)}
+                className="password-visibility-toggle absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                aria-label={showPasswordConfirmation ? (lang === 'bn' ? 'নিশ্চিতকরণ পাসওয়ার্ড লুকান' : 'Hide confirmation password') : (lang === 'bn' ? 'নিশ্চিতকরণ পাসওয়ার্ড দেখান' : 'Show confirmation password')}
+                aria-pressed={showPasswordConfirmation}
+              >
+                {showPasswordConfirmation ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </Button>
             </div>
             {(fieldErrors.password_confirmation || (form.password_confirmation && form.password !== form.password_confirmation)) &&
               <p className="mt-1 text-[11px] text-rose-600">{fieldErrors.password_confirmation || (lang === 'bn' ? 'দুটি পাসওয়ার্ড মিলছে না।' : 'Passwords do not match.')}</p>}

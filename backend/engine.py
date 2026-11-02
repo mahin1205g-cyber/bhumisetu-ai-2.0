@@ -62,10 +62,16 @@ def _get_pool():
                     return None
                 _pool = ConnectionPool(
                     database_url,
-                    kwargs={"row_factory": dict_row},
+                    kwargs={"row_factory": dict_row, "connect_timeout": 10},
                     min_size=1,
                     max_size=10,
                     timeout=30,
+                    # Serverless PostgreSQL providers may close idle TLS sessions.
+                    # Validate pooled connections before handing them to requests
+                    # and recycle them before common provider idle/lifetime limits.
+                    check=ConnectionPool.check_connection,
+                    max_idle=180,
+                    max_lifetime=1800,
                     open=False,
                 )
                 _pool.open(wait=True)
@@ -131,7 +137,8 @@ def init():
                 salt TEXT NOT NULL,
                 nid TEXT,
                 designation TEXT,
-                created_at TEXT NOT NULL)""")
+                created_at TEXT NOT NULL,
+                profile_picture TEXT)""")
             # Add a stable login name without replacing any existing account data.
             c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS username TEXT")
             c.execute("UPDATE users SET username = 'user_' || id::text WHERE username IS NULL OR BTRIM(username) = ''")
@@ -150,6 +157,12 @@ def init():
             END $$""")
             c.execute("ALTER TABLE users ALTER COLUMN username SET NOT NULL")
             c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS updated_at TEXT")
+            c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS profile_picture TEXT")
+            c.execute("""CREATE TABLE IF NOT EXISTS profile_pictures(
+                user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+                image_data BYTEA NOT NULL,
+                updated_at TEXT NOT NULL
+            )""")
             c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_lower_unique ON users (LOWER(username))")
             c.execute("""CREATE TABLE IF NOT EXISTS login_attempt_lockouts(
                 user_id INTEGER PRIMARY KEY,
@@ -590,7 +603,7 @@ def get_user_by_id(uid: int):
 def get_all_users():
     init()
     with conn() as c:
-        rows = c.execute("SELECT id, name, username, email, phone, role, nid, designation, created_at FROM users ORDER BY id ASC").fetchall()
+        rows = c.execute("SELECT id, name, username, email, phone, role, nid, designation, created_at, profile_picture FROM users ORDER BY id ASC").fetchall()
         return [dict(r) for r in rows]
 
 
@@ -1152,9 +1165,15 @@ def get_mutation_application(tracking_no_or_id):
     init()
     with conn() as c:
         if str(tracking_no_or_id).isdigit():
-            app = c.execute("SELECT * FROM mutation_applications WHERE id = %s", (int(tracking_no_or_id),)).fetchone()
+            app = c.execute(
+                "SELECT m.*, u.username, u.profile_picture FROM mutation_applications m LEFT JOIN users u ON u.id = m.user_id WHERE m.id = %s",
+                (int(tracking_no_or_id),),
+            ).fetchone()
         else:
-            app = c.execute("SELECT * FROM mutation_applications WHERE UPPER(tracking_no) = UPPER(%s)", (str(tracking_no_or_id),)).fetchone()
+            app = c.execute(
+                "SELECT m.*, u.username, u.profile_picture FROM mutation_applications m LEFT JOIN users u ON u.id = m.user_id WHERE UPPER(m.tracking_no) = UPPER(%s)",
+                (str(tracking_no_or_id),),
+            ).fetchone()
 
         if not app:
             return None
@@ -1175,21 +1194,21 @@ def get_mutation_application(tracking_no_or_id):
 def list_mutation_applications(user_id=None, role=None, status_filter=None, limit=50):
     init()
     with conn() as c:
-        query = "SELECT * FROM mutation_applications"
+        query = "SELECT m.*, u.username, u.profile_picture FROM mutation_applications m LEFT JOIN users u ON u.id = m.user_id"
         params = []
         conditions = []
 
         if role == "citizen" and user_id:
-            conditions.append("user_id = %s")
+            conditions.append("m.user_id = %s")
             params.append(user_id)
         if status_filter:
-            conditions.append("status = %s")
+            conditions.append("m.status = %s")
             params.append(status_filter)
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
 
-        query += " ORDER BY id DESC LIMIT %s"
+        query += " ORDER BY m.id DESC LIMIT %s"
         params.append(limit)
 
         rows = c.execute(query, params).fetchall()
@@ -1698,8 +1717,29 @@ def dashboard_stats():
         total_props = c.execute("SELECT COUNT(*) n FROM properties").fetchone()["n"]
         total_deeds = c.execute("SELECT COUNT(*) n FROM deeds").fetchone()["n"]
         total_verifications = c.execute("SELECT COUNT(*) n FROM deed_verifications").fetchone()["n"]
-        m_stats = mutation_stats()
-        r_stats = stats()
+
+        m_stats = {status: 0 for status in VALID_MUTATION_STATUSES}
+        mutation_total = 0
+        for row in c.execute("SELECT status, COUNT(*) n FROM mutation_applications GROUP BY status"):
+            m_stats[row["status"]] = row["n"]
+            mutation_total += row["n"]
+        m_stats["total"] = mutation_total
+        m_stats["pending"] = sum(
+            m_stats[status]
+            for status in [
+                "Submitted",
+                "Initial Review",
+                "Document Verification",
+                "Additional Information Required",
+                "Decision Pending",
+            ]
+        )
+
+        r_stats = {"total": 0, "high": 0, "medium": 0, "low": 0}
+        for row in c.execute("SELECT risk_level, COUNT(*) n FROM records GROUP BY risk_level"):
+            r_stats[row["risk_level"]] = row["n"]
+            r_stats["total"] += row["n"]
+
         dd_high = c.execute("SELECT COUNT(*) n FROM due_diligence_reports WHERE risk_level = 'high'").fetchone()["n"]
         dd_medium = c.execute("SELECT COUNT(*) n FROM due_diligence_reports WHERE risk_level = 'medium'").fetchone()["n"]
         total_dd = c.execute("SELECT COUNT(*) n FROM due_diligence_reports").fetchone()["n"]

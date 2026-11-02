@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import BhumiSathiLogo from '../components/BhumiSathiLogo';
+import ProfileAvatar from '../components/ProfileAvatar';
 import {
   FileCheck2, GitBranchPlus, AlertOctagon, Layers, Clock, ArrowRight,
   TrendingUp, ShieldAlert, CheckCircle, RefreshCw, Eye, Search, Zap,
@@ -15,6 +16,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
   const { lang, t, user } = useApp();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
 
   // In-dashboard Quick Tracker State
@@ -29,15 +31,18 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
   const [dashSearchLoading, setDashSearchLoading] = useState(false);
 
   const fetchStats = async () => {
-    setLoading(true);
+    if (stats) setRefreshing(true);
+    else setLoading(true);
     setError('');
     try {
       const data = await api.getDashboardStats();
       setStats(data);
     } catch (err) {
-      setError(err.message);
+      console.error('Dashboard stats could not be loaded:', err);
+      setError(err.code || 'REQUEST_FAILED');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -80,7 +85,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
 
   if (loading) {
     return (
-      <div className="gov-container py-20 text-center space-y-3">
+      <div className="gov-container py-20 text-center space-y-3" role="status" aria-live="polite" aria-busy="true">
         <RefreshCw className="w-9 h-9 text-[#047857] animate-spin mx-auto" />
         <p className="text-sm font-semibold text-gray-600 dark:text-gray-300">
           {lang === 'bn' ? 'ড্যাশবোর্ড ডেটা প্রস্তুত হচ্ছে...' : 'Loading dashboard statistics...'}
@@ -89,10 +94,44 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
     );
   }
 
+  const loadErrorMessage = error === 'REQUEST_TIMEOUT'
+    ? (lang === 'bn'
+      ? 'ড্যাশবোর্ডের তথ্য আনতে বেশি সময় লাগছে। ব্যাকএন্ড বা ডেটাবেস সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।'
+      : 'Dashboard data is taking too long to load. Check the backend or database connection and try again.')
+    : error === 'BACKEND_UNAVAILABLE'
+      ? (lang === 'bn'
+        ? 'সার্ভারের সাথে সংযোগ করা যাচ্ছে না। সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।'
+        : 'Could not connect to the server. Check the connection and try again.')
+      : (lang === 'bn'
+        ? 'ড্যাশবোর্ডের তথ্য লোড করা যায়নি। আবার চেষ্টা করুন।'
+        : 'Dashboard data could not be loaded. Please try again.');
+
+  if (error && !stats) {
+    return (
+      <div className="gov-container py-20 flex justify-center">
+        <div className="gov-card w-full max-w-lg p-6 text-center space-y-3" role="alert">
+          <h2 className="text-base font-bold text-gray-900 dark:text-white">
+            {lang === 'bn' ? 'ড্যাশবোর্ড ডেটা লোড হয়নি' : 'Dashboard data did not load'}
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-300">{loadErrorMessage}</p>
+          <Button type="button" onClick={fetchStats} className="gov-btn-primary mx-auto">
+            {lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Try again'}
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
   const mStats = stats?.mutation_stats || {};
   const rStats = stats?.record_risk_stats || {};
   const ddStats = stats?.due_diligence_stats || {};
   const totalRiskAlerts = (rStats.high || 0) + (ddStats.high || 0);
+  const handleMetricCardKeyDown = (event, tab) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      setActiveTab(tab);
+    }
+  };
 
   return (
     <div className="gov-container py-6 sm:py-8 space-y-6 max-w-7xl">
@@ -123,6 +162,15 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         </div>
       </div>
 
+      {error && (
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200" role="alert">
+          <span>{loadErrorMessage}</span>
+          <Button type="button" onClick={fetchStats} disabled={refreshing} className="gov-btn-secondary shrink-0">
+            {lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Retry'}
+          </Button>
+        </div>
+      )}
+
       {/* 1. Welcoming Hero Banner & Personalized Greeting */}
       <div className="gov-card p-6 bg-gradient-to-r from-[#065F46] via-[#047857] to-[#0b462d] text-white border border-emerald-500/20 shadow-lg relative overflow-hidden">
         <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
@@ -145,9 +193,12 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                 </span>
               </div>
 
-              <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-                {lang === 'bn' ? `স্বাগতম, ${user?.name || 'নাগরিক'}` : `Welcome, ${user?.name || 'Citizen'}`}
-              </h1>
+              <div className="flex items-center gap-3">
+                {user && <ProfileAvatar user={user} className="h-11 w-11 border-2 border-white/80 text-base shadow-lg" />}
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+                  {lang === 'bn' ? `স্বাগতম, ${user?.name || 'নাগরিক'}` : `Welcome, ${user?.name || 'Citizen'}`}
+                </h1>
+              </div>
               <p className="text-xs sm:text-sm text-emerald-50 mt-1 max-w-xl">
                 {lang === 'bn'
                   ? 'নিরাপদ ভূমি সিদ্ধান্তের নির্ভরযোগ্য ডিজিটাল সেতু — দলিল যাচাই, ই-নামজারি এবং স্বত্ব ঝুঁকি নিরূপণ এক ক্লিকেই।'
@@ -160,12 +211,15 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           {/* Quick Actions & Refresh */}
           <div className="flex items-center gap-2.5">
             <Button
+              type="button"
               onClick={fetchStats}
+              disabled={refreshing}
+              aria-busy={refreshing}
               className="px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-white flex items-center gap-1.5 transition"
               title="Refresh Data"
             >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span>{lang === 'bn' ? 'হালনাগাদ' : 'Refresh'}</span>
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
+              <span>{refreshing ? (lang === 'bn' ? 'হালনাগাদ হচ্ছে...' : 'Refreshing...') : (lang === 'bn' ? 'হালনাগাদ' : 'Refresh')}</span>
             </Button>
             <Button
               onClick={() => setActiveTab('deed-verify')}
@@ -184,8 +238,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             <span className="font-semibold text-white">
               {lang === 'bn' ? 'অ্যালগরিদম স্পিড:' : 'Search Engine:'}
             </span>
-            <span className="text-[#F5B544] font-mono">Binary Search O(log N)</span>
-            <span className="text-emerald-100/80">({lang === 'bn' ? '১০০-৫০০ মিলিয়ন ডেটায় ক্র্যাশ-মুক্ত' : 'Scalable to 500M records'})</span>
+            <span className="text-[#F5B544] font-mono">{lang === 'bn' ? 'ডেটাবেসভিত্তিক অনুসন্ধান' : 'Database-backed search'}</span>
           </div>
 
           <div className="flex items-center gap-3">
@@ -204,17 +257,20 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             <div>
               <h2 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
                 <Search className="w-4 h-4 text-[#047857] dark:text-emerald-400" />
-                <span>{lang === 'bn' ? 'তাৎক্ষণিক অনুসন্ধান (বাইনারি সার্চ)' : 'Instant Search (Binary Search O(log N))'}</span>
+                <span>{lang === 'bn' ? 'ডেটাবেসে রেকর্ড অনুসন্ধান' : 'Database-backed record search'}</span>
               </h2>
               <p className="text-[11px] text-gray-500 dark:text-gray-400">
                 {lang === 'bn'
                   ? 'দলিল নম্বর, দাগ নম্বর, খতিয়ান বা নামজারি ট্র্যাকিং নম্বর দিয়ে মুহূর্তের মধ্যে অনুসন্ধান করুন।'
-                  : 'Instantly find any deed, plot, khatian or tracking number in sub-milliseconds.'}
+                  : 'Search deeds, plots, khatians, and application tracking records.'}
               </p>
             </div>
 
             {/* Quick Filter Chips */}
             <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[10px] text-gray-500 dark:text-gray-400">
+                {lang === 'bn' ? 'ডেমো নমুনা:' : 'Demo examples:'}
+              </span>
               {[
                 { label: 'PL-784', query: 'PL-784' },
                 { label: '1042', query: '1042' },
@@ -236,11 +292,12 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <div className="relative flex-1">
-              <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="relative flex-1 min-w-0">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <Input
                 type="text"
+                aria-label={lang === 'bn' ? 'দলিল, প্লট, খতিয়ান বা আবেদন দিয়ে খুঁজুন' : 'Search deeds, parcels, khatians, or applications'}
                 value={dashboardQuery}
                 onChange={(e) => setDashboardQuery(e.target.value)}
                 placeholder={lang === 'bn' ? 'যেমন: PL-784, 1042, MUT-2026-DHK-4821, বা মৌজা...' : 'e.g. PL-784, 1042, MUT-2026-DHK-4821, or mouza...'}
@@ -276,7 +333,8 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
                 {dashSearchResults.results.map((r, i) => (
-                  <div
+                  <Button
+                    type="button"
                     key={i}
                     onClick={() => {
                       if (r._match_type === 'property') setActiveTab('properties');
@@ -286,7 +344,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                         setActiveTab('mutation-track');
                       }
                     }}
-                    className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-[#febd69] bg-gray-50 dark:bg-gray-800/50 cursor-pointer transition group"
+                    className="w-full p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:border-[#febd69] bg-gray-50 dark:bg-gray-800/50 text-left cursor-pointer transition group"
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-bold text-xs text-gray-900 dark:text-white group-hover:text-[#d97706] dark:group-hover:text-[#febd69]">
@@ -299,7 +357,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                     <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-1 truncate">
                       {r._subtitle}
                     </p>
-                  </div>
+                  </Button>
                 ))}
               </div>
             )}
@@ -313,7 +371,11 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         <div
           data-scroll-reveal
           onClick={() => setActiveTab('properties')}
-          className="gov-card p-4 sm:p-5 border-l-4 border-l-[#047857] dark:border-l-emerald-500 cursor-pointer transition card-3d-interactive"
+          onKeyDown={(event) => handleMetricCardKeyDown(event, 'properties')}
+          role="button"
+          tabIndex={0}
+          aria-label={lang === 'bn' ? 'মোট প্লটের তালিকা খুলুন' : 'Open registered parcel list'}
+          className="gov-card p-4 sm:p-5 border-l-4 border-l-[#047857] dark:border-l-emerald-500 cursor-pointer transition card-3d-interactive text-left"
         >
           <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
             <span className="text-xs font-semibold">{lang === 'bn' ? 'মোট প্লট / পার্সেল' : 'Total Parcels'}</span>
@@ -336,7 +398,11 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         <div
           data-scroll-reveal
           onClick={() => setActiveTab('deed-verify')}
-          className="gov-card p-4 sm:p-5 border-l-4 border-l-blue-600 dark:border-l-blue-400 cursor-pointer transition card-3d-interactive"
+          onKeyDown={(event) => handleMetricCardKeyDown(event, 'deed-verify')}
+          role="button"
+          tabIndex={0}
+          aria-label={lang === 'bn' ? 'দলিল যাচাই খুলুন' : 'Open deed verification'}
+          className="gov-card p-4 sm:p-5 border-l-4 border-l-blue-600 dark:border-l-blue-400 cursor-pointer transition card-3d-interactive text-left"
         >
           <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
             <span className="text-xs font-semibold">{lang === 'bn' ? 'যাচাইকৃত দলিল' : 'Deeds Verified'}</span>
@@ -359,7 +425,11 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         <div
           data-scroll-reveal
           onClick={() => setActiveTab('mutation')}
-          className="gov-card p-4 sm:p-5 border-l-4 border-l-purple-600 dark:border-l-purple-400 cursor-pointer transition card-3d-interactive"
+          onKeyDown={(event) => handleMetricCardKeyDown(event, 'mutation')}
+          role="button"
+          tabIndex={0}
+          aria-label={lang === 'bn' ? 'ই-নামজারি খুলুন' : 'Open mutation applications'}
+          className="gov-card p-4 sm:p-5 border-l-4 border-l-purple-600 dark:border-l-purple-400 cursor-pointer transition card-3d-interactive text-left"
         >
           <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
             <span className="text-xs font-semibold">{lang === 'bn' ? 'দাখিলকৃত নামজারি' : 'Mutations Filed'}</span>
@@ -382,7 +452,11 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         <div
           data-scroll-reveal
           onClick={() => setActiveTab('due-diligence')}
-          className="gov-card p-4 sm:p-5 border-l-4 border-l-rose-600 dark:border-l-rose-400 cursor-pointer transition card-3d-interactive"
+          onKeyDown={(event) => handleMetricCardKeyDown(event, 'due-diligence')}
+          role="button"
+          tabIndex={0}
+          aria-label={lang === 'bn' ? 'উচ্চ ঝুঁকির সতর্কতা দেখুন' : 'Review high risk alerts'}
+          className="gov-card p-4 sm:p-5 border-l-4 border-l-rose-600 dark:border-l-rose-400 cursor-pointer transition card-3d-interactive text-left"
         >
           <div className="flex items-center justify-between text-gray-500 dark:text-gray-400 mb-1">
             <span className="text-xs font-semibold">{lang === 'bn' ? 'উচ্চ ঝুঁকি সতর্কতা' : 'High Risk Alerts'}</span>
@@ -530,6 +604,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           <form onSubmit={handleQuickTrack} className="flex items-center gap-2 w-full md:w-auto">
             <Input
               type="text"
+              aria-label={lang === 'bn' ? 'নামজারি ট্র্যাকিং নম্বর' : 'Mutation tracking number'}
               value={trackInput}
               onChange={(e) => setTrackInput(e.target.value)}
               placeholder="e.g. MUT-2026-DHK-4821"
@@ -650,7 +725,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             </span>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 pt-2">
+          <div className="grid grid-cols-1 min-[420px]:grid-cols-3 gap-3 pt-2">
             <div className="p-4 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-center">
               <span className="text-xs text-emerald-800 dark:text-emerald-300 font-semibold block mb-1">
                 {lang === 'bn' ? 'নিম্ন ঝুঁকি' : 'Low Risk'}

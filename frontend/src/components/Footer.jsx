@@ -114,9 +114,9 @@ export default function Footer({ setActiveTab }) {
             © ২০২৬ ভূমিসেতু (Bhumisetu) — সর্বস্বত্ব সংরক্ষিত | নিরাপদ ডিজিটাল ভূমি প্রযুক্তি ব্যবস্থা
           </div>
           <div className="flex items-center gap-4">
-            <span>সংস্করণ ২.০ (O(log N) বাইনারি সার্চ)</span>
+            <span>সংস্করণ ২.০</span>
             <span className="w-1.5 h-1.5 rounded-full bg-[#047857] inline-block"></span>
-            <span>ফাস্টএপিআই ও C++ ব্যাকএন্ড সংযুক্ত</span>
+            <span>FastAPI · ঐচ্ছিক C++ acceleration</span>
           </div>
         </div>
       </div>

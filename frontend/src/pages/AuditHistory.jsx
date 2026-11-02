@@ -61,10 +61,11 @@ export default function AuditHistory({ setActiveTab, navigateBack }) {
 
       {/* Filter & Refresh */}
       <div className="gov-card p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
-        <div className="relative flex-1 min-w-[240px]">
-          <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
+        <div className="relative flex-1 min-w-0 sm:min-w-[240px]">
+          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
           <Input
             type="text"
+            aria-label={lang === 'bn' ? 'নিরীক্ষা লগ খুঁজুন' : 'Search audit logs'}
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={lang === 'bn' ? 'ব্যবহারকারী, কার্যক্রম বা বিবরণ দিয়ে খুঁজুন...' : 'Search logs by user, action or details...'}

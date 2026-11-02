@@ -131,7 +131,7 @@ export default function LandingPage({ setActiveTab }) {
             <span className="text-slate-300 dark:text-slate-700">•</span>
             <span className="flex items-center gap-1.5">
               <Check className="w-4 h-4 text-[#047857] dark:text-emerald-400" />
-              <span>{lang === 'bn' ? 'O(log N) দ্রুততম বাইনারি সার্চ' : 'O(log N) Fast Binary Search'}</span>
+              <span>{lang === 'bn' ? 'ডেটাবেসভিত্তিক রেকর্ড অনুসন্ধান' : 'Database-backed record search'}</span>
             </span>
             <span className="text-slate-300 dark:text-slate-700">•</span>
             <span className="flex items-center gap-1.5">
@@ -181,7 +181,7 @@ export default function LandingPage({ setActiveTab }) {
           </h2>
           <p className="text-xs sm:text-sm text-[#64748B] dark:text-slate-400">
             {lang === 'bn'
-              ? 'নাগরিক সেবা সহজীকরণ, দ্রুততম বাইনারি সার্চ এবং ভূমি সুরক্ষায় আধুনিক প্রযুক্তি।'
+              ? 'নাগরিক সেবা সহজীকরণ, ডেটাবেসভিত্তিক রেকর্ড অনুসন্ধান এবং ভূমি সুরক্ষায় আধুনিক প্রযুক্তি।'
               : 'Empowering citizens, ensuring transparency, and securing property investments.'}
           </p>
         </div>
