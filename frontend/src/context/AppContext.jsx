@@ -15,30 +15,24 @@ export function AppProvider({ children }) {
     return localStorage.getItem('lg_theme') || 'light';
   });
 
-  // 3. User state: demo citizen default
-  const [user, setUser] = useState(() => {
-    const saved = localStorage.getItem('lg_user');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed && parsed.role === 'admin') {
-          return {
-            ...parsed,
-            name: "Md Bayazid Hossain",
-            email: "dbscbayazid111@gmail.com",
-            phone: "01645241040"
-          };
-        }
-        return parsed;
-      } catch (e) {
-        // fallback
-      }
-    }
-    return null;
-  });
+  // User identity and role are always reloaded from the authenticated API.
+  const [user, setUser] = useState(null);
 
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    if (!localStorage.getItem('lg_token')) return;
+    let active = true;
+    api.getMe().then((profile) => {
+      if (active) setUser(profile);
+    }).catch(() => {
+      if (!active) return;
+      setToken(null);
+      setUser(null);
+    });
+    return () => { active = false; };
+  }, []);
 
   // Sync lang
   useEffect(() => {
@@ -54,15 +48,6 @@ export function AppProvider({ children }) {
       document.documentElement.classList.remove('dark');
     }
   }, [theme]);
-
-  // Sync user
-  useEffect(() => {
-    if (user) {
-      localStorage.setItem('lg_user', JSON.stringify(user));
-    } else {
-      localStorage.removeItem('lg_user');
-    }
-  }, [user]);
 
   // Fetch notifications
   const refreshNotifications = async () => {
@@ -95,48 +80,22 @@ export function AppProvider({ children }) {
     return translations[lang]?.[key] || translations['bn']?.[key] || key;
   };
 
-  const loginUser = (userData, token) => {
-    setUser(userData);
+  const loginUser = async (token) => {
     setToken(token);
+    try {
+      const profile = await api.getMe();
+      setUser(profile);
+      return profile;
+    } catch (error) {
+      setToken(null);
+      setUser(null);
+      throw error;
+    }
   };
 
   const logoutUser = () => {
     setUser(null);
     setToken(null);
-  };
-
-  const switchDemoRole = async (roleName) => {
-    const demoAccounts = {
-      citizen: {
-        id: 1,
-        name: "মোঃ রফিকুল ইসলাম",
-        email: "citizen@bhumisathi.gov.bd",
-        role: "citizen",
-        nid: "19902692518000123",
-        designation: "নাগরিক"
-      },
-      officer: {
-        id: 2,
-        name: "বেগম ফরিদা পারভীন",
-        email: "officer@bhumisathi.gov.bd",
-        role: "officer",
-        nid: "19852692518000456",
-        designation: "সহকারী কমিশনার (ভূমি) / AC Land"
-      },
-      admin: {
-        id: 3,
-        name: "Md Bayazid Hossain",
-        email: "dbscbayazid111@gmail.com",
-        phone: "01645241040",
-        role: "admin",
-        nid: "19882692518000789",
-        designation: "সিস্টেম আর্কিটেক্ট ও অ্যাডমিনিস্ট্রেটর"
-      }
-    };
-    const target = demoAccounts[roleName] || demoAccounts.citizen;
-    setUser(target);
-    setToken(`lg-token-${target.id}-demo-session`);
-    await refreshNotifications();
   };
 
   return (
@@ -152,7 +111,6 @@ export function AppProvider({ children }) {
         setUser,
         loginUser,
         logoutUser,
-        switchDemoRole,
         t,
         notifications,
         unreadCount,

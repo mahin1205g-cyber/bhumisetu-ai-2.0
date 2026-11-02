@@ -1,3 +1,4 @@
+import Button from './Button';
 import React, { useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import BhumiSathiLogo from './BhumiSathiLogo';
@@ -112,13 +113,13 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
             </div>
           </div>
           {/* Close Button [X] */}
-          <button
+          <Button
             onClick={onClose}
             className="glass-control w-7 h-7 rounded-md text-[#64748B] dark:text-gray-300 hover:text-[#17212B] dark:hover:text-white flex items-center justify-center transition"
             title="Close Menu (Esc)"
           >
             <X className="w-4 h-4" />
-          </button>
+          </Button>
         </div>
 
         {/* User Greeting Bar */}
@@ -172,7 +173,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                     (item.id === 'deed-verify' && activeTab === 'verification-result') ||
                     (item.id === 'mutation' && activeTab === 'mutation-track');
                   return (
-                    <button
+                    <Button
                       key={item.id}
                       onClick={() => handleNav(item.id)}
                       className={`drawer-glass-item mx-3 w-[calc(100%-1.5rem)] px-3 py-2.5 rounded-xl flex items-center justify-between text-left group ${
@@ -194,7 +195,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                         )}
                         <ChevronRight className="w-4 h-4 text-gray-400 group-hover:text-[#047857] dark:group-hover:text-emerald-400 group-hover:translate-x-0.5 transition" />
                       </div>
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -208,15 +209,15 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
             </div>
 
             <div className="grid grid-cols-2 gap-2">
-              <button
+              <Button
                 onClick={toggleLang}
                 className="glass-control flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold text-[#17212B] dark:text-gray-200 transition"
               >
                 <Globe className="w-3.5 h-3.5 text-[#047857]" />
                 <span>{lang === 'bn' ? 'English' : 'বাংলা'}</span>
-              </button>
+              </Button>
 
-              <button
+              <Button
                 onClick={toggleTheme}
                 className="glass-control flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl text-xs font-semibold text-[#17212B] dark:text-gray-200 transition"
               >
@@ -231,7 +232,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
                     <span>ডার্ক মোড</span>
                   </>
                 )}
-              </button>
+              </Button>
             </div>
 
             {/* Gov Hotline 16122 Info Pill */}
@@ -247,7 +248,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
 
             {/* Logout / Login button */}
             {user ? (
-              <button
+              <Button
                 onClick={() => {
                   logoutUser();
                   onClose();
@@ -257,9 +258,9 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>{t('navLogout')}</span>
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 onClick={() => {
                   onClose();
                   setActiveTab('login');
@@ -268,7 +269,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
               >
                 <User className="w-3.5 h-3.5" />
                 <span>{t('navLogin')}</span>
-              </button>
+              </Button>
             )}
           </div>
         </div>

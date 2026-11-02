@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -140,7 +142,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
         </div>
 
         <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
-          <button
+          <Button
             onClick={() => {
               if (setSelectedTracking) setSelectedTracking(successApp.tracking_no);
               setActiveTab('mutation-track');
@@ -149,9 +151,9 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
           >
             <GitBranchPlus className="w-3.5 h-3.5" />
             <span>{lang === 'bn' ? 'অগ্রগতি ট্র্যাক করুন (Visual Timeline)' : 'Track Application Progress'}</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
             onClick={() => {
               setSuccessApp(null);
               setStep(1);
@@ -159,7 +161,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
             className="gov-btn-secondary text-xs py-2 px-4"
           >
             {lang === 'bn' ? 'নতুন আরেকটি আবেদন' : 'Apply Another'}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -191,14 +193,14 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
         }}
         fallbackTab="dashboard"
         actions={
-          <button
+          <Button
             type="button"
             onClick={handlePresetFill}
             className="px-3 py-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-[#047857] dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold hover:bg-emerald-100 flex items-center gap-1.5 shadow-xs transition"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
             <span>{lang === 'bn' ? 'ডেমো তথ্য পূরণ' : 'Load Demo Preset'}</span>
-          </button>
+          </Button>
         }
       />
 
@@ -252,7 +254,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'আবেদনকারীর পুরো নাম' : 'Applicant Full Name'} <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   name="applicant_name"
                   value={form.applicant_name}
@@ -266,7 +268,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('nid')} <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   name="applicant_nid"
                   value={form.applicant_nid}
@@ -281,7 +283,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'মোবাইল নম্বর' : 'Mobile Phone'} <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   name="applicant_phone"
                   value={form.applicant_phone}
@@ -296,11 +298,11 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'আবেদনকারীর সম্পর্ক' : 'Applicant Relation'}
                 </label>
-                <select name="applicant_relation" value={form.applicant_relation} onChange={handleChange} className="gov-select">
+                <Input as="select" name="applicant_relation" value={form.applicant_relation} onChange={handleChange} className="gov-select">
                   <option value="Self">{lang === 'bn' ? 'নিজে (মালিক)' : 'Self (Owner)'}</option>
                   <option value="Heir">{lang === 'bn' ? 'ওয়ারিশ সূত্রে' : 'Legal Heir'}</option>
                   <option value="Representative">{lang === 'bn' ? 'ক্ষমতাপ্রাপ্ত প্রতিনিধি (আমমোক্তার)' : 'Authorized Representative'}</option>
-                </select>
+                </Input>
               </div>
             </div>
 
@@ -308,13 +310,13 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'বর্তমান ও যোগাযোগের ঠিকানা' : 'Address'}
               </label>
-              <textarea
+              <Input as="textarea"
                 name="applicant_address"
                 value={form.applicant_address}
                 onChange={handleChange}
                 rows="2"
                 className="gov-input resize-none"
-              ></textarea>
+              ></Input>
             </div>
           </div>
         )}
@@ -330,61 +332,61 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('district')}</label>
-                <select name="district" value={form.district} onChange={handleChange} className="gov-select">
+                <Input as="select" name="district" value={form.district} onChange={handleChange} className="gov-select">
                   <option value="ঢাকা">ঢাকা (Dhaka)</option>
                   <option value="চট্টগ্রাম">চট্টগ্রাম (Chattogram)</option>
                   <option value="রাজশাহী">রাজশাহী (Rajshahi)</option>
                   <option value="সিলেট">সিলেট (Sylhet)</option>
-                </select>
+                </Input>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('upazila')}</label>
-                <input type="text" name="upazila" value={form.upazila} onChange={handleChange} className="gov-input" />
+                <Input type="text" name="upazila" value={form.upazila} onChange={handleChange} className="gov-input" />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('mouza')}</label>
-                <input type="text" name="mouza" value={form.mouza} onChange={handleChange} className="gov-input" />
+                <Input type="text" name="mouza" value={form.mouza} onChange={handleChange} className="gov-input" />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('khatianType')}</label>
-                <select name="khatian_type" value={form.khatian_type} onChange={handleChange} className="gov-select">
+                <Input as="select" name="khatian_type" value={form.khatian_type} onChange={handleChange} className="gov-select">
                   <option value="BS">বিএস (BS / City Survey)</option>
                   <option value="RS">আরএস (RS)</option>
                   <option value="SA">এসএ (SA)</option>
                   <option value="CS">সিএস (CS)</option>
-                </select>
+                </Input>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('khatianNo')} *</label>
-                <input type="text" name="khatian_no" value={form.khatian_no} onChange={handleChange} className="gov-input" required />
+                <Input type="text" name="khatian_no" value={form.khatian_no} onChange={handleChange} className="gov-input" required />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('plotNo')} *</label>
-                <input type="text" name="plot_no" value={form.plot_no} onChange={handleChange} className="gov-input" required />
+                <Input type="text" name="plot_no" value={form.plot_no} onChange={handleChange} className="gov-input" required />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('landArea')} *</label>
-                <input type="number" step="0.01" name="land_area" value={form.land_area} onChange={handleChange} className="gov-input" required />
+                <Input type="number" step="0.01" name="land_area" value={form.land_area} onChange={handleChange} className="gov-input" required />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('landClass')}</label>
-                <select name="land_class" value={form.land_class} onChange={handleChange} className="gov-select">
+                <Input as="select" name="land_class" value={form.land_class} onChange={handleChange} className="gov-select">
                   <option value="বাড়ি (Homestead)">বাড়ি (Homestead)</option>
                   <option value="নাল (Nal / Agricultural)">নাল (Nal / Agricultural)</option>
                   <option value="বাণিজ্যিক (Commercial)">বাণিজ্যিক (Commercial)</option>
                   <option value="ভিটি (Highland)">ভিটি (Highland)</option>
-                </select>
+                </Input>
               </div>
             </div>
           </div>
@@ -403,26 +405,26 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'মালিকানা অর্জনের সূত্র' : 'Source of Ownership'}
                 </label>
-                <select name="ownership_source" value={form.ownership_source} onChange={handleChange} className="gov-select">
+                <Input as="select" name="ownership_source" value={form.ownership_source} onChange={handleChange} className="gov-select">
                   <option value="ক্রয়সূত্রে (Purchase)">ক্রয়সূত্রে (Purchase)</option>
                   <option value="ওয়ারিশসূত্রে (Inheritance)">ওয়ারিশসূত্রে (Inheritance)</option>
                   <option value="হেবা / দানসূত্রে (Gift / Heba)">হেবা / দানসূত্রে (Gift / Heba)</option>
                   <option value="বন্দোবস্তসূত্রে (Settlement)">বন্দোবস্তসূত্রে (Settlement)</option>
-                </select>
+                </Input>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'মূল বালাম দলিল নং' : 'Registered Deed No'} *
                 </label>
-                <input type="text" name="deed_no" value={form.deed_no} onChange={handleChange} className="gov-input" required />
+                <Input type="text" name="deed_no" value={form.deed_no} onChange={handleChange} className="gov-input" required />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'দলিল সম্পাদনের তারিখ' : 'Deed Date'}
                 </label>
-                <input type="date" name="deed_date" value={form.deed_date} onChange={handleChange} className="gov-input" />
+                <Input type="date" name="deed_date" value={form.deed_date} onChange={handleChange} className="gov-input" />
               </div>
             </div>
 
@@ -490,19 +492,19 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
         <div className="pt-4 border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-3">
           <div>
             {step > 1 && (
-              <button
+              <Button
                 type="button"
                 onClick={() => setStep(step - 1)}
                 className="gov-btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
                 <span>{t('btnBack')}</span>
-              </button>
+              </Button>
             )}
           </div>
 
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
               disabled={loading}
               onClick={() => handleSubmit(true)}
@@ -510,19 +512,19 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
             >
               <Save className="w-3.5 h-3.5" />
               <span>{t('btnSaveDraft')}</span>
-            </button>
+            </Button>
 
             {step < 4 ? (
-              <button
+              <Button
                 type="button"
                 onClick={() => setStep(step + 1)}
                 className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
               >
                 <span>{t('btnNext')}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              </Button>
             ) : (
-              <button
+              <Button
                 type="button"
                 disabled={loading}
                 onClick={() => handleSubmit(false)}
@@ -539,7 +541,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
                     <span>{lang === 'bn' ? 'চূড়ান্ত আবেদন দাখিল করুন' : 'Submit Application'}</span>
                   </>
                 )}
-              </button>
+              </Button>
             )}
           </div>
         </div>

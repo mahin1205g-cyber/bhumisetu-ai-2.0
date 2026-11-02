@@ -1,3 +1,4 @@
+import Button from './Button';
 import React, { useState, useEffect } from 'react';
 import QRCode from 'qrcode';
 import { Download, Copy, Check, ExternalLink, X, ShieldCheck, QrCode } from 'lucide-react';
@@ -84,12 +85,12 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
       {modalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 animate-fade-in no-print">
           <div className="bg-white dark:bg-[#131c27] text-gray-900 dark:text-gray-100 rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-gray-200 dark:border-gray-700 space-y-4 relative">
-            <button
+            <Button
               onClick={() => setModalOpen(false)}
               className="absolute top-4 right-4 p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
             >
               <X className="w-5 h-5" />
-            </button>
+            </Button>
 
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-400 font-bold text-sm">
               <ShieldCheck className="w-5 h-5 text-[#0b462d] dark:text-emerald-400" />
@@ -120,21 +121,21 @@ export default function QRCodeCanvas({ value, size = 120, label = "", title = "�
             </div>
 
             <div className="grid grid-cols-2 gap-2 pt-2">
-              <button
+              <Button
                 onClick={handleDownload}
                 className="gov-btn-primary text-xs py-2 justify-center flex items-center gap-1.5 font-bold shadow"
               >
                 <Download className="w-3.5 h-3.5" />
                 <span>কিউআর ডাউনলোড</span>
-              </button>
+              </Button>
 
-              <button
+              <Button
                 onClick={handleCopy}
                 className="gov-btn-secondary text-xs py-2 justify-center flex items-center gap-1.5 font-bold"
               >
                 {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
                 <span>{copied ? 'কপি হয়েছে!' : 'তথ্য কপি'}</span>
-              </button>
+              </Button>
             </div>
           </div>
         </div>

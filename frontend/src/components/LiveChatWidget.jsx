@@ -1,3 +1,5 @@
+import Input from './Input';
+import Button from './Button';
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -461,27 +463,27 @@ export default function LiveChatWidget({ setActiveTab }) {
 
             {/* Header Control Buttons */}
             <div className="flex items-center gap-1 text-emerald-200">
-              <button
+              <Button
                 onClick={handleClearChat}
                 title={lang === 'bn' ? 'চ্যাট নতুন করে শুরু করুন' : 'Clear conversation'}
                 className="p-1.5 hover:bg-white/10 rounded-lg transition"
               >
                 <RotateCcw className="w-4 h-4" />
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setIsMaximized(!isMaximized)}
                 title={isMaximized ? (lang === 'bn' ? 'ছোট করুন' : 'Restore') : (lang === 'bn' ? 'বড় করুন' : 'Maximize')}
                 className="p-1.5 hover:bg-white/10 rounded-lg transition hidden sm:inline-flex"
               >
                 {isMaximized ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setIsOpen(false)}
                 title={lang === 'bn' ? 'বন্ধ করুন' : 'Close'}
                 className="p-1.5 hover:bg-white/10 rounded-lg transition"
               >
                 <X className="w-5 h-5" />
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -496,7 +498,7 @@ export default function LiveChatWidget({ setActiveTab }) {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {QUICK_PROMPTS.map((p) => (
-                    <button
+                    <Button
                       key={p.id}
                       onClick={() => handleSend(p.query)}
                       className="text-left text-xs p-2.5 rounded-lg bg-gray-50 dark:bg-[#1a2b22] hover:bg-emerald-50 dark:hover:bg-emerald-950/70 border border-gray-200/70 dark:border-emerald-800/40 text-gray-800 dark:text-gray-200 transition flex items-start gap-2 hover:border-emerald-500 hover:shadow"
@@ -505,7 +507,7 @@ export default function LiveChatWidget({ setActiveTab }) {
                       <span className="font-medium leading-snug">
                         {lang === 'bn' ? p.labelBn : p.labelEn}
                       </span>
-                    </button>
+                    </Button>
                   ))}
                 </div>
               </div>
@@ -566,21 +568,21 @@ export default function LiveChatWidget({ setActiveTab }) {
                       {/* Retry for failed AI requests */}
                       {isAi && msg.isError && msg.retryable && (
                         <div className="mt-3 pt-2.5 border-t border-amber-200/70 dark:border-amber-900/40">
-                          <button
+                          <Button
                             onClick={() => handleRetry(msg)}
                             disabled={isThinking || isStreaming}
                             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 text-white text-xs font-semibold shadow transition"
                           >
                             <RefreshCw className="w-3.5 h-3.5" />
                             <span>{lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Retry'}</span>
-                          </button>
+                          </Button>
                         </div>
                       )}
 
                       {/* In-chat action button if suggested by AI */}
                       {isAi && msg.action && setActiveTab && (
                         <div className="mt-3 pt-2.5 border-t border-gray-100 dark:border-gray-800/80">
-                          <button
+                          <Button
                             onClick={() => {
                               setActiveTab(msg.action.tab);
                               if (window.innerWidth < 640) setIsOpen(false);
@@ -589,7 +591,7 @@ export default function LiveChatWidget({ setActiveTab }) {
                           >
                             <span>{msg.action.label || (lang === 'bn' ? msg.action.labelBn : msg.action.labelEn)}</span>
                             <ExternalLink className="w-3.5 h-3.5" />
-                          </button>
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -599,7 +601,7 @@ export default function LiveChatWidget({ setActiveTab }) {
                       <span>{msg.time}</span>
                       {isAi && msg.text && (
                         <div className="flex items-center gap-1.5 ml-2">
-                          <button
+                          <Button
                             onClick={() => copyToClipboard(msg.text, idx)}
                             title={lang === 'bn' ? 'কপি করুন' : 'Copy'}
                             className="p-1 hover:text-gray-600 dark:hover:text-gray-300 transition"
@@ -609,23 +611,23 @@ export default function LiveChatWidget({ setActiveTab }) {
                             ) : (
                               <Copy className="w-3 h-3" />
                             )}
-                          </button>
+                          </Button>
                           {!msg.isError && (
                             <>
-                              <button
+                              <Button
                                 onClick={() => setFeedback(msg.id, 'like')}
                                 title={lang === 'bn' ? 'উপকারী' : 'Helpful'}
                                 className={`p-1 hover:text-emerald-500 transition ${feedbackState[msg.id] === 'like' ? 'text-emerald-500' : ''}`}
                               >
                                 <ThumbsUp className="w-3 h-3" />
-                              </button>
-                              <button
+                              </Button>
+                              <Button
                                 onClick={() => setFeedback(msg.id, 'dislike')}
                                 title={lang === 'bn' ? 'উপকারী নয়' : 'Not helpful'}
                                 className={`p-1 hover:text-red-500 transition ${feedbackState[msg.id] === 'dislike' ? 'text-red-500' : ''}`}
                               >
                                 <ThumbsDown className="w-3 h-3" />
-                              </button>
+                              </Button>
                             </>
                           )}
                         </div>
@@ -669,12 +671,12 @@ export default function LiveChatWidget({ setActiveTab }) {
                 <span className="w-2 h-2 bg-amber-500 rounded-full animate-ping" />
                 {lang === 'bn' ? 'উত্তর তৈরি হচ্ছে...' : 'Generating response...'}
               </span>
-              <button
+              <Button
                 onClick={stopGeneration}
                 className="font-bold underline text-xs hover:text-amber-950 dark:hover:text-amber-100"
               >
                 {lang === 'bn' ? 'থামুন' : 'Stop'}
-              </button>
+              </Button>
             </div>
           )}
 
@@ -687,7 +689,7 @@ export default function LiveChatWidget({ setActiveTab }) {
               }}
               className="flex items-end gap-2 bg-gray-50 dark:bg-[#18261f] border border-gray-300 dark:border-gray-700 rounded-xl px-3 py-1.5 focus-within:border-emerald-500 focus-within:ring-2 focus-within:ring-emerald-500/20 transition"
             >
-              <textarea
+              <Input as="textarea"
                 ref={inputRef}
                 rows={1}
                 value={input}
@@ -704,7 +706,7 @@ export default function LiveChatWidget({ setActiveTab }) {
               />
 
               {/* Voice Input Button */}
-              <button
+              <Button
                 type="button"
                 onClick={toggleVoiceInput}
                 title={isListening ? (lang === 'bn' ? 'মাইক্রোফোন বন্ধ করুন' : 'Stop listening') : (lang === 'bn' ? 'ভয়েস দিয়ে বলুন' : 'Voice input')}
@@ -715,16 +717,16 @@ export default function LiveChatWidget({ setActiveTab }) {
                 }`}
               >
                 {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              </button>
+              </Button>
 
               {/* Send Button */}
-              <button
+              <Button
                 type="submit"
                 disabled={!input.trim() || isStreaming || isThinking}
                 className="p-1.5 bg-[#0b462d] hover:bg-[#145e3c] disabled:opacity-40 disabled:hover:bg-[#0b462d] text-white rounded-lg transition shadow-sm"
               >
                 <Send className="w-4 h-4" />
-              </button>
+              </Button>
             </form>
 
             <div className="flex items-center justify-between mt-1.5 px-1 text-[10px] text-gray-400 dark:text-gray-500">
@@ -740,7 +742,7 @@ export default function LiveChatWidget({ setActiveTab }) {
         {/* Pill Bubble: "✖ লাইভ চ্যাট 👋" */}
         {showPill && !isOpen && (
           <div className="flex items-center gap-2 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 text-xs sm:text-sm font-bold px-3.5 py-2 rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700 animate-float-gentle transition hover:shadow-2xl">
-            <button
+            <Button
               onClick={(e) => {
                 e.stopPropagation();
                 setShowPill(false);
@@ -749,7 +751,7 @@ export default function LiveChatWidget({ setActiveTab }) {
               title={lang === 'bn' ? 'লুকান' : 'Dismiss'}
             >
               <X className="w-3.5 h-3.5" />
-            </button>
+            </Button>
             <span
               onClick={() => setIsOpen(true)}
               className="cursor-pointer flex items-center gap-1.5 hover:text-[#0b462d] dark:hover:text-emerald-400 transition"
@@ -761,7 +763,7 @@ export default function LiveChatWidget({ setActiveTab }) {
         )}
 
         {/* Circular Floating Chat Launcher Button (Screenshot 3) */}
-        <button
+        <Button
           onClick={() => setIsOpen(!isOpen)}
           aria-label="Toggle Live Chat"
           className="w-14 h-14 rounded-full bg-[#0b7e4a] hover:bg-[#09663b] text-white shadow-2xl flex items-center justify-center transition-all duration-300 hover:scale-105 active:scale-95 relative group border-2 border-white dark:border-gray-800 ring-4 ring-emerald-500/20"
@@ -782,7 +784,7 @@ export default function LiveChatWidget({ setActiveTab }) {
               <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-white dark:border-gray-800" />
             </span>
           )}
-        </button>
+        </Button>
       </div>
     </div>
   );

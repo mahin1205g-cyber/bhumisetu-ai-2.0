@@ -1,371 +1,272 @@
-import React, { useState, useEffect } from 'react';
+import Input from '../components/Input';
+import Button from '../components/Button';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import BhumiSathiLogo from '../components/BhumiSathiLogo';
-import {
-  User, Lock, Eye, EyeOff, Shield, ArrowRight, Sparkles, CheckCircle2,
-  Phone, Mail, KeyRound, RefreshCw, Send, ArrowLeft, Home
-} from 'lucide-react';
+import { User, Lock, Eye, EyeOff, ShieldCheck, ArrowLeft } from 'lucide-react';
+
+const portals = [
+  { role: 'citizen', bn: 'নাগরিক', en: 'Citizen' },
+  { role: 'officer', bn: 'কর্মকর্তা / কর্মী', en: 'Officer / Worker' },
+  { role: 'admin', bn: 'অ্যাডমিন', en: 'Admin' },
+];
 
 export default function Login({ setActiveTab, navigateBack }) {
-  const { lang, t, loginUser, switchDemoRole } = useApp();
-
-  const [loginMode, setLoginMode] = useState('password'); // 'password' | 'otp'
-
-  // Password mode state
-  const [identifier, setIdentifier] = useState('citizen@bhumisetu.gov.bd');
-  const [password, setPassword] = useState('demo123');
+  const { lang, loginUser } = useApp();
+  const [portal, setPortal] = useState('citizen');
+  const [identifier, setIdentifier] = useState('');
+  const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-
-  // OTP mode state
-  const [otpDestination, setOtpDestination] = useState('01711002233');
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpPreview, setOtpPreview] = useState('');
-  const [countdown, setCountdown] = useState(0);
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [successMsg, setSuccessMsg] = useState('');
+  const [loginLockSeconds, setLoginLockSeconds] = useState(0);
+  const [success, setSuccess] = useState('');
+  const [recoveryStep, setRecoveryStep] = useState(0);
+  const [recovering, setRecovering] = useState(false);
+  const [recoveryType, setRecoveryType] = useState('password');
+  const [recoveryIdentity, setRecoveryIdentity] = useState({ username: '', full_name: '', phone: '', nid: '' });
+  const [recoveredUsername, setRecoveredUsername] = useState('');
+  const [recoveryLockSeconds, setRecoveryLockSeconds] = useState(0);
+  const [resetToken, setResetToken] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
-  // Countdown timer effect
   useEffect(() => {
-    let timer;
-    if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-    }
-    return () => clearTimeout(timer);
-  }, [countdown]);
+    if (recoveryLockSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => setRecoveryLockSeconds((remaining) => Math.max(0, remaining - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [recoveryLockSeconds > 0]);
 
-  const handlePasswordLogin = async (e) => {
-    e.preventDefault();
-    if (!identifier || !password) {
-      setError(lang === 'bn' ? 'ব্যবহারকারী নাম/ইমেইল ও পাসওয়ার্ড পূরণ করুন।' : 'Please enter your username/email and password.');
-      return;
-    }
+  useEffect(() => {
+    if (loginLockSeconds <= 0) return undefined;
+    const timer = window.setInterval(() => setLoginLockSeconds((remaining) => Math.max(0, remaining - 1)), 1000);
+    return () => window.clearInterval(timer);
+  }, [loginLockSeconds > 0]);
 
-    setLoading(true);
+  const loginLockoutMessage = () => {
+    const hours = Math.floor(loginLockSeconds / 3600);
+    const minutes = Math.floor((loginLockSeconds % 3600) / 60);
+    const seconds = loginLockSeconds % 60;
+    return lang === 'bn'
+      ? `এই অ্যাকাউন্টে লগইন ${hours} ঘণ্টা ${minutes} মিনিট ${seconds} সেকেন্ডের জন্য বন্ধ।`
+      : `Sign in for this account is locked for ${hours}h ${minutes}m ${seconds}s.`;
+  };
+
+  const lockoutMessage = () => {
+    const hours = Math.floor(recoveryLockSeconds / 3600);
+    const minutes = Math.floor((recoveryLockSeconds % 3600) / 60);
+    const seconds = recoveryLockSeconds % 60;
+    return lang === 'bn'
+      ? `এই ${recoveryType === 'password' ? 'পাসওয়ার্ড' : 'ইউজারনেম'} পুনরুদ্ধার ${hours} ঘণ্টা ${minutes} মিনিট ${seconds} সেকেন্ডের জন্য বন্ধ।`
+      : `This ${recoveryType === 'password' ? 'password' : 'username'} recovery is locked for ${hours}h ${minutes}m ${seconds}s.`;
+  };
+
+  const beginRecovery = (type) => {
+    setRecovering(true);
+    setRecoveryType(type);
+    setRecoveryStep(0);
+    setRecoveryIdentity({ username: '', full_name: '', phone: '', nid: '' });
+    setRecoveredUsername('');
+    setResetToken('');
+    setRecoveryLockSeconds(0);
     setError('');
+    setSuccess('');
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    setError('');
+    setLoginLockSeconds(0);
+    setLoading(true);
     try {
-      const res = await api.login(identifier, password);
-      loginUser(res.user, res.token);
-      setActiveTab('dashboard');
+      const result = await api.login(identifier.trim(), password);
+      if (result.user?.role !== portal) {
+        setError(lang === 'bn'
+          ? 'এই অ্যাকাউন্টের ভূমিকা নির্বাচিত লগইন পোর্টালের সঙ্গে মেলে না।'
+          : 'This account role does not match the selected login portal.');
+        return;
+      }
+      await loginUser(result.token);
+      setActiveTab(portal === 'admin' ? 'admin' : portal === 'officer' ? 'officer-review' : 'dashboard');
     } catch (err) {
-      setError(err.message);
+      const detail = err.payload?.detail;
+      if (detail?.code === 'account_login_locked') {
+        setLoginLockSeconds(Number(detail.remaining_seconds) || 0);
+      } else if (detail?.code === 'login_rate_limited') {
+        const wait = Number(detail.retry_after_seconds) || 0;
+        setError(lang === 'bn'
+          ? `অনেকবার চেষ্টা হয়েছে। ${wait} সেকেন্ড পর আবার চেষ্টা করুন।`
+          : `Too many recent attempts. Try again in ${wait} seconds.`);
+      } else {
+        setError(err.message);
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSendOTP = async () => {
-    if (!otpDestination || otpDestination.trim().length < 3) {
-      setError(lang === 'bn' ? 'অনুগ্রহ করে সঠিক মোবাইল নম্বর বা ইমেইল ঠিকানা দিন।' : 'Please enter a valid phone number or email.');
-      return;
-    }
-
-    setLoading(true);
-    setError('');
-    setSuccessMsg('');
-
+  const handleRecoveryStart = async (event) => {
+    event.preventDefault();
+    setError(''); setSuccess(''); setLoading(true);
     try {
-      const res = await api.sendOTP(otpDestination, 'login');
-      setOtpSent(true);
-      setOtpPreview(res.otp_preview || '849201');
-      setCountdown(60);
-      setSuccessMsg(
-        lang === 'bn'
-          ? `আপনার ${res.channel_bn || 'মোবাইলে'} ৬-সংখ্যার ওটিপি কোড পাঠানো হয়েছে।`
-          : `Verification code sent to your ${res.channel || 'phone'}.`
-      );
+      const result = recoveryType === 'password'
+        ? await api.startPasswordRecovery({ username: recoveryIdentity.username, phone: recoveryIdentity.phone, nid: recoveryIdentity.nid })
+        : await api.recoverUsername({ full_name: recoveryIdentity.full_name, phone: recoveryIdentity.phone, nid: recoveryIdentity.nid });
+      if (recoveryType === 'password') setResetToken(result.reset_token);
+      else setRecoveredUsername(result.username);
+      setRecoveryStep(1);
+      setRecoveryLockSeconds(0);
+      setSuccess(recoveryType === 'password'
+        ? (lang === 'bn' ? 'ইউজারনেম, মোবাইল ও NID মিলেছে। এখন নতুন পাসওয়ার্ড দিন।' : 'Username, mobile, and NID matched. Set a new password now.')
+        : (lang === 'bn' ? 'আপনার ইউজারনেম পাওয়া গেছে।' : 'Your username was found.'));
     } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+      const detail = err.payload?.detail;
+      if (detail?.code === 'recovery_locked') {
+        setRecoveryLockSeconds(Number(detail.remaining_seconds) || 0);
+        setError('');
+      } else if (detail?.code === 'recovery_rate_limited') {
+        setError(lang === 'bn'
+          ? 'এই পরিচয় থেকে অল্প সময়ে অনেকবার চেষ্টা হয়েছে। এক মিনিট অপেক্ষা করে আবার চেষ্টা করুন।'
+          : 'Too many recent requests for this recovery identity. Wait a minute and try again.');
+      } else if (err.status === 400) {
+        setError(lang === 'bn'
+          ? (recoveryType === 'password' ? 'ইউজারনেম, মোবাইল নম্বর ও NID কোনো অ্যাকাউন্টের সঙ্গে মেলেনি।' : 'পূর্ণ নাম, মোবাইল নম্বর ও NID কোনো অ্যাকাউন্টের সঙ্গে মেলেনি।')
+          : err.message);
+      } else {
+        setError(err.message);
+      }
+    } finally { setLoading(false); }
   };
 
-  const handleOTPLogin = async (e) => {
-    e.preventDefault();
-    if (!otpCode || otpCode.trim().length < 4) {
-      setError(lang === 'bn' ? 'অনুগ্রহ করে ৬-সংখ্যার ওটিপি কোড দিন।' : 'Please enter the 6-digit OTP code.');
+  const handlePasswordReset = async (event) => {
+    event.preventDefault();
+    setError(''); setSuccess('');
+    if (newPassword.length < 8) {
+      setError(lang === 'bn' ? 'পাসওয়ার্ড ন্যূনতম ৮ অক্ষরের হতে হবে।' : 'Password must contain at least 8 characters.');
       return;
     }
-
+    if (newPassword !== confirmPassword) {
+      setError(lang === 'bn' ? 'দুটি পাসওয়ার্ড মিলছে না।' : 'Passwords do not match.');
+      return;
+    }
     setLoading(true);
-    setError('');
-
     try {
-      const res = await api.loginWithOTP(otpDestination, otpCode);
-      loginUser(res.user, res.token);
-      setActiveTab('dashboard');
+      await api.resetPassword({ reset_token: resetToken, password: newPassword, password_confirmation: confirmPassword });
+      setSuccess(lang === 'bn' ? 'পাসওয়ার্ড সফলভাবে পরিবর্তন হয়েছে। এখন নতুন পাসওয়ার্ড দিয়ে লগইন করুন।' : 'Password reset. Sign in with your new password.');
+      setRecoveryStep(0);
+      setRecovering(false);
+      setResetToken(''); setNewPassword(''); setConfirmPassword('');
     } catch (err) {
       setError(err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleDemoLogin = (role) => {
-    switchDemoRole(role);
-    setActiveTab(role === 'officer' ? 'officer-review' : role === 'admin' ? 'admin' : 'dashboard');
+    } finally { setLoading(false); }
   };
 
   return (
     <div className="gov-container py-10 max-w-md mx-auto space-y-6">
-      {/* Top Back Navigation with Clean Apple/Linear Styling */}
       <div className="flex items-center justify-between">
-        <button
-          type="button"
-          onClick={() => navigateBack ? navigateBack('home') : setActiveTab('home')}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:border-[#047857]/40 hover:bg-[#F7FAF8] dark:hover:bg-[#1A2823] hover:text-[#047857] shadow-xs transition"
-          title={lang === 'bn' ? 'মূল পাতায় ফিরে যান' : 'Back to Home'}
-        >
+        <Button type="button" onClick={() => navigateBack ? navigateBack('home') : setActiveTab('home')}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:text-[#047857] shadow-xs transition">
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>{lang === 'bn' ? 'মূল পাতায় ফিরে যান' : 'Back to Home'}</span>
-        </button>
-
-        <span className="text-[11px] text-slate-400 font-medium">
-          Bhumisetu • Auth
-        </span>
+        </Button>
+        <span className="text-[11px] text-slate-400 font-medium">Bhumisetu • Auth</span>
       </div>
 
-      {/* Brand Header with Static Vector Logo (No Distracting Animation) */}
       <div className="text-center space-y-2">
-        <div className="flex justify-center mb-1">
-          <BhumiSathiLogo size={52} className="shadow-xs" />
-        </div>
+        <div className="flex justify-center mb-1"><BhumiSathiLogo size={52} className="shadow-xs" /></div>
         <h1 className="text-2xl font-bold text-[#17212B] dark:text-white">
           {lang === 'bn' ? 'ভূমিসেতু পোর্টালে লগইন' : 'Sign in to Bhumisetu'}
         </h1>
         <p className="text-xs text-[#64748B]">
-          {lang === 'bn' ? 'নাগরিক ও কর্মকর্তা ড্যাশবোর্ডে প্রবেশ করতে লগইন করুন' : 'Access your citizen or officer verification workspace'}
+          {lang === 'bn' ? 'আপনার অ্যাকাউন্টের ধরন অনুযায়ী লগইন পোর্টাল নির্বাচন করুন' : 'Choose the portal for your account'}
         </p>
       </div>
 
-      {/* 1-Click Demo Logins */}
-      <div className="p-3.5 rounded-xl bg-[#F0FDF4] dark:bg-[#0B241A] border border-[#D1FAE5] dark:border-[#1E2E28] space-y-2 text-xs">
-        <span className="font-bold text-[#047857] dark:text-emerald-300 flex items-center gap-1.5">
-          <Sparkles className="w-3.5 h-3.5 text-[#F5B544]" />
-          {lang === 'bn' ? '১-ক্লিকে ডেমো অ্যাকাউন্টে প্রবেশ:' : '1-Click Quick Demo Login:'}
-        </span>
-        <div className="grid grid-cols-3 gap-2 pt-1">
-          <button
-            type="button"
-            onClick={() => handleDemoLogin('citizen')}
-            className="p-2 rounded-lg bg-white dark:bg-[#14201C] border border-[#A7F3D0] dark:border-[#1E2E28] text-[11px] font-bold text-[#047857] dark:text-emerald-300 hover:bg-[#D1FAE5]/40 transition shadow-xs text-center"
-          >
-            {lang === 'bn' ? '👤 নাগরিক' : '👤 Citizen'}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDemoLogin('officer')}
-            className="p-2 rounded-lg bg-white dark:bg-[#14201C] border border-blue-200 dark:border-blue-900 text-[11px] font-bold text-blue-700 dark:text-blue-300 hover:bg-blue-50 transition shadow-xs text-center"
-          >
-            {lang === 'bn' ? '🏛️ কর্মকর্তা' : '🏛️ Officer'}
-          </button>
-          <button
-            type="button"
-            onClick={() => handleDemoLogin('admin')}
-            className="p-2 rounded-lg bg-white dark:bg-[#14201C] border border-amber-200 dark:border-amber-900 text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:bg-amber-50 transition shadow-xs text-center"
-          >
-            {lang === 'bn' ? '⚙️ অ্যাডমিন' : '⚙️ Admin'}
-          </button>
-        </div>
+      <div className="grid grid-cols-3 rounded-xl bg-[#F7FAF8] dark:bg-[#14201C] p-1 border border-[#E2E8F0] dark:border-[#1E2E28] gap-1">
+        {portals.map((item) => (
+          <Button key={item.role} type="button" disabled={recovering} onClick={() => { setPortal(item.role); setError(''); }}
+            aria-pressed={portal === item.role}
+            className={`py-2 px-1 text-xs font-bold rounded-lg transition ${portal === item.role ? 'bg-white dark:bg-[#1E2E28] text-[#047857] dark:text-emerald-400 shadow-xs' : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'}`}>
+            {lang === 'bn' ? item.bn : item.en}
+          </Button>
+        ))}
       </div>
 
-      {/* Login Mode Switcher Tabs */}
-      <div className="flex rounded-xl bg-[#F7FAF8] dark:bg-[#14201C] p-1 border border-[#E2E8F0] dark:border-[#1E2E28]">
-        <button
-          type="button"
-          onClick={() => { setLoginMode('password'); setError(''); setSuccessMsg(''); }}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            loginMode === 'password'
-              ? 'bg-white dark:bg-[#1E2E28] text-[#047857] dark:text-emerald-400 shadow-xs'
-              : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          <Lock className="w-3.5 h-3.5" />
-          <span>{lang === 'bn' ? 'পাসওয়ার্ড দিয়ে লগইন' : 'Password Login'}</span>
-        </button>
+      {(error || (recovering && recoveryLockSeconds > 0) || (!recovering && loginLockSeconds > 0)) && <div role="alert" className="p-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs">{recovering && recoveryLockSeconds > 0 ? lockoutMessage() : !recovering && loginLockSeconds > 0 ? loginLockoutMessage() : error}</div>}
+      {success && <div role="status" className="p-3 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs">{success}</div>}
 
-        <button
-          type="button"
-          onClick={() => { setLoginMode('otp'); setError(''); setSuccessMsg(''); }}
-          className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-1.5 ${
-            loginMode === 'otp'
-              ? 'bg-white dark:bg-[#1E2E28] text-[#047857] dark:text-emerald-400 shadow-xs'
-              : 'text-gray-500 hover:text-gray-900 dark:hover:text-white'
-          }`}
-        >
-          <KeyRound className="w-3.5 h-3.5 text-amber-500" />
-          <span>{lang === 'bn' ? 'ওটিপি / কোড দিয়ে লগইন' : 'OTP Code Login'}</span>
-        </button>
-      </div>
-
-      {error && (
-        <div className="p-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-xs">
-          {error}
-        </div>
-      )}
-
-      {successMsg && (
-        <div className="p-3 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0" />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {/* Main Login Card */}
-      <div className="gov-card p-6 sm:p-7 space-y-4">
-        {loginMode === 'password' ? (
-          /* Password Login Form */
-          <form onSubmit={handlePasswordLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
-                {lang === 'bn' ? 'ইমেইল বা ব্যবহারকারী নাম' : 'Email or Username'}
-              </label>
-              <div className="relative">
-                <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  value={identifier}
-                  onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="citizen@bhumisetu.gov.bd"
-                  className="gov-input pl-9"
-                  required
-                />
-              </div>
+      <div className="gov-card p-6 sm:p-7">
+        {recovering ? (
+          <div className="space-y-4">
+            <h2 className="font-bold text-sm text-[#17212B] dark:text-white">{recoveryType === 'password' ? (lang === 'bn' ? 'পাসওয়ার্ড পুনরুদ্ধার' : 'Recover password') : (lang === 'bn' ? 'ইউজারনেম খুঁজুন' : 'Find username')}</h2>
+            <div className="grid grid-cols-2 gap-2 rounded-xl bg-[#F7FAF8] dark:bg-[#14201C] p-1 border border-[#E2E8F0] dark:border-[#1E2E28]">
+              <Button type="button" disabled={loading} onClick={() => beginRecovery('password')} className={`py-2 px-2 text-xs font-bold rounded-lg ${recoveryType === 'password' ? 'bg-white dark:bg-[#1E2E28] text-[#047857] shadow-xs' : 'text-gray-500'}`}>{lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'}</Button>
+              <Button type="button" disabled={loading} onClick={() => beginRecovery('username')} className={`py-2 px-2 text-xs font-bold rounded-lg ${recoveryType === 'username' ? 'bg-white dark:bg-[#1E2E28] text-[#047857] shadow-xs' : 'text-gray-500'}`}>{lang === 'bn' ? 'ইউজারনেম' : 'Username'}</Button>
             </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
-                {lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'}
-              </label>
-              <div className="relative">
-                <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  className="gov-input pl-9 pr-9"
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow-xs"
-            >
-              {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Signing in...') : (lang === 'bn' ? 'লগইন করুন' : 'Sign In')}
-            </button>
-          </form>
+            {recoveryStep === 0 && <form onSubmit={handleRecoveryStart} className="space-y-3">
+              <p className="text-xs text-gray-500">{recoveryType === 'password' ? (lang === 'bn' ? 'অ্যাকাউন্টের ইউজারনেম, নিবন্ধিত মোবাইল ও NID দিন।' : 'Enter the account username, registered mobile number, and NID.') : (lang === 'bn' ? 'অ্যাকাউন্টে দেওয়া পূর্ণ নাম, নিবন্ধিত মোবাইল ও NID দিন।' : 'Enter the account full name, registered mobile number, and NID.')}</p>
+              {recoveryType === 'password'
+                ? <Input className="gov-input" autoComplete="username" placeholder={lang === 'bn' ? 'ইউজারনেম' : 'Username'} value={recoveryIdentity.username} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, username: e.target.value })} required />
+                : <Input className="gov-input" autoComplete="name" placeholder={lang === 'bn' ? 'পূর্ণ নাম' : 'Full name'} value={recoveryIdentity.full_name} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, full_name: e.target.value })} required />}
+              <Input className="gov-input" type="tel" inputMode="tel" autoComplete="tel" placeholder={lang === 'bn' ? 'মোবাইল নম্বর' : 'Mobile number'} value={recoveryIdentity.phone} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, phone: e.target.value })} required />
+              <Input className="gov-input" inputMode="numeric" placeholder="NID (10, 13, or 17 digits)" value={recoveryIdentity.nid} onChange={(e) => setRecoveryIdentity({ ...recoveryIdentity, nid: e.target.value.replace(/[^0-9]/g, '').slice(0, 17) })} pattern="(?:[0-9]{10}|[0-9]{13}|[0-9]{17})" maxLength={17} required />
+              <Button className="w-full gov-btn-primary text-xs" disabled={loading || recoveryLockSeconds > 0}>{loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Checking...') : recoveryType === 'password' ? (lang === 'bn' ? 'পরিচয় যাচাই করুন' : 'Verify identity') : (lang === 'bn' ? 'ইউজারনেম খুঁজুন' : 'Find username')}</Button>
+            </form>}
+            {recoveryType === 'username' && recoveryStep === 1 && <div className="space-y-3">
+              <p className="text-xs text-gray-500">{lang === 'bn' ? 'আপনার ইউজারনেম:' : 'Your username:'}</p>
+              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 p-3 font-mono font-bold text-emerald-800 dark:text-emerald-300">{recoveredUsername}</div>
+            </div>}
+            {recoveryType === 'password' && recoveryStep === 1 && <form onSubmit={handlePasswordReset} className="space-y-3">
+              <p className="text-xs text-gray-500">{lang === 'bn' ? 'নতুন পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের দিন।' : 'Choose a new password with at least 8 characters.'}</p>
+              <Input className="gov-input" type="password" autoComplete="new-password" minLength={8} maxLength={256} placeholder={lang === 'bn' ? 'নতুন পাসওয়ার্ড' : 'New password'} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} required />
+              <Input className="gov-input" type="password" autoComplete="new-password" minLength={8} maxLength={256} placeholder={lang === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm password'} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} required />
+              <Button className="w-full gov-btn-primary text-xs" disabled={loading}>{loading ? (lang === 'bn' ? 'পরিবর্তন হচ্ছে...' : 'Resetting...') : (lang === 'bn' ? 'নতুন পাসওয়ার্ড সেট করুন' : 'Reset password')}</Button>
+            </form>}
+            <Button type="button" className="text-xs text-gray-500 underline" onClick={() => { setRecovering(false); setRecoveryStep(0); setRecoveryLockSeconds(0); setError(''); setSuccess(''); }}>{lang === 'bn' ? 'লগইনে ফিরে যান' : 'Back to login'}</Button>
+          </div>
         ) : (
-          /* OTP / Verification Code Login Form */
-          <form onSubmit={handleOTPLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
-                {lang === 'bn' ? 'মোবাইল নম্বর বা ইমেইল ঠিকানা' : 'Mobile Number or Email'}
-              </label>
-              <div className="flex gap-2">
-                <div className="relative flex-1">
-                  {otpDestination.includes('@') ? (
-                    <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                  ) : (
-                    <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                  )}
-                  <input
-                    type="text"
-                    value={otpDestination}
-                    onChange={(e) => setOtpDestination(e.target.value)}
-                    placeholder="01711002233 বা user@email.com"
-                    className="gov-input pl-9"
-                    required
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleSendOTP}
-                  disabled={loading || countdown > 0}
-                  className="gov-btn-secondary text-xs px-3.5 py-2 font-bold whitespace-nowrap"
-                >
-                  {countdown > 0 ? (
-                    <span>{countdown}s</span>
-                  ) : (
-                    <span>{otpSent ? (lang === 'bn' ? 'পুনরায় পাঠান' : 'Resend') : (lang === 'bn' ? 'ওটিপি পাঠান' : 'Send OTP')}</span>
-                  )}
-                </button>
-              </div>
+          <>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
+              {lang === 'bn' ? 'ব্যবহারকারীর নাম অথবা ইমেইল' : 'Username or Email'}
+            </label>
+            <div className="relative"><User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Input type="text" name="identifier" value={identifier} onChange={(e) => setIdentifier(e.target.value)}
+                placeholder={lang === 'bn' ? 'ব্যবহারকারীর নাম অথবা ইমেইল' : 'Username or Email'}
+                autoComplete="username" className="gov-input pl-9" required /></div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
+              {lang === 'bn' ? 'পাসওয়ার্ড' : 'Password'}
+            </label>
+            <div className="relative"><Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Input type={showPassword ? 'text' : 'password'} value={password} onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password" className="gov-input pl-9 pr-9" required />
+              <Button type="button" onClick={() => setShowPassword(!showPassword)} aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600">{showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}</Button>
             </div>
-
-            {/* Simulated Live Gateway Notification */}
-            {otpPreview && (
-              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-xs space-y-1">
-                <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center justify-between">
-                  <span>📩 {lang === 'bn' ? 'মোবাইল / ইমেইল ওটিপি সিমুলেশন:' : 'Incoming OTP Message:'}</span>
-                  <button
-                    type="button"
-                    onClick={() => setOtpCode(otpPreview)}
-                    className="text-[11px] text-[#047857] dark:text-emerald-400 underline font-bold"
-                  >
-                    {lang === 'bn' ? 'কোডটি বসান (Auto-Fill)' : 'Auto-Fill'}
-                  </button>
-                </div>
-                <div className="font-mono text-sm tracking-widest text-[#047857] dark:text-emerald-400 font-black">
-                  {otpPreview}
-                </div>
-                <p className="text-[10px] text-gray-500">
-                  {lang === 'bn' ? 'এই কোডটি ইনপুট ফিল্ডে প্রদান করে ভেরিফাই করুন (মেয়াদ ৫ মিনিট)।' : 'Use this 6-digit code to complete login.'}
-                </p>
-              </div>
-            )}
-
-            <div>
-              <label className="block text-xs font-semibold text-[#17212B] dark:text-gray-300 mb-1">
-                {lang === 'bn' ? '৬-সংখ্যার ওটিপি কোড (OTP Verification Code)' : '6-Digit OTP Code'}
-              </label>
-              <div className="relative">
-                <KeyRound className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
-                  type="text"
-                  maxLength={6}
-                  value={otpCode}
-                  onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                  placeholder="849201"
-                  className="gov-input pl-9 tracking-widest font-mono text-sm"
-                  required
-                />
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              disabled={loading || !otpCode}
-              className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow-xs"
-            >
-              {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Verifying...') : (lang === 'bn' ? 'কোড যাচাই করে লগইন করুন' : 'Verify & Sign In')}
-            </button>
-          </form>
-        )}
-
-        <div className="pt-2 border-t border-[#E2E8F0] dark:border-[#1E2E28] text-center text-xs text-gray-500">
+          </div>
+          <Button type="submit" disabled={loading} className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow-xs">
+            {loading ? (lang === 'bn' ? 'যাচাই হচ্ছে...' : 'Signing in...') : (lang === 'bn' ? 'লগইন করুন' : 'Sign In')}
+          </Button>
+          <p className="text-[11px] text-center text-gray-500 flex justify-center items-center gap-1"><ShieldCheck className="w-3.5 h-3.5" />
+            {lang === 'bn' ? 'অ্যাকাউন্টের অনুমতি সার্ভার যাচাই করে' : 'Permissions are verified by the server'}
+          </p>
+        </form>
+        {portal === 'citizen' && <div className="mt-4 pt-3 border-t border-[#E2E8F0] dark:border-[#1E2E28] text-center text-xs text-gray-500">
           <span>{lang === 'bn' ? 'নতুন নাগরিক?' : 'New citizen?'} </span>
-          <button
-            onClick={() => setActiveTab('register')}
-            className="text-[#047857] dark:text-emerald-400 font-bold hover:underline"
-          >
+          <Button onClick={() => setActiveTab('register')} className="text-[#047857] dark:text-emerald-400 font-bold hover:underline">
             {lang === 'bn' ? 'এখানে নিবন্ধন করুন' : 'Register here'}
-          </button>
+          </Button>
+        </div>}
+        <div className="mt-3 flex flex-wrap justify-center gap-4 text-center">
+          <Button type="button" onClick={() => beginRecovery('password')} className="text-xs text-[#047857] dark:text-emerald-400 font-semibold hover:underline">{lang === 'bn' ? 'পাসওয়ার্ড ভুলে গেছেন?' : 'Forgot password?'}</Button>
+          <Button type="button" onClick={() => beginRecovery('username')} className="text-xs text-[#047857] dark:text-emerald-400 font-semibold hover:underline">{lang === 'bn' ? 'ইউজারনেম ভুলে গেছেন?' : 'Forgot username?'}</Button>
         </div>
+          </>
+        )}
       </div>
     </div>
   );

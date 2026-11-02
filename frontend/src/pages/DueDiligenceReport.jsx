@@ -1,3 +1,4 @@
+import Button from '../components/Button';
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import QRCodeCanvas from '../components/QRCodeCanvas';
@@ -15,12 +16,12 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
         <p className="text-sm text-gray-500">
           {lang === 'bn' ? 'কোনো ঝুঁকি রিপোর্ট পাওয়া যায়নি। অনুগ্রহ করে পূর্বে যাচাই সম্পন্ন করুন।' : 'No assessment report found. Please run a due diligence check.'}
         </p>
-        <button
+        <Button
           onClick={() => navigateBack ? navigateBack('due-diligence') : setActiveTab('due-diligence')}
           className="gov-btn-primary text-xs"
         >
           {lang === 'bn' ? 'যাচাই ফরম খুলুন' : 'Open Due Diligence Form'}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -92,30 +93,30 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
       {/* Top Actions */}
       <div className="flex flex-wrap items-center justify-between gap-3 no-print bg-white dark:bg-gray-800/80 p-3.5 rounded-xl border border-gray-200 dark:border-gray-700 shadow-sm">
         <div className="flex items-center gap-2">
-          <button
+          <Button
             onClick={() => navigateBack ? navigateBack('due-diligence') : setActiveTab('due-diligence')}
             className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>{lang === 'bn' ? '← প্রাক-ক্রয় স্বত্ব যাচাই ফরম-এ ফিরে যান' : '← Back to Due Diligence Form'}</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
             onClick={() => setActiveTab('dashboard')}
             className="gov-btn-secondary text-xs py-2 px-3 flex items-center gap-1.5"
           >
             <Home className="w-3.5 h-3.5" />
             <span>{lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard'}</span>
-          </button>
+          </Button>
         </div>
 
-        <button
+        <Button
           onClick={handlePrint}
           className="gov-btn-gold text-xs py-2 px-4 flex items-center gap-1.5 font-bold shadow"
         >
           <Printer className="w-3.5 h-3.5" />
           <span>{lang === 'bn' ? 'রিপোর্ট প্রিন্ট / সংরক্ষণ' : 'Print / Download Report'}</span>
-        </button>
+        </Button>
       </div>
 
       {/* Printable Report Box */}
@@ -322,34 +323,34 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
 
       {/* Bottom Action Bar */}
       <div className="gov-card p-4 flex flex-wrap items-center justify-between gap-4 no-print border-2 border-amber-600/30 bg-amber-50/40 dark:bg-amber-950/20 shadow-md">
-        <button
+        <Button
           onClick={() => setActiveTab('due-diligence')}
           className="gov-btn-primary text-xs py-2.5 px-5 flex items-center gap-2 font-bold shadow hover:scale-[1.02] transition-transform"
         >
           <ArrowLeft className="w-4 h-4" />
           <span>{lang === 'bn' ? '← পূর্ববর্তী পেজে ফিরে যান (নতুন জমি যাচাই)' : '← Back to Due Diligence Form'}</span>
-        </button>
+        </Button>
 
         <div className="flex flex-wrap items-center gap-2">
-          <button
+          <Button
             onClick={() => setActiveTab('deed-verify')}
             className="gov-btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-semibold"
           >
             <span>{lang === 'bn' ? 'দলিল ক্রস-চেক করুন' : 'Verify Deed'}</span>
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => setActiveTab('dashboard')}
             className="gov-btn-secondary text-xs py-2 px-3.5 flex items-center gap-1.5 font-semibold"
           >
             <span>{lang === 'bn' ? 'ড্যাশবোর্ডে ফিরে যান' : 'Go to Dashboard'}</span>
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handlePrint}
             className="gov-btn-gold text-xs py-2 px-4 flex items-center gap-1.5 font-bold shadow"
           >
             <Printer className="w-4 h-4" />
             <span>{lang === 'bn' ? 'রিপোর্ট প্রিন্ট / সংরক্ষণ' : 'Print Report'}</span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

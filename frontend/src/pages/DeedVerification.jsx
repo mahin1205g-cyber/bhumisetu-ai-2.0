@@ -1,10 +1,12 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
 import {
   FileCheck2, UploadCloud, Search, AlertTriangle, CheckCircle,
-  Sparkles, RefreshCw, Info, Cpu, CheckCircle2, ArrowRight
+  FileText, Sparkles, RefreshCw, ArrowRight, Info, Cpu, CheckCircle2
 } from 'lucide-react';
 
 export default function DeedVerification({ setActiveTab, setVerificationResult, navigateBack }) {
@@ -77,53 +79,33 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const getErrorMessage = (err) => {
-    if (err?.message) return err.message;
-    return lang === 'bn'
-      ? 'অনুরোধটি সম্পন্ন করা যায়নি। Backend চালু আছে কি না এবং API URL ঠিক আছে কি না পরীক্ষা করুন।'
-      : 'The request failed. Please check that the backend is running and the API URL is correct.';
-  };
-
-  const openResult = (result) => {
-    if (!result || typeof result !== 'object') {
-      throw new Error(lang === 'bn' ? 'সার্ভার থেকে সঠিক ফলাফল পাওয়া যায়নি।' : 'The server returned an invalid response.');
-    }
-    setVerificationResult(result);
-    setActiveTab('verification-result');
-  };
-
   const handleVerify = async (e) => {
     e.preventDefault();
-    const payload = {
-      ...formData,
-      deed_no: formData.deed_no.trim(),
-      plot_id: formData.plot_id.trim(),
-      khatian_no: formData.khatian_no.trim(),
-      owner_name: formData.owner_name.trim(),
-      reg_year: Number(formData.reg_year),
-    };
-
-    if (!payload.deed_no && !payload.plot_id) {
-      setError(lang === 'bn'
-        ? 'অনুগ্রহ করে দলিল নম্বর অথবা দাগ/প্লট নম্বর লিখুন।'
-        : 'Please provide either a Deed Number or Plot ID.');
-      return;
-    }
-    if (!Number.isInteger(payload.reg_year) || payload.reg_year < 1950 || payload.reg_year > new Date().getFullYear()) {
-      setError(lang === 'bn' ? 'সঠিক নিবন্ধন সাল লিখুন।' : 'Please enter a valid registration year.');
+    if (!formData.deed_no && !formData.plot_id) {
+      setError(lang === 'bn' ? 'অনুগ্রহ করে দলিল নম্বর অথবা দাগ/প্লট নম্বর লিখুন।' : 'Please provide either Deed Number or Plot ID.');
       return;
     }
 
     setLoading(true);
     setError('');
     setVerifyStage(1);
+
     try {
+      await new Promise(r => setTimeout(r, 280));
       setVerifyStage(2);
-      const result = await api.verifyDeed(payload, user?.id);
+
+      const resultPromise = api.verifyDeed(formData, user?.id);
+      await new Promise(r => setTimeout(r, 320));
       setVerifyStage(3);
-      openResult(result);
+
+      const result = await resultPromise;
+      await new Promise(r => setTimeout(r, 260));
+      setVerifyStage(4);
+
+      setVerificationResult(result);
+      setActiveTab('verification-result');
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err.message);
     } finally {
       setLoading(false);
       setVerifyStage(0);
@@ -131,33 +113,32 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
   };
 
   const handleFileUpload = async (selectedFile) => {
-    if (!selectedFile || loading) return;
-
-    const allowedTypes = ['application/pdf', 'image/png', 'image/jpeg'];
-    const allowedExtensions = /\.(pdf|png|jpe?g)$/i;
-    if (!allowedTypes.includes(selectedFile.type) && !allowedExtensions.test(selectedFile.name)) {
-      setError(lang === 'bn' ? 'শুধু PDF, JPG অথবা PNG ফাইল আপলোড করুন।' : 'Only PDF, JPG, or PNG files are allowed.');
-      return;
-    }
-    if (selectedFile.size > 10 * 1024 * 1024) {
-      setError(lang === 'bn' ? 'ফাইলের আকার ১০ MB-এর বেশি হতে পারবে না।' : 'The file must be 10 MB or smaller.');
-      return;
-    }
-
+    if (!selectedFile) return;
     setFile(selectedFile);
     setLoading(true);
     setError('');
     setVerifyStage(1);
+
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
-      if (user?.id !== undefined && user?.id !== null) fd.append('user_id', String(user.id));
+      if (user?.id) fd.append('user_id', user.id);
+
+      await new Promise(r => setTimeout(r, 280));
       setVerifyStage(2);
-      const result = await api.uploadDeed(fd);
+
+      const resultPromise = api.uploadDeed(fd);
+      await new Promise(r => setTimeout(r, 320));
       setVerifyStage(3);
-      openResult(result);
+
+      const result = await resultPromise;
+      await new Promise(r => setTimeout(r, 260));
+      setVerifyStage(4);
+
+      setVerificationResult(result);
+      setActiveTab('verification-result');
     } catch (err) {
-      setError(getErrorMessage(err));
+      setError(err.message);
     } finally {
       setLoading(false);
       setVerifyStage(0);
@@ -184,30 +165,6 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
         onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
         fallbackTab="dashboard"
       />
-
-      <button
-        type="button"
-        onClick={() => setActiveTab && setActiveTab('deed-search')}
-        className="w-full flex items-center justify-between gap-3 p-4 rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/30 hover:border-[#047857] transition text-left group"
-      >
-        <span className="flex items-start gap-2.5 min-w-0">
-          <Search className="w-4 h-4 text-[#047857] dark:text-emerald-400 mt-0.5 flex-shrink-0" />
-          <span className="min-w-0">
-            <span className="block text-xs font-bold text-emerald-900 dark:text-emerald-200">
-              {lang === 'bn' ? 'শুধু দলিল নম্বর দিয়ে খুঁজতে চান?' : 'Only have a deed number?'}
-            </span>
-            <span className="block text-[11px] text-emerald-800/80 dark:text-emerald-300/80 mt-0.5">
-              {lang === 'bn'
-                ? 'জেলা, উপজেলা, মৌজা বা দাগ নম্বর দিয়েও দলিল রেকর্ড অনুসন্ধান করতে পারবেন।'
-                : 'Search stored deed records by district, upazila, mouza, dag or khatian as well.'}
-            </span>
-          </span>
-        </span>
-        <span className="flex items-center gap-1 text-[11px] font-bold text-[#047857] dark:text-emerald-300 flex-shrink-0">
-          <span>{lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}</span>
-          <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
-        </span>
-      </button>
 
       {/* Staged Multi-Phase Verification Overlay */}
       {loading && (
@@ -280,32 +237,32 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
           <span className="text-[11px] text-gray-500">{lang === 'bn' ? '১-ক্লিকে পূরণ' : '1-Click Preset'}</span>
         </div>
         <div className="flex flex-wrap gap-2 pt-1">
-          <button
+          <Button
             type="button"
             onClick={() => loadScenario('match')}
             className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition shadow-sm flex items-center gap-1.5"
           >
             <CheckCircle className="w-3 h-3 text-emerald-600" />
             <span>{lang === 'bn' ? 'নমুনা ১: শতভাগ মিল (Clear Title)' : 'Scenario 1: Full Match'}</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
             onClick={() => loadScenario('mismatch_owner')}
             className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-800 text-xs font-semibold text-amber-800 dark:text-amber-300 hover:bg-amber-100 transition shadow-sm flex items-center gap-1.5"
           >
             <AlertTriangle className="w-3 h-3 text-amber-600" />
             <span>{lang === 'bn' ? 'নমুনা ২: বিক্রেতার নাম গরমিল' : 'Scenario 2: Owner Mismatch'}</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
             onClick={() => loadScenario('dispute')}
             className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-rose-300 dark:border-rose-800 text-xs font-semibold text-rose-800 dark:text-rose-300 hover:bg-rose-100 transition shadow-sm flex items-center gap-1.5"
           >
             <AlertTriangle className="w-3 h-3 text-rose-600" />
             <span>{lang === 'bn' ? 'নমুনা ৩: দেওয়ানি আদালতের বিরোধ' : 'Scenario 3: Title Litigation'}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -329,15 +286,16 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {t('deedNo')} <span className="text-gray-400 font-normal">({lang === 'bn' ? 'ঐচ্ছিক, প্লট নম্বর দিলে' : 'optional when Plot ID is provided'})</span>
+                  {t('deedNo')} <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   name="deed_no"
                   value={formData.deed_no}
                   onChange={handleChange}
                   placeholder={lang === 'bn' ? 'যেমন: D-8492 অথবা D-1001' : 'e.g., D-8492 or D-1001'}
                   className="gov-input"
+                  required
                 />
               </div>
 
@@ -345,13 +303,13 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('regYear')} <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="number"
                   name="reg_year"
                   value={formData.reg_year}
                   onChange={handleChange}
                   min="1950"
-                  max={new Date().getFullYear()}
+                  max="2026"
                   className="gov-input"
                   required
                 />
@@ -363,19 +321,19 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('district')}
                 </label>
-                <select name="district" value={formData.district} onChange={handleChange} className="gov-select">
+                <Input as="select" name="district" value={formData.district} onChange={handleChange} className="gov-select">
                   <option value="ঢাকা">ঢাকা (Dhaka)</option>
                   <option value="চট্টগ্রাম">চট্টগ্রাম (Chattogram)</option>
                   <option value="রাজশাহী">রাজশাহী (Rajshahi)</option>
                   <option value="সিলেট">সিলেট (Sylhet)</option>
-                </select>
+                </Input>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('upazila')}
                 </label>
-                <input
+                <Input
                   type="text"
                   name="upazila"
                   value={formData.upazila}
@@ -389,7 +347,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('mouza')}
                 </label>
-                <input
+                <Input
                   type="text"
                   name="mouza"
                   value={formData.mouza}
@@ -405,7 +363,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('plotNo')}
                 </label>
-                <input
+                <Input
                   type="text"
                   name="plot_id"
                   value={formData.plot_id}
@@ -419,7 +377,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('khatianNo')}
                 </label>
-                <input
+                <Input
                   type="text"
                   name="khatian_no"
                   value={formData.khatian_no}
@@ -433,7 +391,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'মালিক / গ্রহীতার নাম' : 'Owner / Transferee Name'}
                 </label>
-                <input
+                <Input
                   type="text"
                   name="owner_name"
                   value={formData.owner_name}
@@ -448,17 +406,17 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'অতিরিক্ত মন্তব্য বা পর্যবেক্ষণ (ঐচ্ছিক)' : 'Additional Notes (Optional)'}
               </label>
-              <textarea
+              <Input as="textarea"
                 name="notes"
                 value={formData.notes}
                 onChange={handleChange}
                 rows="2"
                 placeholder={lang === 'bn' ? 'যাচাই সম্পর্কিত কোনো বিশেষ তথ্য...' : 'Any special notes for review...'}
                 className="gov-input resize-none"
-              ></textarea>
+              ></Input>
             </div>
 
-            <button
+            <Button
               type="submit"
               disabled={loading}
               className="w-full gov-btn-primary justify-center text-xs py-3 font-bold shadow"
@@ -474,7 +432,7 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                   <span>{lang === 'bn' ? 'দলিল ও বালাম ক্রস-চেক করুন' : 'Verify Deed & Cross-Check Balam'}</span>
                 </>
               )}
-            </button>
+            </Button>
           </form>
         </div>
 
@@ -493,38 +451,31 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
           </div>
 
           <div
-            role="button"
-            tabIndex={0}
-            aria-label={lang === 'bn' ? 'দলিল ফাইল নির্বাচন করুন' : 'Choose deed file'}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
-                e.preventDefault();
-                document.getElementById('deed-file-input')?.click();
-              }
-            }}
-            onDragOver={(e) => { e.preventDefault(); if (!loading) setDragActive(true); }}
+            onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
             onDragLeave={() => setDragActive(false)}
             onDrop={(e) => {
               e.preventDefault();
               setDragActive(false);
-              if (!loading && e.dataTransfer.files?.[0]) handleFileUpload(e.dataTransfer.files[0]);
+              if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                handleFileUpload(e.dataTransfer.files[0]);
+              }
             }}
             className={`border-2 border-dashed rounded-xl p-6 text-center transition cursor-pointer ${
               dragActive
                 ? 'border-[#0b462d] bg-emerald-50 dark:bg-emerald-950/40'
                 : 'border-gray-300 dark:border-gray-700 hover:border-[#0b462d] bg-gray-50/50 dark:bg-gray-800/20'
             }`}
-            onClick={() => { if (!loading) document.getElementById('deed-file-input')?.click(); }}
+            onClick={() => document.getElementById('deed-file-input').click()}
           >
-            <input
+            <Input
               id="deed-file-input"
               type="file"
-              accept=".pdf,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-              disabled={loading}
+              accept=".pdf,.png,.jpg,.jpeg"
               className="hidden"
               onChange={(e) => {
-                if (e.target.files?.[0]) handleFileUpload(e.target.files[0]);
-                e.target.value = '';
+                if (e.target.files && e.target.files[0]) {
+                  handleFileUpload(e.target.files[0]);
+                }
               }}
             />
             <UploadCloud className="w-10 h-10 text-[#0b462d] dark:text-emerald-400 mx-auto mb-2" />

@@ -8,3 +8,4 @@ python-multipart
 pypdf
 python-dotenv
 psycopg[binary]
+argon2-cffi>=23.1.0

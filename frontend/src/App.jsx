@@ -1,3 +1,4 @@
+import Button from './components/Button';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useApp } from './context/AppContext';
 import Header from './components/Header';
@@ -28,7 +29,7 @@ import Register from './pages/Register';
 import NotFoundPage from './pages/NotFoundPage';
 
 export default function App() {
-  const { user } = useApp();
+  const { user, lang } = useApp();
 
   // Helper to extract tab id from window.location.hash
   const getTabFromHash = () => {
@@ -48,6 +49,7 @@ export default function App() {
   const [verificationResult, setVerificationResult] = useState(null);
   const [dueDiligenceResult, setDueDiligenceResult] = useState(null);
   const [selectedTracking, setSelectedTracking] = useState('MUT-2026-DHK-4821');
+  const mainContentRef = useRef(null);
 
   // In-memory history stack for safe back navigation
   const historyStackRef = useRef([getTabFromHash()]);
@@ -124,6 +126,37 @@ export default function App() {
     };
   }, [activeTab]);
 
+  useEffect(() => {
+    const root = mainContentRef.current;
+    if (!root || window.matchMedia('(prefers-reduced-motion: reduce)').matches || !('IntersectionObserver' in window)) return undefined;
+
+    const targets = Array.from(root.querySelectorAll('section, [data-scroll-reveal]'));
+    if (!targets.length) return undefined;
+
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (!entry.isIntersecting) return;
+        entry.target.classList.remove('scroll-reveal-pending');
+        entry.target.classList.add('scroll-reveal-visible');
+        observer.unobserve(entry.target);
+      });
+    }, { threshold: 0.08, rootMargin: '0px 0px -36px 0px' });
+
+    targets.forEach((element, index) => {
+      element.style.setProperty('--scroll-reveal-delay', `${(index % 4) * 45}ms`);
+      element.classList.add('scroll-reveal-pending');
+      observer.observe(element);
+    });
+
+    return () => {
+      observer.disconnect();
+      targets.forEach((element) => {
+        element.classList.remove('scroll-reveal-pending', 'scroll-reveal-visible');
+        element.style.removeProperty('--scroll-reveal-delay');
+      });
+    };
+  }, [activeTab]);
+
   // Keyboard shortcut Alt+Left Arrow for intuitive back navigation
   useEffect(() => {
     const handleKeyNav = (e) => {
@@ -137,6 +170,20 @@ export default function App() {
   }, [navigateBack]);
 
   const renderContent = () => {
+    const privateTabs = new Set([
+      'dashboard', 'deed-verify', 'deed-search', 'verification-result', 'mutation',
+      'mutation-track', 'officer-review', 'due-diligence', 'due-diligence-report',
+      'properties', 'audit-logs', 'notifications', 'profile', 'admin'
+    ]);
+    if (privateTabs.has(activeTab) && !user) {
+      return <div className="gov-container py-20 text-center space-y-4"><p>{lang === 'bn' ? 'এই সেবা ব্যবহার করতে লগইন করুন।' : 'Please sign in to use this service.'}</p><Button className="gov-btn-primary" onClick={() => navigate('login')}>{lang === 'bn' ? 'লগইন' : 'Sign in'}</Button></div>;
+    }
+    if (activeTab === 'admin' && user?.role !== 'admin') {
+      return <div className="gov-container py-20 text-center"><p>{user ? 'Admin access required.' : 'Please log in first.'}</p><Button className="gov-btn-primary mt-4" onClick={() => navigate('login')}>Login</Button></div>;
+    }
+    if (activeTab === 'officer-review' && !['officer', 'admin'].includes(user?.role)) {
+      return <div className="gov-container py-20 text-center"><p>{user ? 'Officer access required.' : 'Please log in first.'}</p><Button className="gov-btn-primary mt-4" onClick={() => navigate('login')}>Login</Button></div>;
+    }
     switch (activeTab) {
       case 'home':
         return <LandingPage setActiveTab={setActiveTab} navigate={navigate} />;
@@ -322,8 +369,10 @@ export default function App() {
       />
 
       {/* Main Page Content with Smooth Transition */}
-      <main className="flex-1 animate-page-enter">
-        {renderContent()}
+      <main ref={mainContentRef} className="flex-1">
+        <div key={activeTab} className="page-transition-enter">
+          {renderContent()}
+        </div>
       </main>
 
       {/* Modern Footer with Creator Credits */}

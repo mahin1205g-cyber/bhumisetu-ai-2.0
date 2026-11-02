@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -97,7 +99,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
       {/* Top Navigation & Breadcrumbs */}
       <div className="flex items-center justify-between pb-2 border-b border-slate-200/80 dark:border-slate-800/80">
         <div className="flex items-center gap-2">
-          <button
+          <Button
             type="button"
             onClick={() => navigateBack ? navigateBack('home') : setActiveTab('home')}
             className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-300 shadow-xs transition focus:outline-none focus:ring-2 focus:ring-emerald-500/30"
@@ -105,7 +107,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           >
             <ArrowLeft className="w-3.5 h-3.5 transition-transform group-hover:-translate-x-0.5" />
             <span>{lang === 'bn' ? 'মূল পাতা' : 'Back to Home'}</span>
-          </button>
+          </Button>
 
           <span className="text-slate-400 text-xs hidden sm:inline">•</span>
           <span className="text-slate-500 text-xs font-medium hidden sm:inline">
@@ -157,21 +159,21 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
 
           {/* Quick Actions & Refresh */}
           <div className="flex items-center gap-2.5">
-            <button
+            <Button
               onClick={fetchStats}
               className="px-3.5 py-2 rounded-lg bg-white/10 hover:bg-white/20 border border-white/20 text-xs font-semibold text-white flex items-center gap-1.5 transition"
               title="Refresh Data"
             >
               <RefreshCw className="w-3.5 h-3.5" />
               <span>{lang === 'bn' ? 'হালনাগাদ' : 'Refresh'}</span>
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => setActiveTab('deed-verify')}
               className="gov-btn-primary text-xs py-2 px-4 shadow-sm"
             >
               <FileCheck2 className="w-4 h-4" />
               <span>{lang === 'bn' ? 'নতুন দলিল যাচাই' : 'Verify Deed'}</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -219,7 +221,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                 { label: 'MUT-2026-DHK-4821', query: 'MUT-2026-DHK-4821' },
                 { label: 'KH-102', query: 'KH-102' }
               ].map((chip) => (
-                <button
+                <Button
                   key={chip.label}
                   type="button"
                   onClick={() => {
@@ -229,7 +231,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                   className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 hover:bg-emerald-50 hover:text-[#047857] dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono transition"
                 >
                   +{chip.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -237,7 +239,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           <div className="flex items-center gap-2">
             <div className="relative flex-1">
               <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
-              <input
+              <Input
                 type="text"
                 value={dashboardQuery}
                 onChange={(e) => setDashboardQuery(e.target.value)}
@@ -245,13 +247,13 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                 className="gov-input pl-9 py-2.5 text-xs font-medium"
               />
             </div>
-            <button
+            <Button
               type="submit"
               className="gov-btn-primary text-xs py-2.5 px-4 font-bold flex-shrink-0"
             >
               <Zap className={`w-3.5 h-3.5 ${dashSearchLoading ? 'animate-spin' : ''}`} />
               <span>{lang === 'bn' ? 'খুঁজুন' : 'Search'}</span>
-            </button>
+            </Button>
           </div>
         </form>
 
@@ -309,6 +311,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Metric 1: Registered Parcels */}
         <div
+          data-scroll-reveal
           onClick={() => setActiveTab('properties')}
           className="gov-card p-4 sm:p-5 border-l-4 border-l-[#047857] dark:border-l-emerald-500 cursor-pointer transition card-3d-interactive"
         >
@@ -331,6 +334,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
 
         {/* Metric 2: Deed Verifications */}
         <div
+          data-scroll-reveal
           onClick={() => setActiveTab('deed-verify')}
           className="gov-card p-4 sm:p-5 border-l-4 border-l-blue-600 dark:border-l-blue-400 cursor-pointer transition card-3d-interactive"
         >
@@ -353,6 +357,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
 
         {/* Metric 3: Mutations Approved */}
         <div
+          data-scroll-reveal
           onClick={() => setActiveTab('mutation')}
           className="gov-card p-4 sm:p-5 border-l-4 border-l-purple-600 dark:border-l-purple-400 cursor-pointer transition card-3d-interactive"
         >
@@ -375,6 +380,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
 
         {/* Metric 4: Risk Alerts */}
         <div
+          data-scroll-reveal
           onClick={() => setActiveTab('due-diligence')}
           className="gov-card p-4 sm:p-5 border-l-4 border-l-rose-600 dark:border-l-rose-400 cursor-pointer transition card-3d-interactive"
         >
@@ -404,7 +410,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Service: Deed Verification */}
-          <div className="gov-card p-5 flex flex-col justify-between hover:border-emerald-600 transition group bg-white dark:bg-[#131c27] card-3d-interactive">
+          <div data-scroll-reveal className="gov-card p-5 flex flex-col justify-between hover:border-emerald-600 transition group bg-white dark:bg-[#131c27] card-3d-interactive">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-emerald-100 dark:bg-emerald-950 text-[#047857] dark:text-emerald-300 flex items-center justify-center shadow-sm">
@@ -425,18 +431,18 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             </div>
 
             <div className="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800">
-              <button
+              <Button
                 onClick={() => setActiveTab('deed-verify')}
                 className="w-full gov-btn-primary text-xs justify-center py-2"
               >
                 <span>{lang === 'bn' ? 'দলিল যাচাই শুরু করুন' : 'Verify Deed Now'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Service: Smart E-Namjari */}
-          <div className="gov-card p-5 flex flex-col justify-between hover:border-blue-600 transition group bg-white dark:bg-[#131c27] card-3d-interactive">
+          <div data-scroll-reveal className="gov-card p-5 flex flex-col justify-between hover:border-blue-600 transition group bg-white dark:bg-[#131c27] card-3d-interactive">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 dark:bg-blue-950 text-blue-700 dark:text-blue-300 flex items-center justify-center shadow-sm">
@@ -457,23 +463,23 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             </div>
 
             <div className="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800 flex items-center gap-2">
-              <button
+              <Button
                 onClick={() => setActiveTab('mutation')}
                 className="flex-1 gov-btn-primary bg-blue-700 hover:bg-blue-800 border-blue-900 text-xs justify-center py-2"
               >
                 <span>{lang === 'bn' ? 'নতুন আবেদন' : 'Apply'}</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setActiveTab('mutation-track')}
                 className="flex-1 gov-btn-secondary text-xs justify-center py-2"
               >
                 <span>{lang === 'bn' ? 'ট্র্যাকিং' : 'Track'}</span>
-              </button>
+              </Button>
             </div>
           </div>
 
           {/* Service: Pre-Purchase Due Diligence */}
-          <div className="gov-card p-5 flex flex-col justify-between hover:border-amber-600 transition group bg-white dark:bg-[#131c27] card-3d-interactive">
+          <div data-scroll-reveal className="gov-card p-5 flex flex-col justify-between hover:border-amber-600 transition group bg-white dark:bg-[#131c27] card-3d-interactive">
             <div className="space-y-3">
               <div className="flex items-center justify-between">
                 <div className="w-10 h-10 rounded-xl bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center shadow-sm">
@@ -494,13 +500,13 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             </div>
 
             <div className="pt-4 mt-2 border-t border-gray-100 dark:border-gray-800">
-              <button
+              <Button
                 onClick={() => setActiveTab('due-diligence')}
                 className="w-full gov-btn-primary text-xs justify-center py-2"
               >
                 <span>{lang === 'bn' ? 'ঝুঁকি বিশ্লেষণ করুন' : 'Assess Land Risk'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -522,21 +528,21 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           </div>
 
           <form onSubmit={handleQuickTrack} className="flex items-center gap-2 w-full md:w-auto">
-            <input
+            <Input
               type="text"
               value={trackInput}
               onChange={(e) => setTrackInput(e.target.value)}
               placeholder="e.g. MUT-2026-DHK-4821"
               className="gov-input py-1.5 px-3 text-xs w-full sm:w-64 font-mono uppercase"
             />
-            <button
+            <Button
               type="submit"
               className="gov-btn-primary text-xs py-1.5 px-3 flex-shrink-0"
               disabled={trackingLoading}
             >
               <Search className={`w-3.5 h-3.5 ${trackingLoading ? 'animate-spin' : ''}`} />
               <span>{lang === 'bn' ? 'ট্র্যাক' : 'Track'}</span>
-            </button>
+            </Button>
           </form>
         </div>
 
@@ -559,7 +565,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
                 </span>
               </div>
 
-              <button
+              <Button
                 onClick={() => {
                   if (setSelectedTracking) setSelectedTracking(quickTrackResult.tracking_no);
                   setActiveTab('mutation-track');
@@ -568,7 +574,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
               >
                 <span>{lang === 'bn' ? 'সম্পূর্ণ ট্র্যাকিং পেজ দেখুন' : 'View Full Details'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              </Button>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
@@ -691,13 +697,13 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             <Clock className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
             <span>{lang === 'bn' ? 'সাম্প্রতিক সিস্টেম ও নাগরিক কার্যক্রম' : 'Recent System Activity'}</span>
           </h3>
-          <button
+          <Button
             onClick={() => setActiveTab('audit-logs')}
             className="text-xs text-[#047857] dark:text-emerald-400 hover:underline font-semibold flex items-center gap-1"
           >
             <span>{lang === 'bn' ? 'সম্পূর্ণ লগ দেখুন' : 'View All Logs'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
-          </button>
+          </Button>
         </div>
 
         <div className="overflow-x-auto">

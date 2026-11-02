@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -61,7 +63,7 @@ export default function AuditHistory({ setActiveTab, navigateBack }) {
       <div className="gov-card p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="relative flex-1 min-w-[240px]">
           <Search className="w-4 h-4 absolute left-3 top-2.5 text-gray-400" />
-          <input
+          <Input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
@@ -70,13 +72,13 @@ export default function AuditHistory({ setActiveTab, navigateBack }) {
           />
         </div>
 
-        <button
+        <Button
           onClick={fetchLogs}
           className="gov-btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</span>
-        </button>
+        </Button>
       </div>
 
       {/* Logs Table */}

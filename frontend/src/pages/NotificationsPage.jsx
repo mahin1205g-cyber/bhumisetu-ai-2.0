@@ -1,3 +1,4 @@
+import Button from '../components/Button';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -34,10 +35,10 @@ export default function NotificationsPage({ setActiveTab, navigateBack }) {
         onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
         fallbackTab="dashboard"
         actions={
-          <button onClick={refreshNotifications} className="gov-btn-secondary text-xs py-1.5 px-3">
+          <Button onClick={refreshNotifications} className="gov-btn-secondary text-xs py-1.5 px-3">
             <RefreshCw className="w-3.5 h-3.5" />
             <span>{lang === 'bn' ? 'হালনাগাদ' : 'Refresh'}</span>
-          </button>
+          </Button>
         }
       />
 
@@ -79,9 +80,9 @@ export default function NotificationsPage({ setActiveTab, navigateBack }) {
                   {n.is_read ? (
                     <span className="text-[11px] text-gray-400">✓ {lang === 'bn' ? 'পঠিত' : 'Read'}</span>
                   ) : (
-                    <button className="text-[11px] text-emerald-600 font-semibold hover:underline">
+                    <Button className="text-[11px] text-emerald-600 font-semibold hover:underline">
                       {lang === 'bn' ? 'পঠিত চিহ্নিত করুন' : 'Mark as read'}
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>

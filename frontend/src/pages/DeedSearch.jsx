@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useApp } from '../context/AppContext';
@@ -93,14 +95,14 @@ function DeedCard({ deed, lang, onDetail, index = 0 }) {
           </p>
         </div>
 
-        <button
+        <Button
           type="button"
           onClick={() => onDetail(deed.id)}
           className="gov-btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
         >
           <Eye className="w-3.5 h-3.5" />
           <span>{lang === 'bn' ? 'বিস্তারিত দেখুন' : 'View details'}</span>
-        </button>
+        </Button>
       </div>
 
       <dl className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
@@ -412,14 +414,14 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-2 pt-1">
-            <button type="button" onClick={retryNumberSearch} className="gov-btn-primary text-xs justify-center">
+            <Button type="button" onClick={retryNumberSearch} className="gov-btn-primary text-xs justify-center">
               <RefreshCw className="w-3.5 h-3.5" />
               <span>{bn ? 'আবার চেষ্টা করুন' : 'Try again'}</span>
-            </button>
-            <button type="button" onClick={openAdvancedFromNotFound} className="gov-btn-secondary text-xs justify-center">
+            </Button>
+            <Button type="button" onClick={openAdvancedFromNotFound} className="gov-btn-secondary text-xs justify-center">
               <SlidersHorizontal className="w-3.5 h-3.5" />
               <span>{bn ? 'দলিল নম্বর খুঁজুন' : 'Search deed number'}</span>
-            </button>
+            </Button>
           </div>
         </div>
       );
@@ -534,7 +536,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
               <label htmlFor="deed-number-input" className="sr-only">
                 {bn ? 'দলিল নম্বর' : 'Deed number'}
               </label>
-              <input
+              <Input
                 id="deed-number-input"
                 ref={numberInputRef}
                 type="text"
@@ -549,14 +551,14 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
                 aria-describedby={numberError ? 'deed-number-error' : undefined}
               />
             </div>
-            <button
+            <Button
               type="submit"
               disabled={locked || numberLoading}
               className="gov-btn-primary text-xs justify-center py-2.5 px-5 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {numberLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
               <span>{numberLoading ? (bn ? 'খোঁজা হচ্ছে...' : 'Searching...') : (bn ? 'অনুসন্ধান করুন' : 'Search')}</span>
-            </button>
+            </Button>
           </div>
           {numberError && (
             <p id="deed-number-error" className="text-[11px] font-semibold text-rose-600 dark:text-rose-400">
@@ -569,7 +571,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
       </section>
 
       <section ref={advancedPanelRef} className="gov-card p-5 sm:p-6 space-y-4">
-        <button
+        <Button
           type="button"
           onClick={() => setShowAdvanced((prev) => !prev)}
           aria-expanded={showAdvanced}
@@ -590,7 +592,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
           <span className={`w-8 h-8 rounded-lg border border-[#E2E8F0] dark:border-gray-700 flex items-center justify-center flex-shrink-0 transition-transform duration-200 ${showAdvanced ? 'rotate-180' : ''}`}>
             <ChevronRight className="w-4 h-4 rotate-90" />
           </span>
-        </button>
+        </Button>
 
         <div
           id="advanced-search-panel"
@@ -603,77 +605,77 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
                 <label htmlFor="filter-district" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'জেলা' : 'District'}
                 </label>
-                <select id="filter-district" name="district" value={filters.district} onChange={updateFilter} className="gov-select" disabled={advancedLoading}>
+                <Input as="select" id="filter-district" name="district" value={filters.district} onChange={updateFilter} className="gov-select" disabled={advancedLoading}>
                   <option value="">{bn ? 'সব জেলা' : 'All districts'}</option>
                   {DISTRICTS.map((district) => (
                     <option key={district} value={district}>{district}</option>
                   ))}
-                </select>
+                </Input>
               </div>
 
               <div>
                 <label htmlFor="filter-upazila" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'উপজেলা' : 'Upazila'}
                 </label>
-                <input id="filter-upazila" name="upazila" value={filters.upazila} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: মিরপুর' : 'e.g. Mirpur'} disabled={advancedLoading} />
+                <Input id="filter-upazila" name="upazila" value={filters.upazila} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: মিরপুর' : 'e.g. Mirpur'} disabled={advancedLoading} />
               </div>
 
               <div>
                 <label htmlFor="filter-sro" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'সাব-রেজিস্ট্রি অফিস' : 'Sub-registry office'}
                 </label>
-                <input id="filter-sro" name="sub_registry_office" value={filters.sub_registry_office} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: মিরপুর সাব-রেজিস্ট্রি অফিস' : 'e.g. Mirpur SRO'} disabled={advancedLoading} />
+                <Input id="filter-sro" name="sub_registry_office" value={filters.sub_registry_office} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: মিরপুর সাব-রেজিস্ট্রি অফিস' : 'e.g. Mirpur SRO'} disabled={advancedLoading} />
               </div>
 
               <div>
                 <label htmlFor="filter-year" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'দলিলের সাল' : 'Registration year'}
                 </label>
-                <input id="filter-year" name="reg_year" type="number" inputMode="numeric" min="1950" max={new Date().getFullYear()} value={filters.reg_year} onChange={updateFilter} className="gov-input" placeholder="2025" disabled={advancedLoading} />
+                <Input id="filter-year" name="reg_year" type="number" inputMode="numeric" min="1950" max={new Date().getFullYear()} value={filters.reg_year} onChange={updateFilter} className="gov-input" placeholder="2025" disabled={advancedLoading} />
               </div>
 
               <div>
                 <label htmlFor="filter-deed-type" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'দলিলের ধরন' : 'Deed type'}
                 </label>
-                <select id="filter-deed-type" className="gov-select opacity-70" disabled>
+                <Input as="select" id="filter-deed-type" className="gov-select opacity-70" disabled>
                   <option>{bn ? 'এই ডেটাবেজে সংরক্ষিত নেই' : 'Not stored in this database'}</option>
-                </select>
+                </Input>
               </div>
 
               <div>
                 <label htmlFor="filter-mouza" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'মৌজার নাম' : 'Mouza name'}
                 </label>
-                <input id="filter-mouza" name="mouza" value={filters.mouza} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: পাইকপাড়া' : 'e.g. Paikpara'} disabled={advancedLoading} />
+                <Input id="filter-mouza" name="mouza" value={filters.mouza} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: পাইকপাড়া' : 'e.g. Paikpara'} disabled={advancedLoading} />
               </div>
 
               <div>
                 <label htmlFor="filter-seller" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'বিক্রেতার নাম' : 'Seller name'}
                 </label>
-                <input id="filter-seller" name="seller_name" value={filters.seller_name} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'বিক্রেতার নাম' : 'Seller name'} disabled={advancedLoading} />
+                <Input id="filter-seller" name="seller_name" value={filters.seller_name} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'বিক্রেতার নাম' : 'Seller name'} disabled={advancedLoading} />
               </div>
 
               <div>
                 <label htmlFor="filter-buyer" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'ক্রেতার নাম' : 'Buyer name'}
                 </label>
-                <input id="filter-buyer" name="buyer_name" value={filters.buyer_name} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'ক্রেতার নাম' : 'Buyer name'} disabled={advancedLoading} />
+                <Input id="filter-buyer" name="buyer_name" value={filters.buyer_name} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'ক্রেতার নাম' : 'Buyer name'} disabled={advancedLoading} />
               </div>
 
               <div>
                 <label htmlFor="filter-plot" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'দাগ নম্বর' : 'Dag number'}
                 </label>
-                <input id="filter-plot" name="plot_id" value={filters.plot_id} onChange={updateFilter} maxLength={80} className="gov-input" placeholder={bn ? 'যেমন: DHK-MIR-001' : 'e.g. DHK-MIR-001'} disabled={advancedLoading} />
+                <Input id="filter-plot" name="plot_id" value={filters.plot_id} onChange={updateFilter} maxLength={80} className="gov-input" placeholder={bn ? 'যেমন: DHK-MIR-001' : 'e.g. DHK-MIR-001'} disabled={advancedLoading} />
               </div>
 
               <div>
                 <label htmlFor="filter-khatian" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
                   {bn ? 'খতিয়ান নম্বর' : 'Khatian number'}
                 </label>
-                <input id="filter-khatian" name="khatian_no" value={filters.khatian_no} onChange={updateFilter} maxLength={80} className="gov-input" placeholder={bn ? 'যেমন: BS-1045' : 'e.g. BS-1045'} disabled={advancedLoading} />
+                <Input id="filter-khatian" name="khatian_no" value={filters.khatian_no} onChange={updateFilter} maxLength={80} className="gov-input" placeholder={bn ? 'যেমন: BS-1045' : 'e.g. BS-1045'} disabled={advancedLoading} />
               </div>
             </div>
 
@@ -691,7 +693,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
             )}
 
             <div className="flex flex-col sm:flex-row gap-2.5">
-              <button
+              <Button
                 type="submit"
                 disabled={advancedLoading}
                 className="gov-btn-primary text-xs justify-center py-2.5 px-5 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -702,11 +704,11 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
                     ? (bn ? 'অনুসন্ধান চলছে...' : 'Searching...')
                     : (bn ? 'বিস্তারিত অনুসন্ধান করুন' : 'Run advanced search')}
                 </span>
-              </button>
-              <button type="button" onClick={handleResetAdvanced} disabled={advancedLoading} className="gov-btn-secondary text-xs justify-center py-2.5 px-4">
+              </Button>
+              <Button type="button" onClick={handleResetAdvanced} disabled={advancedLoading} className="gov-btn-secondary text-xs justify-center py-2.5 px-4">
                 <RefreshCw className="w-3.5 h-3.5" />
                 <span>{bn ? 'ফিল্টার রিসেট' : 'Reset filters'}</span>
-              </button>
+              </Button>
             </div>
           </form>
         </div>
@@ -724,7 +726,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
           {renderResults(advancedResult)}
           {advancedResult.found && advancedResult.pages > 1 && (
             <nav className="flex flex-wrap items-center justify-between gap-3 pt-1" aria-label={bn ? 'পৃষ্ঠা' : 'Pagination'}>
-              <button
+              <Button
                 type="button"
                 onClick={() => runAdvancedSearch(appliedFilters, advancedResult.page - 1)}
                 disabled={advancedResult.page <= 1 || advancedLoading}
@@ -732,13 +734,13 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
               >
                 <ChevronLeft className="w-3.5 h-3.5" />
                 <span>{bn ? 'পূর্ববর্তী' : 'Previous'}</span>
-              </button>
+              </Button>
               <span className="text-[11px] font-semibold text-[#64748B] dark:text-slate-400">
                 {bn
                   ? `পৃষ্ঠা ${toBnDigits(advancedResult.page)} / ${toBnDigits(advancedResult.pages)}`
                   : `Page ${advancedResult.page} of ${advancedResult.pages}`}
               </span>
-              <button
+              <Button
                 type="button"
                 onClick={() => runAdvancedSearch(appliedFilters, advancedResult.page + 1)}
                 disabled={advancedResult.page >= advancedResult.pages || advancedLoading}
@@ -746,7 +748,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
               >
                 <span>{bn ? 'পরবর্তী' : 'Next'}</span>
                 <ChevronRight className="w-3.5 h-3.5" />
-              </button>
+              </Button>
             </nav>
           )}
         </div>
@@ -774,9 +776,9 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
               <h2 id="deed-detail-title" className="text-sm font-bold text-[#17212B] dark:text-white break-words">
                 {bn ? 'দলিলের বিস্তারিত তথ্য' : 'Deed details'}
               </h2>
-              <button type="button" onClick={closeDetail} className="w-8 h-8 rounded-lg border border-[#E2E8F0] dark:border-gray-700 flex items-center justify-center hover:bg-[#F7FAF8] dark:hover:bg-gray-800 transition" aria-label={bn ? 'বন্ধ করুন' : 'Close'}>
+              <Button type="button" onClick={closeDetail} className="w-8 h-8 rounded-lg border border-[#E2E8F0] dark:border-gray-700 flex items-center justify-center hover:bg-[#F7FAF8] dark:hover:bg-gray-800 transition" aria-label={bn ? 'বন্ধ করুন' : 'Close'}>
                 <X className="w-4 h-4" />
-              </button>
+              </Button>
             </div>
 
             <div className="p-5 space-y-4">

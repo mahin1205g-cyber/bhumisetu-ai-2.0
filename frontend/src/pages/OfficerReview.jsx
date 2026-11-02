@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -122,13 +124,13 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
         onBack={() => navigateBack ? navigateBack('dashboard') : (setActiveTab && setActiveTab('dashboard'))}
         fallbackTab="dashboard"
         actions={
-          <button
+          <Button
             onClick={fetchApps}
             className="gov-btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5"
           >
             <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
             <span>{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</span>
-          </button>
+          </Button>
         }
       />
 
@@ -144,7 +146,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
         <div className="flex items-center gap-2">
           <Filter className="w-4 h-4 text-gray-400" />
           <span className="font-semibold text-gray-700 dark:text-gray-300">{lang === 'bn' ? 'স্ট্যাটাস ফিল্টার:' : 'Filter by Status:'}</span>
-          <select
+          <Input as="select"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             className="gov-select py-1 text-xs w-auto font-medium"
@@ -156,7 +158,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
             <option value="Resubmitted">{lang === 'bn' ? 'সংশোধিত দাখিলকৃত (Resubmitted)' : 'Resubmitted'}</option>
             <option value="Approved">{lang === 'bn' ? 'অনুমোদিত (Approved)' : 'Approved'}</option>
             <option value="Rejected">{lang === 'bn' ? 'খারিজ (Rejected)' : 'Rejected'}</option>
-          </select>
+          </Input>
         </div>
 
         <span className="text-gray-500">
@@ -229,14 +231,14 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                       {new Date(app.created_at).toLocaleDateString(lang === 'bn' ? 'bn-BD' : 'en-US')}
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
+                      <Button
                         onClick={() => handleOpenReview(app)}
                         disabled={loadingDetails}
                         className="px-3 py-1 rounded bg-[#0b462d] hover:bg-[#12583a] text-white font-medium text-[11px] inline-flex items-center gap-1.5 transition shadow-sm active:scale-95"
                       >
                         <Eye className="w-3 h-3" />
                         <span>{lang === 'bn' ? 'নথি পর্যালোচনা' : 'Review File'}</span>
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -272,12 +274,12 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                   </span>
                 </div>
               </div>
-              <button
+              <Button
                 onClick={() => setSelectedApp(null)}
                 className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-300 text-sm font-bold flex items-center justify-center transition"
               >
                 ✕
-              </button>
+              </Button>
             </div>
 
             {/* Applicant & Land Details Card */}
@@ -353,7 +355,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
 
             {/* Officer Action Buttons */}
             <div className="pt-3 border-t border-gray-100 dark:border-gray-800 flex flex-wrap items-center justify-between gap-3">
-              <button
+              <Button
                 onClick={() => {
                   if (setSelectedTracking) setSelectedTracking(selectedApp.tracking_no);
                   setActiveTab('mutation-track');
@@ -362,32 +364,32 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
               >
                 <span>{lang === 'bn' ? 'পূর্ণাঙ্গ টাইমলাইন দেখুন' : 'View Timeline'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
-              </button>
+              </Button>
 
               <div className="flex items-center gap-2">
-                <button
+                <Button
                   onClick={() => setActionModal({ type: 'info' })}
                   className="px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition"
                 >
                   <AlertTriangle className="w-3.5 h-3.5" />
                   <span>{lang === 'bn' ? 'সংশোধনের নির্দেশ' : 'Request Correction'}</span>
-                </button>
+                </Button>
 
-                <button
+                <Button
                   onClick={() => setActionModal({ type: 'reject' })}
                   className="px-3 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-semibold text-xs flex items-center gap-1.5 shadow-sm active:scale-95 transition"
                 >
                   <XCircle className="w-3.5 h-3.5" />
                   <span>{lang === 'bn' ? 'খারিজ / বাতিল' : 'Reject'}</span>
-                </button>
+                </Button>
 
-                <button
+                <Button
                   onClick={() => setActionModal({ type: 'approve' })}
                   className="gov-btn-primary text-xs py-2 px-4 shadow active:scale-95 transition flex items-center gap-1.5"
                 >
                   <CheckCircle2 className="w-3.5 h-3.5" />
                   <span>{lang === 'bn' ? 'নামজারি মঞ্জুর করুন' : 'Approve Mutation'}</span>
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -411,7 +413,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                 {lang === 'bn' ? 'কর্মকর্তার মন্তব্য / আদেশের কারণ' : 'Official Remarks / Order'}
                 {(actionModal.type === 'reject' || actionModal.type === 'info') && <span className="text-rose-500"> *</span>}
               </label>
-              <textarea
+              <Input as="textarea"
                 value={remarks}
                 onChange={(e) => setRemarks(e.target.value)}
                 rows="3"
@@ -423,19 +425,19 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                     : (lang === 'bn' ? 'আগামী ৭ কার্যদিবসের মধ্যে বায়া দলিলের স্পষ্ট কপি ও হালনাগাদ খাজনার দাখিলা আপলোড করুন।' : 'Please submit clearer Baya Dalil and updated tax dakhila within 7 days.')
                 }
                 className="gov-input resize-none text-xs"
-              ></textarea>
+              ></Input>
             </div>
 
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-gray-800">
-              <button
+              <Button
                 type="button"
                 onClick={() => setActionModal(null)}
                 className="gov-btn-secondary text-xs py-1.5 px-3"
               >
                 {lang === 'bn' ? 'বাতিল' : 'Cancel'}
-              </button>
+              </Button>
 
-              <button
+              <Button
                 type="button"
                 disabled={submitting}
                 onClick={handleActionSubmit}
@@ -448,7 +450,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                 }`}
               >
                 {submitting ? (lang === 'bn' ? 'প্রক্রিয়াধীন...' : 'Processing...') : (lang === 'bn' ? 'আদেশ জারি করুন' : 'Issue Order')}
-              </button>
+              </Button>
             </div>
           </div>
         </div>

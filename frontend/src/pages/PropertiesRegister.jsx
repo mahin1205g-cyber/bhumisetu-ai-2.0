@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -116,7 +118,7 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
         <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
           <div className="relative flex-1 min-w-[260px]">
             <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
-            <input
+            <Input
               type="text"
               value={search}
               onChange={(e) => {
@@ -136,7 +138,7 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
               { id: 'disputed', label: lang === 'bn' ? 'বিরোধপূর্ণ' : 'Disputed' },
               { id: 'acquired', label: lang === 'bn' ? 'অধিগ্রহণকৃত' : 'Acquired' }
             ].map((st) => (
-              <button
+              <Button
                 key={st.id}
                 onClick={() => {
                   setStatusFilter(st.id);
@@ -149,17 +151,17 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
                 }`}
               >
                 {st.label}
-              </button>
+              </Button>
             ))}
 
-            <button
+            <Button
               onClick={fetchProps}
               className="gov-btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5 ml-1"
               title="Refresh"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
               <span>{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</span>
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -239,13 +241,13 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
                       </span>
                     </td>
                     <td className="py-3 px-4 text-right">
-                      <button
+                      <Button
                         onClick={() => openDetail(p.plot_id)}
                         className="gov-btn-secondary text-xs py-1 px-2.5 inline-flex items-center gap-1 hover:border-[#febd69]"
                       >
                         <Eye className="w-3.5 h-3.5" />
                         <span>{lang === 'bn' ? 'বিস্তারিত' : 'Inspect'}</span>
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -262,27 +264,27 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
             </span>
 
             <div className="flex items-center gap-1.5">
-              <button
+              <Button
                 onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
                 disabled={currentPage === 1}
                 className="px-2.5 py-1 rounded border border-gray-300 dark:border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <ChevronLeft className="w-3.5 h-3.5 inline mr-1" />
                 <span>{lang === 'bn' ? 'পূর্ববর্তী' : 'Prev'}</span>
-              </button>
+              </Button>
 
               <span className="px-3 py-1 font-mono font-bold bg-white dark:bg-gray-800 border rounded">
                 {currentPage}
               </span>
 
-              <button
+              <Button
                 onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
                 disabled={currentPage === totalPages}
                 className="px-2.5 py-1 rounded border border-gray-300 dark:border-gray-700 disabled:opacity-40 disabled:cursor-not-allowed hover:bg-gray-100 dark:hover:bg-gray-800"
               >
                 <span>{lang === 'bn' ? 'পরবর্তী' : 'Next'}</span>
                 <ChevronRight className="w-3.5 h-3.5 inline ml-1" />
-              </button>
+              </Button>
             </div>
           </div>
         )}
@@ -304,12 +306,12 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
                   {selectedProp.mouza}, {selectedProp.upazila}, {selectedProp.district}
                 </p>
               </div>
-              <button
+              <Button
                 onClick={() => setSelectedProp(null)}
                 className="text-gray-400 hover:text-gray-600 font-bold text-lg"
               >
                 ✕
-              </button>
+              </Button>
             </div>
 
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
@@ -345,7 +347,7 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
                           {d.seller_name} ➔ {d.buyer_name} ({d.area} শতক, ৳{d.price?.toLocaleString()})
                         </div>
                       </div>
-                      <button
+                      <Button
                         onClick={() => {
                           setSelectedProp(null);
                           if (setVerificationResult) {
@@ -355,7 +357,7 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
                         className="gov-btn-secondary text-[11px] py-1 px-2"
                       >
                         যাচাই করুন
-                      </button>
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -365,12 +367,12 @@ export default function PropertiesRegister({ setActiveTab, setVerificationResult
             </div>
 
             <div className="pt-2 flex justify-end">
-              <button
+              <Button
                 onClick={() => setSelectedProp(null)}
                 className="gov-btn-secondary text-xs"
               >
                 বন্ধ করুন
-              </button>
+              </Button>
             </div>
           </div>
         </div>

@@ -1,3 +1,4 @@
+import Button from '../components/Button';
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import BhumiSathiLogo from '../components/BhumiSathiLogo';
@@ -12,16 +13,6 @@ export default function LandingPage({ setActiveTab }) {
   const [openFaq, setOpenFaq] = useState(null);
 
   const features = [
-    {
-      id: 'deed-search',
-      badge: lang === 'bn' ? 'দলিল অনুসন্ধান' : 'Deed Search',
-      title: lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number',
-      desc: lang === 'bn'
-        ? 'দলিল নম্বর, জেলা, উপজেলা, মৌজা, দাগ বা খতিয়ান নম্বর দিয়ে ভূমিসেতুতে সংরক্ষিত দলিল রেকর্ড খুঁজুন এবং উপলব্ধ বিস্তারিত তথ্য দেখুন।'
-        : 'Look up deed records stored in Bhumisetu by deed number, district, mouza, dag or khatian and review the available details.',
-      icon: Search,
-      cta: lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deeds'
-    },
     {
       id: 'deed-verify',
       badge: lang === 'bn' ? 'দলিল ও বালাম যাচাই' : 'Deed Verification',
@@ -115,28 +106,20 @@ export default function LandingPage({ setActiveTab }) {
 
           {/* Apple/Linear Style Clean Action Buttons */}
           <div className="flex flex-wrap items-center justify-center gap-3.5 pt-2 animate-smooth-enter" style={{ animationDelay: '0.25s' }}>
-            <button
+            <Button
               onClick={() => setActiveTab('deed-verify')}
               className="gov-btn-primary px-8 py-3 text-sm font-bold shadow-xs hover:bg-[#065F46] flex items-center gap-2 group transition"
             >
               <span>{lang === 'bn' ? 'যাচাই শুরু করুন' : 'Start Verification'}</span>
               <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform duration-150" />
-            </button>
+            </Button>
 
-            <button
-              onClick={() => setActiveTab('deed-search')}
-              className="gov-btn-secondary px-7 py-3 text-sm font-semibold shadow-xs hover:border-[#047857]/40 transition flex items-center gap-2"
-            >
-              <Search className="w-4 h-4 text-[#047857]" />
-              <span>{lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}</span>
-            </button>
-
-            <button
+            <Button
               onClick={() => setActiveTab('dashboard')}
               className="gov-btn-secondary px-7 py-3 text-sm font-semibold shadow-xs hover:border-[#047857]/40 transition"
             >
               <span>{t('navDashboard')}</span>
-            </button>
+            </Button>
           </div>
 
           {/* Trust Highlights Row */}
@@ -203,12 +186,13 @@ export default function LandingPage({ setActiveTab }) {
           </p>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {features.map(f => {
             const Icon = f.icon;
             return (
               <div
                 key={f.id}
+                data-scroll-reveal
                 className="gov-card p-6 sm:p-7 flex flex-col justify-between group hover:border-[#047857]/40 hover:shadow-hover transition duration-200"
               >
                 <div className="space-y-4">
@@ -231,13 +215,13 @@ export default function LandingPage({ setActiveTab }) {
                 </div>
 
                 <div className="pt-6">
-                  <button
+                  <Button
                     onClick={() => setActiveTab(f.id)}
                     className="w-full gov-btn-secondary justify-center text-xs sm:text-sm py-2.5 group-hover:border-[#047857] group-hover:text-[#047857] transition"
                   >
                     <span>{f.cta}</span>
                     <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </button>
+                  </Button>
                 </div>
               </div>
             );
@@ -266,6 +250,7 @@ export default function LandingPage({ setActiveTab }) {
             ].map((s, idx) => (
               <div
                 key={idx}
+                data-scroll-reveal
                 className="bg-white dark:bg-[#14201C] p-5 rounded-xl border border-[#E2E8F0] dark:border-[#1E2E28] shadow-xs flex flex-col items-center text-center space-y-3"
               >
                 <div className="step-sphere">
@@ -292,6 +277,7 @@ export default function LandingPage({ setActiveTab }) {
           {faqs.map((f, i) => (
             <div
               key={i}
+              data-scroll-reveal
               className="gov-card overflow-hidden cursor-pointer"
               onClick={() => setOpenFaq(openFaq === i ? null : i)}
             >

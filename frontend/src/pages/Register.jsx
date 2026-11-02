@@ -1,95 +1,91 @@
-import React, { useState, useEffect } from 'react';
+import Input from '../components/Input';
+import Button from '../components/Button';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import BhumiSathiLogo from '../components/BhumiSathiLogo';
 import {
-  User, Lock, Mail, Phone, CreditCard, Eye, EyeOff, CheckCircle2,
-  KeyRound, ShieldCheck, ArrowRight, RefreshCw, Sparkles, ArrowLeft
+  User, Lock, Mail, Phone, CreditCard, Eye, EyeOff, CheckCircle2, ArrowLeft
 } from 'lucide-react';
 
 export default function Register({ setActiveTab, navigateBack }) {
-  const { lang, t, loginUser } = useApp();
+  const { lang, loginUser } = useApp();
 
   const [form, setForm] = useState({
     name: '',
+    username: '',
     email: '',
     password: '',
+    password_confirmation: '',
     phone: '',
     nid: ''
   });
-
-  const [otpCode, setOtpCode] = useState('');
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpPreview, setOtpPreview] = useState('');
-  const [otpVerified, setOtpVerified] = useState(false);
-  const [countdown, setCountdown] = useState(0);
 
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+  const [usernameStatus, setUsernameStatus] = useState({ state: 'idle', value: '' });
 
-  // Countdown timer
   useEffect(() => {
-    let timer;
-    if (countdown > 0) {
-      timer = setTimeout(() => setCountdown(countdown - 1), 1000);
+    const username = form.username.trim();
+    if (!username) {
+      setUsernameStatus({ state: 'idle', value: '' });
+      return undefined;
     }
-    return () => clearTimeout(timer);
-  }, [countdown]);
+    if (!/^[A-Za-z0-9_.]{4,30}$/.test(username)) {
+      setUsernameStatus({ state: 'invalid', value: username });
+      return undefined;
+    }
+    setUsernameStatus({ state: 'checking', value: username });
+    let active = true;
+    const timer = window.setTimeout(async () => {
+      try {
+        const result = await api.checkUsernameAvailability(username);
+        if (active) setUsernameStatus({ state: result.available ? 'available' : result.valid ? 'taken' : 'invalid', value: username });
+      } catch {
+        if (active) setUsernameStatus({ state: 'error', value: username });
+      }
+    }, 350);
+    return () => { active = false; window.clearTimeout(timer); };
+  }, [form.username]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setForm(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleSendOTP = async () => {
-    const target = form.phone.trim() || form.email.trim();
-    if (!target) {
-      setError(lang === 'bn' ? 'ওটিপি পাঠাতে মোবাইল নম্বর বা ইমেইল পূরণ করুন।' : 'Please enter your phone number or email for OTP verification.');
-      return;
-    }
-
-    setLoading(true);
+    setFieldErrors(prev => ({ ...prev, [name]: '' }));
     setError('');
     setSuccessMsg('');
-
-    try {
-      const res = await api.sendOTP(target, 'register');
-      setOtpSent(true);
-      setOtpPreview(res.otp_preview || '682491');
-      setCountdown(60);
-      setSuccessMsg(
-        lang === 'bn'
-          ? `আপনার ${res.channel_bn || 'মোবাইলে'} ৬-সংখ্যার ওটিপি কোড পাঠানো হয়েছে।`
-          : `Verification code sent to your ${res.channel || 'phone'}.`
-      );
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
   };
 
   const handleRegister = async (e) => {
     e.preventDefault();
-    if (!form.name || !form.email || !form.password) {
+    if (!form.name || !form.username || !form.email || !form.password) {
       setError(lang === 'bn' ? 'অনুগ্রহ করে আবশ্যকীয় তথ্যগুলো পূরণ করুন।' : 'Please fill all required fields.');
       return;
     }
 
-    if (form.password.length < 5) {
-      setError(lang === 'bn' ? 'পাসওয়ার্ড ন্যূনতম ৫ অক্ষরের হতে হবে।' : 'Password must be at least 5 characters.');
+    if (!/^[A-Za-z0-9_.]{4,30}$/.test(form.username.trim())) {
+      setFieldErrors(prev => ({ ...prev, username: lang === 'bn' ? 'ইউজারনেম ৪–৩০ অক্ষরের হতে হবে; শুধু ইংরেজি অক্ষর, সংখ্যা, _ ও . ব্যবহার করুন।' : 'Use 4–30 letters, numbers, underscores, or periods.' }));
+      return;
+    }
+    if (!/^(?:[0-9]{10}|[0-9]{13}|[0-9]{17})$/.test(form.nid)) {
+      setFieldErrors(prev => ({ ...prev, nid: lang === 'bn' ? 'NID-তে শুধু ইংরেজি সংখ্যা দিন; দৈর্ঘ্য ১০, ১৩ অথবা ১৭ অঙ্ক হতে হবে।' : 'Use ASCII digits only; NID must contain exactly 10, 13, or 17 digits.' }));
+      return;
+    }
+    if (usernameStatus.value !== form.username.trim() || usernameStatus.state !== 'available') {
+      setError(lang === 'bn' ? 'ইউজারনেমের availability যাচাই শেষ হওয়া পর্যন্ত অপেক্ষা করুন।' : 'Wait for the username availability check to finish.');
       return;
     }
 
-    if (!otpSent) {
-      setError(lang === 'bn' ? 'নিবন্ধনের পূর্বে মোবাইল বা ইমেইলে ওটিপি কোড পাঠান।' : 'Please request an OTP verification code before registration.');
+    if (form.password.length < 8) {
+      setFieldErrors(prev => ({ ...prev, password: lang === 'bn' ? 'পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে।' : 'Password must be at least 8 characters.' }));
       return;
     }
 
-    if (!otpCode || otpCode.trim().length < 4) {
-      setError(lang === 'bn' ? 'অনুগ্রহ করে প্রাপ্ত ৬-সংখ্যার ওটিপি কোড দিন।' : 'Please enter the 6-digit OTP verification code.');
+    if (form.password !== form.password_confirmation) {
+      setFieldErrors(prev => ({ ...prev, password_confirmation: lang === 'bn' ? 'দুটি পাসওয়ার্ড মিলছে না।' : 'Passwords do not match.' }));
       return;
     }
 
@@ -97,24 +93,24 @@ export default function Register({ setActiveTab, navigateBack }) {
     setError('');
 
     try {
-      // 1. Verify OTP first
-      const target = form.phone.trim() || form.email.trim();
-      const vRes = await api.verifyOTP(target, otpCode);
-      if (!vRes.verified) {
-        throw new Error(vRes.message || 'ভুল ওটিপি কোড');
-      }
-
-      // 2. Complete registration
       const res = await api.register({
         ...form,
+        username: form.username.trim(),
+        email: form.email.trim().toLowerCase(),
         role: 'citizen',
         designation: 'নাগরিক',
-        otp_code: otpCode
       });
-      loginUser(res.user, res.token);
-      setActiveTab('dashboard');
+      await loginUser(res.token);
+      setSuccessMsg(lang === 'bn' ? 'নিবন্ধন সফল হয়েছে। ড্যাশবোর্ডে নেওয়া হচ্ছে…' : 'Registration successful. Opening your dashboard…');
+      window.setTimeout(() => setActiveTab('dashboard'), 700);
     } catch (err) {
       setError(err.message);
+      const message = err.message.toLowerCase();
+      if (message.includes('username')) setFieldErrors(prev => ({ ...prev, username: err.message }));
+      else if (message.includes('nid')) setFieldErrors(prev => ({ ...prev, nid: err.message }));
+      else if (message.includes('email')) setFieldErrors(prev => ({ ...prev, email: err.message }));
+      else if (message.includes('phone') || message.includes('mobile')) setFieldErrors(prev => ({ ...prev, phone: err.message }));
+      else if (message.includes('password')) setFieldErrors(prev => ({ ...prev, password: err.message }));
     } finally {
       setLoading(false);
     }
@@ -124,7 +120,7 @@ export default function Register({ setActiveTab, navigateBack }) {
     <div className="gov-container py-10 max-w-md mx-auto space-y-6">
       {/* Top Back Navigation */}
       <div className="flex items-center justify-between">
-        <button
+        <Button
           type="button"
           onClick={() => navigateBack ? navigateBack('login') : setActiveTab('login')}
           className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-[#14201C] border border-[#E2E8F0] dark:border-[#1E2E28] hover:border-[#047857]/40 hover:bg-[#F7FAF8] dark:hover:bg-[#1A2823] hover:text-[#047857] shadow-xs transition"
@@ -132,7 +128,7 @@ export default function Register({ setActiveTab, navigateBack }) {
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>{lang === 'bn' ? 'লগইন পাতায় ফিরে যান' : 'Back to Login'}</span>
-        </button>
+        </Button>
 
         <span className="text-[11px] text-slate-400 font-medium">
           Bhumisetu • Register
@@ -172,7 +168,7 @@ export default function Register({ setActiveTab, navigateBack }) {
             </label>
             <div className="relative">
               <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
+              <Input
                 type="text"
                 name="name"
                 value={form.name}
@@ -186,11 +182,37 @@ export default function Register({ setActiveTab, navigateBack }) {
 
           <div>
             <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              {lang === 'bn' ? 'ইউজারনেম' : 'Username'} <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <User className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Input type="text" name="username" value={form.username} onChange={handleChange}
+                autoComplete="username" minLength={4} maxLength={30} pattern="[A-Za-z0-9_.]{4,30}"
+                placeholder="citizen01" className="gov-input pl-9"
+                aria-invalid={Boolean(fieldErrors.username) || ['invalid', 'taken'].includes(usernameStatus.state)} required />
+            </div>
+            <p role="status" className={`mt-1 text-[11px] ${usernameStatus.state === 'available' ? 'text-emerald-700' : ['invalid', 'taken'].includes(usernameStatus.state) ? 'text-rose-600' : 'text-gray-500'}`}>
+              {fieldErrors.username || (usernameStatus.state === 'available'
+                ? (lang === 'bn' ? 'ব্যবহারযোগ্য' : 'Available')
+                : usernameStatus.state === 'taken'
+                  ? (lang === 'bn' ? 'আগেই নেওয়া হয়েছে' : 'Already taken')
+                  : usernameStatus.state === 'invalid'
+                    ? (lang === 'bn' ? 'ইউজারনেম সঠিক নয়' : 'Invalid username')
+                    : usernameStatus.state === 'checking'
+                      ? (lang === 'bn' ? 'যাচাই হচ্ছে…' : 'Checking…')
+                      : usernameStatus.state === 'error'
+                        ? (lang === 'bn' ? 'এখন যাচাই করা যাচ্ছে না।' : 'Could not check username right now.')
+                        : (lang === 'bn' ? '৪–৩০ অক্ষর: ইংরেজি অক্ষর, সংখ্যা, _ বা .; কোনো স্পেস নয়।' : '4–30 characters: letters, numbers, _ or .; no spaces.'))}
+            </p>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
               {lang === 'bn' ? 'ইমেইল ঠিকানা' : 'Email Address'} <span className="text-rose-500">*</span>
             </label>
             <div className="relative">
               <Mail className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
+              <Input
                 type="email"
                 name="email"
                 value={form.email}
@@ -200,6 +222,7 @@ export default function Register({ setActiveTab, navigateBack }) {
                 required
               />
             </div>
+            {fieldErrors.email && <p className="mt-1 text-[11px] text-rose-600">{fieldErrors.email}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -209,31 +232,44 @@ export default function Register({ setActiveTab, navigateBack }) {
               </label>
               <div className="relative">
                 <Phone className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
+                <Input
                   type="text"
                   name="phone"
                   value={form.phone}
                   onChange={handleChange}
                   placeholder="01711002233"
                   className="gov-input pl-9 text-xs"
+                  inputMode="tel"
+                  maxLength={16}
+                  pattern="[+]?[0-9]{8,15}"
+                  aria-invalid={Boolean(fieldErrors.phone)}
+                required
                 />
+                {fieldErrors.phone && <p className="mt-1 text-[11px] text-rose-600">{fieldErrors.phone}</p>}
               </div>
             </div>
 
             <div>
               <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                {lang === 'bn' ? 'জাতীয় পরিচয়পত্র (NID)' : 'NID (Optional)'}
+              {lang === 'bn' ? 'জাতীয় পরিচয়পত্র (NID)' : 'National ID (NID)'}
               </label>
               <div className="relative">
                 <CreditCard className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                <input
+                <Input
                   type="text"
                   name="nid"
                   value={form.nid}
-                  onChange={handleChange}
-                  placeholder="1990269..."
+                  onChange={(e) => { setForm(prev => ({ ...prev, nid: e.target.value.replace(/[^0-9]/g, '').slice(0, 17) })); setFieldErrors(prev => ({ ...prev, nid: '' })); setError(''); }}
+                  placeholder="10, 13, or 17 digits"
                   className="gov-input pl-9 text-xs"
+                  inputMode="numeric"
+                  maxLength={17}
+                  pattern="(?:[0-9]{10}|[0-9]{13}|[0-9]{17})"
+                  aria-invalid={Boolean(fieldErrors.nid)}
+                required
                 />
+                {!fieldErrors.nid && <p className="mt-1 text-[11px] text-gray-500">{lang === 'bn' ? 'শুধু ইংরেজি সংখ্যা: ১০, ১৩ অথবা ১৭ অঙ্ক।' : 'ASCII digits only: exactly 10, 13, or 17 digits.'}</p>}
+                {fieldErrors.nid && <p className="mt-1 text-[11px] text-rose-600">{fieldErrors.nid}</p>}
               </div>
             </div>
           </div>
@@ -244,107 +280,67 @@ export default function Register({ setActiveTab, navigateBack }) {
             </label>
             <div className="relative">
               <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-              <input
+              <Input
                 type={showPassword ? 'text' : 'password'}
                 name="password"
                 value={form.password}
                 onChange={handleChange}
-                placeholder="••••••••"
+                placeholder={lang === 'bn' ? 'কমপক্ষে ৮ অক্ষর' : 'At least 8 characters'}
                 className="gov-input pl-9 pr-9"
+                minLength={8}
+                maxLength={256}
                 required
               />
-              <button
+              <Button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-2.5 text-gray-400 hover:text-gray-600"
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-              </button>
+              </Button>
             </div>
+            <p className="mt-1 text-[11px] text-gray-500">{lang === 'bn' ? 'পাসওয়ার্ড কমপক্ষে ৮ অক্ষরের হতে হবে।' : 'Password must be at least 8 characters.'}</p>
+            {fieldErrors.password && <p className="mt-1 text-[11px] text-rose-600">{fieldErrors.password}</p>}
           </div>
 
-          {/* OTP Send Trigger & Verification Section */}
-          <div className="pt-2 border-t border-gray-100 dark:border-gray-800 space-y-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300 flex items-center gap-1.5">
-                <KeyRound className="w-3.5 h-3.5 text-amber-500" />
-                <span>{lang === 'bn' ? 'নিরাপত্তা ভেরিফিকেশন (OTP)' : 'Security OTP Verification'}</span>
-              </span>
-
-              <button
-                type="button"
-                onClick={handleSendOTP}
-                disabled={loading || countdown > 0 || (!form.phone && !form.email)}
-                className="gov-btn-secondary text-[11px] py-1 px-3 font-bold"
-              >
-                {countdown > 0 ? (
-                  <span>{countdown}s</span>
-                ) : (
-                  <span>{otpSent ? (lang === 'bn' ? 'পুনরায় কোড পাঠান' : 'Resend Code') : (lang === 'bn' ? 'ওটিপি কোড পাঠান' : 'Send OTP Code')}</span>
-                )}
-              </button>
+          <div>
+            <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+              {lang === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm Password'} <span className="text-rose-500">*</span>
+            </label>
+            <div className="relative">
+              <Lock className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+              <Input
+                type="password"
+                name="password_confirmation"
+                value={form.password_confirmation}
+                onChange={handleChange}
+                className="gov-input pl-9"
+                minLength={8}
+                maxLength={256}
+                required
+              />
             </div>
-
-            {/* Simulated Live Gateway Notification */}
-            {otpPreview && (
-              <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800 text-xs space-y-1">
-                <div className="font-bold text-amber-900 dark:text-amber-200 flex items-center justify-between">
-                  <span>📩 {lang === 'bn' ? 'মোবাইল / ইমেইল ওটিপি বার্তা:' : 'Incoming OTP Message:'}</span>
-                  <button
-                    type="button"
-                    onClick={() => setOtpCode(otpPreview)}
-                    className="text-[11px] text-[#0b462d] dark:text-emerald-400 underline font-bold"
-                  >
-                    {lang === 'bn' ? 'কোডটি বসান (Auto-Fill)' : 'Auto-Fill'}
-                  </button>
-                </div>
-                <div className="font-mono text-sm tracking-widest text-[#0b462d] dark:text-emerald-400 font-black">
-                  {otpPreview}
-                </div>
-                <p className="text-[10px] text-gray-500">
-                  {lang === 'bn' ? 'এই কোডটি প্রদান করে অ্যাকাউন্ট নিবন্ধন নিশ্চিত করুন।' : 'Enter this 6-digit code to complete registration.'}
-                </p>
-              </div>
-            )}
-
-            {otpSent && (
-              <div>
-                <label className="block text-[11px] font-semibold text-gray-600 dark:text-gray-400 mb-1">
-                  {lang === 'bn' ? 'প্রাপ্ত ৬-সংখ্যার ওটিপি কোড প্রদান করুন' : 'Enter 6-Digit OTP Code'}
-                </label>
-                <div className="relative">
-                  <KeyRound className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                  <input
-                    type="text"
-                    maxLength={6}
-                    value={otpCode}
-                    onChange={(e) => setOtpCode(e.target.value.replace(/\D/g, ''))}
-                    placeholder="849201"
-                    className="gov-input pl-9 tracking-widest font-mono text-sm"
-                    required
-                  />
-                </div>
-              </div>
-            )}
+            {(fieldErrors.password_confirmation || (form.password_confirmation && form.password !== form.password_confirmation)) &&
+              <p className="mt-1 text-[11px] text-rose-600">{fieldErrors.password_confirmation || (lang === 'bn' ? 'দুটি পাসওয়ার্ড মিলছে না।' : 'Passwords do not match.')}</p>}
           </div>
 
-          <button
+          <Button
             type="submit"
-            disabled={loading || !otpSent || !otpCode}
+            disabled={loading || usernameStatus.state === 'checking'}
             className="w-full gov-btn-primary justify-center text-xs py-2.5 font-bold shadow"
           >
-            {loading ? (lang === 'bn' ? 'যাচাই ও নিবন্ধন হচ্ছে...' : 'Registering...') : (lang === 'bn' ? 'কোড যাচাই ও অ্যাকাউন্ট তৈরি করুন' : 'Verify & Complete Registration')}
-          </button>
+            {loading ? (lang === 'bn' ? 'অ্যাকাউন্ট তৈরি হচ্ছে...' : 'Creating account...') : (lang === 'bn' ? 'নাগরিক অ্যাকাউন্ট তৈরি করুন' : 'Create Citizen Account')}
+          </Button>
         </form>
 
         <div className="pt-2 border-t border-gray-100 dark:border-gray-800 text-center text-xs text-gray-500">
           <span>{lang === 'bn' ? 'ইতিপূর্বে অ্যাকাউন্ট আছে?' : 'Already have an account?'} </span>
-          <button
+          <Button
             onClick={() => setActiveTab('login')}
             className="text-emerald-700 dark:text-emerald-400 font-bold hover:underline"
           >
             {lang === 'bn' ? 'লগইন করুন' : 'Sign in here'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

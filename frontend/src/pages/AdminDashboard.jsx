@@ -1,21 +1,30 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
-import { ShieldAlert, RotateCcw, Users, Database, CheckCircle2, RefreshCw, Cpu, Zap, Activity, Lock, Unlock, Clock } from 'lucide-react';
+import { ShieldAlert, Users, RefreshCw, Cpu, Zap, Activity, Search } from 'lucide-react';
 
 export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateBack }) {
   const { lang, t, user } = useApp();
-  const [resetting, setResetting] = useState(false);
   const [benchmarking, setBenchmarking] = useState(false);
-  const [msg, setMsg] = useState('');
   const [stats, setStats] = useState(null);
   const [engineInfo, setEngineInfo] = useState(null);
   const [benchData, setBenchData] = useState(null);
-  const [locks, setLocks] = useState([]);
-  const [locksLoading, setLocksLoading] = useState(false);
-  const [locksError, setLocksError] = useState('');
-  const [unlockMsg, setUnlockMsg] = useState('');
+  const [accounts, setAccounts] = useState([]);
+  const [accountTotal, setAccountTotal] = useState(0);
+  const [accountQuery, setAccountQuery] = useState('');
+  const [accountRole, setAccountRole] = useState('all');
+  const [accountOffset, setAccountOffset] = useState(0);
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [officerForm, setOfficerForm] = useState({ name: '', username: '', email: '', phone: '', nid: '', password: '', password_confirmation: '' });
+  const [officerMessage, setOfficerMessage] = useState('');
+  const [dataset, setDataset] = useState('applications');
+  const [dataQuery, setDataQuery] = useState('');
+  const [dataOffset, setDataOffset] = useState(0);
+  const [dataPage, setDataPage] = useState({ items: [], total: 0 });
+  const [dataLoading, setDataLoading] = useState(false);
 
   const fetchStats = async () => {
     try {
@@ -29,73 +38,60 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
     } catch (e) {}
   };
 
-  const fetchLocks = async () => {
-    setLocksLoading(true);
-    setLocksError('');
+  useEffect(() => {
+    fetchStats();
+  }, []);
+
+  const fetchAccounts = async () => {
+    setAccountLoading(true);
     try {
-      const data = await api.adminDeedSearchLocks(50);
-      setLocks(data?.locks || []);
-    } catch (err) {
-      setLocksError(err?.message || (lang === 'bn' ? 'লক তথ্য আনা যায়নি।' : 'Could not load lock records.'));
+      const result = await api.listAdminUsers({ q: accountQuery, role: accountRole, limit: 25, offset: accountOffset });
+      setAccounts(result.items || []);
+      setAccountTotal(result.total || 0);
+    } catch (error) {
+      setOfficerMessage(error.message);
     } finally {
-      setLocksLoading(false);
+      setAccountLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchStats();
-    fetchLocks();
-  }, []);
+    const timer = setTimeout(fetchAccounts, 250);
+    return () => clearTimeout(timer);
+  }, [accountQuery, accountRole, accountOffset]);
 
-  const handleUnlock = async (lock) => {
-    setUnlockMsg('');
-    setLocksError('');
+  const handleCreateOfficer = async (event) => {
+    event.preventDefault();
+    setOfficerMessage('');
+    if (officerForm.password !== officerForm.password_confirmation) {
+      setOfficerMessage(lang === 'bn' ? 'দুটি পাসওয়ার্ড মিলছে না।' : 'Passwords do not match.');
+      return;
+    }
     try {
-      await api.adminUnlockDeedSearch({
-        subject_type: lock.subject_type,
-        subject_key: lock.subject_key
-      });
-      setUnlockMsg(lang === 'bn' ? 'লক সফলভাবে অপসারণ করা হয়েছে।' : 'Lock cleared successfully.');
-      await fetchLocks();
-    } catch (err) {
-      setLocksError(err?.message || (lang === 'bn' ? 'লক অপসারণ করা যায়নি।' : 'Could not clear the lock.'));
+      await api.createOfficer(officerForm);
+      setOfficerMessage(lang === 'bn' ? 'কর্মকর্তার অ্যাকাউন্ট তৈরি হয়েছে।' : 'Officer account created.');
+      setOfficerForm({ name: '', username: '', email: '', phone: '', nid: '', password: '', password_confirmation: '' });
+      fetchAccounts();
+    } catch (error) {
+      setOfficerMessage(error.message);
     }
   };
 
-  const describeSubject = (lock) => {
-    const key = String(lock.subject_key || '');
-    if (lock.subject_type === 'user') {
-      return lang === 'bn' ? `ব্যবহারকারী #${key}` : `User #${key}`;
-    }
-    if (lock.subject_type === 'session') {
-      return lang === 'bn' ? `সেশন ${key.slice(0, 8)}…` : `Session ${key.slice(0, 8)}…`;
-    }
-    return lang === 'bn' ? `আইপি হ্যাশ ${key.slice(0, 10)}…` : `IP hash ${key.slice(0, 10)}…`;
-  };
-
-  const formatRemaining = (seconds) => {
-    const total = Math.max(0, Number(seconds) || 0);
-    const hours = Math.floor(total / 3600);
-    const minutes = Math.floor((total % 3600) / 60);
-    if (lang === 'bn') return `${hours} ঘণ্টা ${minutes} মিনিট`;
-    return `${hours}h ${minutes}m`;
-  };
-
-  const handleReset = async () => {
-    if (!window.confirm(lang === 'bn' ? "আপনি কি সমস্ত ডেটা রিসেট করতে চান?" : "Are you sure you want to reset demo database?")) return;
-    setResetting(true);
-    setMsg('');
+  const fetchDataPage = async () => {
+    setDataLoading(true);
     try {
-      await api.resetSeedData();
-      setMsg(lang === 'bn' ? 'ডাটাবেজ সফলভাবে রিসেট ও সিডিং সম্পন্ন হয়েছে!' : 'Database reset and seeded successfully!');
-      await fetchStats();
-      if (onResetSuccess) onResetSuccess();
-    } catch (err) {
-      alert(err.message);
+      setDataPage(await api.listAdminData(dataset, { q: dataQuery, limit: 25, offset: dataOffset }));
+    } catch (error) {
+      setOfficerMessage(error.message);
     } finally {
-      setResetting(false);
+      setDataLoading(false);
     }
   };
+
+  useEffect(() => {
+    const timer = setTimeout(fetchDataPage, 250);
+    return () => clearTimeout(timer);
+  }, [dataset, dataQuery, dataOffset]);
 
   const handleRunBenchmark = async () => {
     setBenchmarking(true);
@@ -116,8 +112,8 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
         title={lang === 'bn' ? 'সিস্টেম অ্যাডমিনিস্ট্রেটর কন্ট্রোল প্যানেল' : 'Admin Operations & System Health'}
         subtitle={
           lang === 'bn'
-            ? 'ডেটাবেজ সিডিং, ডেমো রিসেট, রোল ম্যানেজমেন্ট ও সিস্টেম নির্ভরযোগ্যতা মনিটরিং।'
-            : 'Database seeding, demo resets, role management, and system health.'
+            ? 'সিস্টেম পরিসংখ্যান এবং সেবার অবস্থা পর্যবেক্ষণ।'
+            : 'Platform statistics, account management, and system health.'
         }
         icon={ShieldAlert}
         badge={lang === 'bn' ? 'অ্যাডমিন প্যানেল' : 'Admin Operations'}
@@ -130,37 +126,8 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
         fallbackTab="dashboard"
       />
 
-      {msg && (
-        <div className="p-3.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 text-xs font-semibold flex items-center gap-2">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-          <span>{msg}</span>
-        </div>
-      )}
-
-      {/* Control Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="gov-card p-6 space-y-4 md:col-span-2">
-          <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2">
-            <Database className="w-4 h-4 text-[#0b462d] dark:text-emerald-400" />
-            <span>{lang === 'bn' ? 'ডেটাবেজ রিসেট ও ফ্রেশ ডেমো সিডিং' : 'Database Reset & Clean Seeding'}</span>
-          </h3>
-          <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
-            {lang === 'bn'
-              ? 'সিস্টেমের সমস্ত পূর্ববর্তী টেস্ট রেকর্ড ও আবেদন মুছে দিয়ে প্রারম্ভিক ডেটাসেট (ম্যাচিং দলিল, গরমিল দলিল, একাধিকবার বিক্রি, নামজারি রেকর্ড) পুনরায় লোড করুন।'
-              : 'Reset database to clean initial state with pre-seeded demonstration records.'}
-          </p>
-
-          <button
-            onClick={handleReset}
-            disabled={resetting}
-            className="gov-btn-gold text-xs py-2.5 px-5 flex items-center gap-2 font-bold shadow"
-          >
-            <RotateCcw className={`w-4 h-4 ${resetting ? 'animate-spin' : ''}`} />
-            <span>{resetting ? (lang === 'bn' ? 'রিসেট হচ্ছে...' : 'Resetting...') : (lang === 'bn' ? 'সম্পূর্ণ ডেটাবেজ রিসেট ও সিড করুন' : 'Reset & Re-Seed Database')}</span>
-          </button>
-        </div>
-
-        <div className="gov-card p-6 space-y-4">
+      <div className="grid grid-cols-1 gap-6">
+        <div data-scroll-reveal className="gov-card p-6 space-y-4">
           <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2">
             <Users className="w-4 h-4 text-blue-600" />
             <span>{lang === 'bn' ? 'সিস্টেম স্ট্যাটাস' : 'System Status'}</span>
@@ -168,15 +135,11 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
           <div className="space-y-2 text-xs">
             <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
               <span className="text-gray-500">API Backend:</span>
-              <strong className="text-emerald-600">FastAPI 0.143</strong>
+              <strong className={stats ? 'text-emerald-600' : 'text-rose-600'}>{stats ? 'FastAPI online' : 'Unavailable'}</strong>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
               <span className="text-gray-500">Database:</span>
-              <strong className="text-emerald-600">PostgreSQL (psycopg 3)</strong>
-            </div>
-            <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-              <span className="text-gray-500">ML Engine:</span>
-              <strong className="text-emerald-600">Isolation Forest (Active)</strong>
+              <strong className={stats ? 'text-emerald-600' : 'text-rose-600'}>{stats ? 'PostgreSQL connected' : 'Unavailable'}</strong>
             </div>
             <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
               <span className="text-gray-500">C++ Native Core:</span>
@@ -184,107 +147,78 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
                 {engineInfo?.cpp_accelerated ? "Active (GCC 14.2)" : "Fallback Mode"}
               </strong>
             </div>
-            <div className="flex justify-between py-1 border-b border-gray-100 dark:border-gray-800">
-              <span className="text-gray-500">OCR Parser:</span>
-              <strong className="text-emerald-600">pypdf & Regex Active</strong>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* Deed-number search protection monitoring */}
-      <div className="gov-card p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <h3 className="font-bold text-sm text-gray-900 dark:text-white flex items-center gap-2">
-              <Lock className="w-4 h-4 text-rose-600" />
-              <span>{lang === 'bn' ? 'দলিল অনুসন্ধান লক মনিটরিং' : 'Deed Search Lock Monitoring'}</span>
-            </h3>
-            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
-              {lang === 'bn'
-                ? 'পরপর ৭ বার ভুল দলিল নম্বরের পর ৫ ঘণ্টার সুরক্ষা লক। লক অপসারণ অডিট লগে রেকর্ড হয়।'
-                : '5-hour protection lock after 7 consecutive invalid deed numbers. Unlocks are written to the audit log.'}
-            </p>
+      <section className="gov-card p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-bold text-sm text-gray-900 dark:text-white">{lang === 'bn' ? 'ব্যবহারকারী ব্যবস্থাপনা' : 'User Management'}</h2>
+          <div className="flex flex-wrap gap-2">
+            <label className="relative">
+              <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-gray-400" />
+              <Input className="gov-input pl-8 text-xs" value={accountQuery} onChange={(e) => { setAccountQuery(e.target.value); setAccountOffset(0); }} placeholder={lang === 'bn' ? 'নাম, ইউজারনেম বা ইমেইল খুঁজুন' : 'Search name, username, or email'} />
+            </label>
+            <Input as="select" className="gov-input text-xs" value={accountRole} onChange={(e) => { setAccountRole(e.target.value); setAccountOffset(0); }}>
+              <option value="all">{lang === 'bn' ? 'সব ভূমিকা' : 'All roles'}</option>
+              <option value="citizen">Citizen</option><option value="officer">Officer</option><option value="admin">Admin</option>
+            </Input>
           </div>
-          <button
-            type="button"
-            onClick={fetchLocks}
-            disabled={locksLoading}
-            className="gov-btn-secondary text-xs py-2 px-3 flex items-center gap-1.5 flex-shrink-0"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${locksLoading ? 'animate-spin' : ''}`} />
-            <span>{lang === 'bn' ? 'রিফ্রেশ' : 'Refresh'}</span>
-          </button>
         </div>
+        {officerMessage && <p role="status" className="text-xs text-emerald-700">{officerMessage}</p>}
+        <form onSubmit={handleCreateOfficer} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2 p-3 rounded-lg bg-slate-50 dark:bg-slate-900">
+          <Input className="gov-input text-xs" placeholder={lang === 'bn' ? 'কর্মকর্তার নাম' : 'Officer name'} value={officerForm.name} onChange={(e) => setOfficerForm({ ...officerForm, name: e.target.value })} required />
+          <Input className="gov-input text-xs" placeholder="Username" minLength={4} maxLength={30} pattern="[A-Za-z0-9_.]{4,30}" value={officerForm.username} onChange={(e) => setOfficerForm({ ...officerForm, username: e.target.value })} required />
+          <Input className="gov-input text-xs" type="email" placeholder="Email" value={officerForm.email} onChange={(e) => setOfficerForm({ ...officerForm, email: e.target.value })} required />
+          <Input className="gov-input text-xs" placeholder={lang === 'bn' ? 'মোবাইল' : 'Phone'} value={officerForm.phone} onChange={(e) => setOfficerForm({ ...officerForm, phone: e.target.value })} required />
+          <Input className="gov-input text-xs" placeholder="NID" value={officerForm.nid} onChange={(e) => setOfficerForm({ ...officerForm, nid: e.target.value })} required />
+          <Input className="gov-input text-xs" type="password" minLength={8} placeholder={lang === 'bn' ? 'অস্থায়ী পাসওয়ার্ড (৮+ অক্ষর)' : 'Temporary password (8+)'} value={officerForm.password} onChange={(e) => setOfficerForm({ ...officerForm, password: e.target.value })} required />
+          <Input className="gov-input text-xs" type="password" minLength={8} placeholder={lang === 'bn' ? 'পাসওয়ার্ড নিশ্চিত করুন' : 'Confirm password'} value={officerForm.password_confirmation} onChange={(e) => setOfficerForm({ ...officerForm, password_confirmation: e.target.value })} required />
+          <Button className="gov-btn-primary text-xs" type="submit">{lang === 'bn' ? 'কর্মকর্তা তৈরি' : 'Create officer'}</Button>
+        </form>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead><tr className="border-b dark:border-slate-700 text-gray-500"><th className="p-2">ID</th><th className="p-2">{lang === 'bn' ? 'নাম' : 'Name'}</th><th className="p-2">Username</th><th className="p-2">Email</th><th className="p-2">{lang === 'bn' ? 'মোবাইল' : 'Phone'}</th><th className="p-2">Role</th><th className="p-2">Created</th></tr></thead>
+            <tbody>{accounts.map((account) => <tr key={account.id} className="border-b dark:border-slate-800"><td className="p-2">{account.id}</td><td className="p-2">{account.name}</td><td className="p-2">{account.username}</td><td className="p-2">{account.email}</td><td className="p-2">{account.phone}</td><td className="p-2">{account.role}</td><td className="p-2">{account.created_at?.slice(0, 10)}</td></tr>)}
+              {!accountLoading && accounts.length === 0 && <tr><td colSpan="7" className="p-4 text-center text-gray-500">{lang === 'bn' ? 'কোনো ব্যবহারকারী পাওয়া যায়নি।' : 'No users found.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end items-center gap-3 text-xs"><span>{accountTotal ? `${accountOffset + 1}–${Math.min(accountOffset + accounts.length, accountTotal)} / ${accountTotal}` : '0'}</span>
+          <Button className="gov-btn-secondary" disabled={accountOffset === 0 || accountLoading} onClick={() => setAccountOffset(Math.max(0, accountOffset - 25))}>{lang === 'bn' ? 'আগে' : 'Previous'}</Button>
+          <Button className="gov-btn-secondary" disabled={accountOffset + 25 >= accountTotal || accountLoading} onClick={() => setAccountOffset(accountOffset + 25)}>{lang === 'bn' ? 'পরে' : 'Next'}</Button>
+        </div>
+      </section>
 
-        {locksError && (
-          <div className="p-3 rounded-lg bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-[11px] text-rose-700 dark:text-rose-300">
-            {locksError}
+      <section className="gov-card p-5 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-bold text-sm text-gray-900 dark:text-white">{lang === 'bn' ? 'PostgreSQL ডেটা ওভারভিউ' : 'PostgreSQL Data Overview'}</h2>
+          <div className="flex gap-2">
+            <Input as="select" className="gov-input text-xs" value={dataset} onChange={(e) => { setDataset(e.target.value); setDataOffset(0); }}>
+              <option value="applications">Applications</option><option value="properties">Properties</option>
+              <option value="deeds">Deeds</option><option value="verifications">Verifications</option>
+              <option value="due-diligence">Due diligence</option><option value="notifications">Notifications</option>
+              <option value="audit-logs">Audit logs</option><option value="records">Records</option>
+            </Input>
+            <Input className="gov-input text-xs" value={dataQuery} onChange={(e) => { setDataQuery(e.target.value); setDataOffset(0); }} placeholder={lang === 'bn' ? 'খুঁজুন' : 'Search records'} />
           </div>
-        )}
-
-        {unlockMsg && (
-          <div className="p-3 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-900/60 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{unlockMsg}</span>
-          </div>
-        )}
-
-        {locksLoading && locks.length === 0 ? (
-          <div className="flex items-center gap-2 text-xs text-gray-500 py-4">
-            <RefreshCw className="w-4 h-4 animate-spin" />
-            <span>{lang === 'bn' ? 'লোড হচ্ছে...' : 'Loading...'}</span>
-          </div>
-        ) : locks.length === 0 ? (
-          <p className="text-xs text-gray-500 dark:text-gray-400 py-2">
-            {lang === 'bn' ? 'বর্তমানে কোনো লক রেকর্ড নেই।' : 'No lock records at the moment.'}
-          </p>
-        ) : (
-          <ul className="divide-y divide-gray-100 dark:divide-gray-800 border border-gray-100 dark:border-gray-800 rounded-lg overflow-hidden">
-            {locks.map((lock) => (
-              <li key={`${lock.subject_type}-${lock.subject_key}`} className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div className="min-w-0 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-bold text-gray-900 dark:text-white break-all">{describeSubject(lock)}</span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${lock.is_active ? 'bg-rose-100 text-rose-700 dark:bg-rose-950 dark:text-rose-300' : 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400'}`}>
-                      {lock.is_active ? (lang === 'bn' ? 'সক্রিয় লক' : 'Active lock') : (lang === 'bn' ? 'নিষ্ক্রিয়' : 'Inactive')}
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-gray-500 dark:text-gray-400">
-                    <span>
-                      {lang === 'bn' ? 'ব্যর্থ চেষ্টা:' : 'Failures:'} <strong>{lock.consecutive_failures}</strong>
-                    </span>
-                    {lock.is_active && (
-                      <span className="flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {formatRemaining(lock.remaining_seconds)}
-                      </span>
-                    )}
-                    {lock.updated_at && (
-                      <span className="truncate max-w-[220px]">
-                        {lang === 'bn' ? 'সর্বশেষ:' : 'Updated:'} {String(lock.updated_at).replace('T', ' ').slice(0, 16)}
-                      </span>
-                    )}
-                  </div>
-                </div>
-                {lock.is_active && (
-                  <button
-                    type="button"
-                    onClick={() => handleUnlock(lock)}
-                    className="gov-btn-secondary text-[11px] py-1.5 px-3 flex items-center gap-1.5 flex-shrink-0 border-rose-200 dark:border-rose-900/60 text-rose-700 dark:text-rose-300"
-                  >
-                    <Unlock className="w-3.5 h-3.5" />
-                    <span>{lang === 'bn' ? 'লক অপসারণ' : 'Clear lock'}</span>
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs text-left">
+            <thead><tr className="border-b dark:border-slate-700 text-gray-500">{Object.keys(dataPage.items?.[0] || {}).map((key) => <th className="p-2 whitespace-nowrap" key={key}>{key}</th>)}</tr></thead>
+            <tbody>{(dataPage.items || []).map((row, index) => <tr key={row.id ?? index} className="border-b dark:border-slate-800">{Object.keys(dataPage.items?.[0] || row).map((key) => <td className="p-2 max-w-64 truncate" title={String(row[key] ?? '')} key={key}>{String(row[key] ?? '')}</td>)}</tr>)}
+              {!dataLoading && !(dataPage.items || []).length && <tr><td className="p-4 text-center text-gray-500">{lang === 'bn' ? 'কোনো রেকর্ড পাওয়া যায়নি।' : 'No records found.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="flex justify-end items-center gap-3 text-xs"><span>{dataPage.total ? `${dataOffset + 1}–${Math.min(dataOffset + (dataPage.items?.length || 0), dataPage.total)} / ${dataPage.total}` : '0'}</span>
+          <Button className="gov-btn-secondary" disabled={!dataOffset || dataLoading} onClick={() => setDataOffset(Math.max(0, dataOffset - 25))}>{lang === 'bn' ? 'আগে' : 'Previous'}</Button>
+          <Button className="gov-btn-secondary" disabled={dataOffset + 25 >= dataPage.total || dataLoading} onClick={() => setDataOffset(dataOffset + 25)}>{lang === 'bn' ? 'পরে' : 'Next'}</Button>
+        </div>
+      </section>
 
       {/* C++ Native Acceleration & Benchmark Card */}
-      <div className="gov-card p-6 space-y-5 border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30 dark:from-gray-900 dark:via-gray-900 dark:to-emerald-950/20">
+      <div data-scroll-reveal className="gov-card p-6 space-y-5 border-2 border-emerald-500/20 bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/30 dark:from-gray-900 dark:via-gray-900 dark:to-emerald-950/20">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-200 mb-2">
@@ -302,14 +236,14 @@ export default function AdminDashboard({ onResetSuccess, setActiveTab, navigateB
             </p>
           </div>
 
-          <button
+          <Button
             onClick={handleRunBenchmark}
             disabled={benchmarking}
             className="gov-btn-primary text-xs py-2.5 px-5 flex items-center gap-2 font-bold whitespace-nowrap shadow-md hover:shadow-lg transition-all"
           >
             <Activity className={`w-4 h-4 ${benchmarking ? 'animate-spin' : ''}`} />
             <span>{benchmarking ? (lang === 'bn' ? 'পরীক্ষা চলছে...' : 'Benchmarking...') : (lang === 'bn' ? 'লাইভ স্পিড টেস্ট চালান' : 'Run Live Speed Benchmark')}</span>
-          </button>
+          </Button>
         </div>
 
         {benchData && (

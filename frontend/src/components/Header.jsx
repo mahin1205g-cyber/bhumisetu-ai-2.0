@@ -1,3 +1,5 @@
+import Input from './Input';
+import Button from './Button';
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -7,6 +9,12 @@ import {
   AlertTriangle, Info, Check, ChevronDown, PhoneCall, Zap, X, ArrowRight,
   Home, LayoutDashboard, FileCheck2, GitBranchPlus
 } from 'lucide-react';
+
+const PROFILE_ROLE_LABELS = {
+  admin: { bn: 'অ্যাডমিন', en: 'Admin' },
+  officer: { bn: 'কর্মকর্তা / কর্মী', en: 'Officer / Worker' },
+  citizen: { bn: 'নাগরিক', en: 'Citizen' },
+};
 
 export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelectedTracking }) {
   const {
@@ -25,6 +33,9 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
   const [showSearchResults, setShowSearchResults] = useState(false);
   const [searchMetrics, setSearchMetrics] = useState(null);
   const searchRef = useRef(null);
+  const profileName = String(user?.name ?? '').trim() || String(user?.username ?? '').trim();
+  const profileInitial = Array.from(profileName)[0]?.toLocaleUpperCase() || 'U';
+  const profileRole = PROFILE_ROLE_LABELS[user?.role]?.[lang] || user?.role || '';
 
   // Close search dropdown when clicking outside
   useEffect(() => {
@@ -98,18 +109,16 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
     (id === 'mutation' && activeTab === 'mutation-track');
 
   return (
-    <header className="sticky top-0 z-40 select-none bg-transparent px-2.5 sm:px-4 pt-2.5 sm:pt-3 pb-1 transition-colors duration-200">
-      <div className="gov-container">
-        <div className="glass-nav px-2 sm:px-3.5 py-2 sm:py-2.5">
-          {/* 1. Government helper strip (desktop) */}
-          <div className="hidden md:flex items-center justify-between text-[10.5px] text-[#54706A] dark:text-[#9FB8AE] px-1 pb-1.5 mb-1.5 border-b border-white/45 dark:border-white/[0.06]">
-            <div className="w-full flex items-center justify-between gap-3">
+    <header className="sticky top-0 z-40 w-full select-none bg-white/95 dark:bg-[#0C1210]/95 backdrop-blur-md border-b border-[#E2E8F0] dark:border-[#1E2E28] shadow-xs transition-colors duration-200">
+      {/* 1. Government helper strip (desktop) */}
+      <div className="hidden md:block bg-[#F7FAF8]/90 dark:bg-[#111A16]/90 border-b border-[#E2E8F0]/70 dark:border-[#1E2E28]/70 py-1 text-[11px] text-[#54706A] dark:text-[#9FB8AE]">
+        <div className="gov-container flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-semibold text-[#17212B] dark:text-[#F8FAF9]">
               {lang === 'bn' ? 'গণপ্রজাতন্ত্রী বাংলাদেশ সরকার' : "Government of the People's Republic of Bangladesh"}
             </span>
-            <span className="hidden md:inline text-slate-300 dark:text-slate-700">•</span>
-            <span className="hidden md:inline text-slate-500 dark:text-slate-400">
+            <span className="text-slate-300 dark:text-slate-700">•</span>
+            <span className="text-slate-500 dark:text-slate-400">
               {lang === 'bn' ? 'ডিজিটাল ভূমি প্রযুক্তি ও নাগরিক সেবা প্ল্যাটফর্ম' : 'Digital Land Technology Platform'}
             </span>
           </div>
@@ -119,10 +128,10 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
               href="tel:16122"
               className="flex items-center gap-1.5 font-bold text-[#047857] dark:text-emerald-400 hover:text-[#065F46] transition"
             >
-              <PhoneCall className="w-3 h-3 text-[#047857] dark:text-emerald-400" />
+              <PhoneCall className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400" />
               <span>{lang === 'bn' ? 'ভূমি সেবা কল সেন্টার:' : 'Helpline:'} 16122</span>
             </a>
-            <span className="hidden sm:inline bg-[#D1FAE5] dark:bg-[#064E3B] text-[#047857] dark:text-emerald-300 text-[10px] px-1.5 py-0.2 rounded font-semibold border border-[#A7F3D0] dark:border-emerald-800">
+            <span className="bg-[#D1FAE5] dark:bg-[#064E3B] text-[#047857] dark:text-emerald-300 text-[10px] px-1.5 py-0.5 rounded font-semibold border border-[#A7F3D0] dark:border-emerald-800">
               ২৪/৭
             </span>
           </div>
@@ -130,12 +139,12 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
       </div>
 
       {/* 2. Main Navigation Row */}
-      <div className="text-[#17212B] dark:text-[#F8FAF9]">
-        <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+      <div className="py-2 sm:py-2.5">
+        <div className="gov-container flex flex-wrap items-center justify-between gap-2 sm:gap-3">
           {/* Left: Hamburger Slide-Window Button + Bhumisetu Brand Logo */}
           <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
             {/* Hamburger Button */}
-            <button
+            <Button
               onClick={onOpenDrawer}
               className="glass-control flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[#17212B] dark:text-[#F8FAF9] focus:outline-none"
               title="Open Navigation Menu"
@@ -144,7 +153,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
               <span className="text-xs font-semibold hidden sm:inline">
                 {lang === 'bn' ? 'সকল সেবা' : 'All Services'}
               </span>
-            </button>
+            </Button>
 
             {/* Brand Logo & Bhumisetu Identity */}
             <div
@@ -174,7 +183,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
             <div ref={searchRef} className="relative min-w-0 order-last basis-full w-full xl:order-none xl:w-auto xl:basis-0 xl:grow xl:max-w-xl xl:mx-1">
               <form onSubmit={handleSearch} className="glass-search flex items-center rounded-xl overflow-hidden">
                 {/* Category Dropdown */}
-                <select
+                <Input as="select"
                   value={searchCategory}
                   onChange={(e) => setSearchCategory(e.target.value)}
                   className="bg-transparent hover:bg-white/45 dark:hover:bg-white/5 text-gray-700 dark:text-gray-300 text-xs font-medium px-2.5 py-2 border-r border-white/50 dark:border-white/10 outline-none cursor-pointer hidden md:block"
@@ -184,11 +193,11 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                   <option value="plot">{lang === 'bn' ? 'দাগ / প্লট' : 'Plots'}</option>
                   <option value="khatian">{lang === 'bn' ? 'খতিয়ান' : 'Khatian'}</option>
                   <option value="tracking">{lang === 'bn' ? 'নামজারি' : 'Tracking'}</option>
-                </select>
+                </Input>
 
                 {/* Instant Search Input */}
                 <div className="relative flex-1 min-w-0">
-                  <input
+                  <Input
                     type="text"
                     value={searchQuery}
                     onChange={(e) => {
@@ -211,7 +220,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                     className="w-full py-2 px-3 bg-transparent text-[#17212B] dark:text-[#F8FAF9] text-xs outline-none placeholder:text-gray-400 font-medium"
                   />
                   {searchQuery && (
-                    <button
+                    <Button
                       type="button"
                       onClick={() => {
                         setSearchQuery('');
@@ -220,18 +229,18 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                       className="absolute right-2 top-2.5 text-gray-400 hover:text-gray-600"
                     >
                       <X className="w-3.5 h-3.5" />
-                    </button>
+                    </Button>
                   )}
                 </div>
 
                 {/* Search Button */}
-                <button
+                <Button
                   type="submit"
                   className="glass-primary bg-[#047857] hover:bg-[#065F46] text-white px-3 sm:px-4 py-2 transition flex items-center justify-center font-bold flex-shrink-0"
                   title="Search using O(log N) Binary Search Algorithm"
                 >
                   <Search className={`w-4 h-4 ${isSearching ? 'animate-spin' : ''}`} />
-                </button>
+                </Button>
               </form>
 
               {/* Live Binary Search Dropdown Results */}
@@ -289,7 +298,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
           {/* Right Controls: Language, Theme, Notifications, Profile */}
           <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
             {/* Language Switcher */}
-            <button
+            <Button
               onClick={toggleLang}
               className="glass-control flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl text-xs font-semibold text-[#17212B] dark:text-[#F8FAF9]"
               title="Toggle Language"
@@ -297,10 +306,10 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
             >
               <Globe className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400" />
               <span className="hidden sm:inline">{lang === 'bn' ? 'English' : 'বাংলা'}</span>
-            </button>
+            </Button>
 
             {/* Dark Mode Toggle */}
-            <button
+            <Button
               onClick={toggleTheme}
               className="glass-control p-1.5 rounded-xl text-gray-700 dark:text-gray-300"
               title="Toggle Dark / Light Mode"
@@ -310,11 +319,11 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
               ) : (
                 <Moon className="w-4 h-4 text-gray-600" />
               )}
-            </button>
+            </Button>
 
             {/* Notifications Dropdown */}
             <div className="relative hidden sm:block">
-              <button
+              <Button
                 onClick={() => setShowNotifs(!showNotifs)}
                 className="glass-control p-1.5 rounded-xl text-gray-700 dark:text-gray-300 relative"
                 title="Notifications"
@@ -325,7 +334,7 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                     {unreadCount}
                   </span>
                 )}
-              </button>
+              </Button>
 
               {showNotifs && (
                 <div className="glass-popover absolute right-0 mt-2 w-80 sm:w-96 rounded-xl p-3 z-50 text-gray-900 dark:text-gray-100">
@@ -380,63 +389,68 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
                     className="glass-control flex items-center gap-2 pl-2 pr-2.5 py-1 rounded-xl cursor-pointer select-none"
                   >
                     <div className="w-6 h-6 rounded-full bg-[#047857] text-white font-bold text-xs flex items-center justify-center shadow-xs">
-                      {user.role === 'admin' ? 'M' : (user.name ? user.name[0] : 'U')}
+                      {profileInitial}
                     </div>
                     <div className="text-left hidden lg:block leading-tight">
                       <div className="text-[10px] text-gray-500 dark:text-gray-400">
-                        {lang === 'bn' ? 'ব্যবহারকারী' : 'User'}
+                        {profileRole}
                       </div>
                       <div className="text-xs font-bold text-[#17212B] dark:text-white max-w-[110px] truncate">
-                        {user.role === 'admin' ? 'অ্যাডমিন' : user.role === 'officer' ? 'এসি ল্যান্ড' : 'নাগরিক'}
+                        {profileName || (lang === 'bn' ? 'ব্যবহারকারী' : 'User')}
                       </div>
                     </div>
                     <ChevronDown className="w-3 h-3 text-gray-400" />
                   </div>
                 ) : (
-                  <button
+                  <Button
                     onClick={() => setActiveTab('login')}
                     className="gov-btn-primary glass-primary text-xs py-1.5 px-3.5 shadow-xs"
                   >
                     <User className="w-3.5 h-3.5" />
                     <span>{t('navLogin')}</span>
-                  </button>
+                  </Button>
                 )}
 
                 {showUserMenu && user && (
                   <div className="glass-popover absolute right-0 mt-2 w-56 rounded-xl p-2 z-50 text-gray-900 dark:text-gray-100">
                     <div className="p-2 border-b border-[#E2E8F0] dark:border-[#1E2E28]">
-                      <div className="font-bold text-xs truncate">{user.role === 'admin' ? '' : user.name}</div>
-                      <div className="text-[11px] text-gray-500 truncate">{user.email}</div>
-                      <div className="text-[10px] text-[#047857] dark:text-emerald-400 font-semibold mt-0.5">
-                        {user.designation || user.role}
+                      <div className="font-bold text-xs truncate" title={profileName}>{profileName || (lang === 'bn' ? 'ব্যবহারকারী' : 'User')}</div>
+                      {user.email && <div className="text-[11px] text-gray-500 truncate" title={user.email}>{user.email}</div>}
+                      {user.username && (
+                        <div className="text-[10px] text-gray-500 dark:text-gray-400 truncate mt-0.5">
+                          {lang === 'bn' ? 'ইউজারনেম' : 'Username'}: {user.username}
+                        </div>
+                      )}
+                      <div className="text-[10px] text-[#047857] dark:text-emerald-400 font-semibold mt-1">
+                        {lang === 'bn' ? 'ভূমিকা' : 'Role'}: {profileRole}
                       </div>
                     </div>
 
                     <div className="py-1">
-                      <button
+                      <Button
                         onClick={() => { setActiveTab('profile'); setShowUserMenu(false); }}
                         className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-[#F7FAF8] dark:hover:bg-[#192722] rounded flex items-center gap-2"
                       >
                         <User className="w-3.5 h-3.5 text-gray-500" />
                         <span>{t('navProfile')}</span>
-                      </button>
-                      <button
+                      </Button>
+                      <Button
                         onClick={() => { setActiveTab('dashboard'); setShowUserMenu(false); }}
                         className="w-full text-left px-2.5 py-1.5 text-xs hover:bg-[#F7FAF8] dark:hover:bg-[#192722] rounded flex items-center gap-2"
                       >
                         <Shield className="w-3.5 h-3.5 text-gray-500" />
                         <span>{t('navDashboard')}</span>
-                      </button>
+                      </Button>
                     </div>
 
                     <div className="pt-1 border-t border-[#E2E8F0] dark:border-[#1E2E28]">
-                      <button
+                      <Button
                         onClick={() => { logoutUser(); setShowUserMenu(false); setActiveTab('login'); }}
                         className="w-full text-left px-2.5 py-1.5 text-xs text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded flex items-center gap-2 font-medium"
                       >
                         <LogOut className="w-3.5 h-3.5" />
                         <span>{t('navLogout')}</span>
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 )}
@@ -445,15 +459,17 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
 
           </div>
         </div>
+      </div>
 
-        {/* 3. Desktop quick navigation */}
-        <div className="hidden xl:flex items-center justify-between gap-3 mt-2 pt-2 border-t border-white/45 dark:border-white/[0.06]">
+      {/* 3. Desktop quick navigation */}
+      <div className="hidden xl:block border-t border-[#E2E8F0]/70 dark:border-[#1E2E28]/70 py-1.5 bg-[#FAFDFB]/60 dark:bg-[#0E1713]/60">
+        <div className="gov-container flex items-center justify-between gap-3">
           <nav
             aria-label={lang === 'bn' ? 'প্রধান নেভিগেশন' : 'Primary navigation'}
             className="flex items-center gap-1"
           >
             {navItems.map(({ id, label, icon: Icon }) => (
-              <button
+              <Button
                 key={id}
                 type="button"
                 onClick={() => setActiveTab(id)}
@@ -462,17 +478,15 @@ export default function Header({ activeTab, setActiveTab, onOpenDrawer, setSelec
               >
                 <Icon className="w-3.5 h-3.5" aria-hidden="true" />
                 <span>{label}</span>
-              </button>
+              </Button>
             ))}
           </nav>
 
-          <span className="hidden xl:inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#33544A] dark:text-[#A7C4B8]">
+          <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold text-[#33544A] dark:text-[#A7C4B8]">
             <Shield className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400" aria-hidden="true" />
             <span>{lang === 'bn' ? 'নিরাপদ ও যাচাইকৃত ভূমি সেবা' : 'Secure, verified land services'}</span>
           </span>
         </div>
-      </div>
-      </div>
       </div>
     </header>
   );

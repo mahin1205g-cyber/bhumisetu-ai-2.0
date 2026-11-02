@@ -142,8 +142,7 @@ cd backend && uvicorn main:app --reload --port 8000
 - **ফ্রন্টএন্ড:** Root Directory = `frontend`, env:
   `VITE_API_URL=https://<backend-domain>/api`।
 
-> Vercel-এ SQLite ব্যবহার করা যায় না (ফাইলসিস্টেম read-only) — `DATABASE_URL`
-> (Neon/Postgres) সবসময় লাগবে।
+> Backend uses PostgreSQL through `DATABASE_URL` (Neon/Postgres); it does not use SQLite.
 
 ### ৪. যাচাই (Verify)
 
@@ -196,13 +195,23 @@ curl http://127.0.0.1:8000/api/chat/status
 - প্রজেক্টের মূল বিজনেস লজিক, স্কিমা ডিজাইন, হ্যাকাথন সমস্যা সমাধান আর্কিটেকচার এবং ভূমি পরিভাষা সম্পূর্ণ দলের নিজস্ব গবেষণার ফসল।
 
 
-## 👥 মূল্যায়নের জন্য প্রাক-কনফিগারকৃত ডেমো অ্যাকাউন্টস (Evaluation Accounts)
+## অ্যাকাউন্ট সেটআপ
 
-| রোল | নাম | ইমেইল | পাসওয়ার্ড | পদবি / বিবরণ |
-|---|---|---|---|---|
-| **👤 নাগরিক (Citizen)** | মোঃ রফিকুল ইসলাম | `citizen@landguard.gov.bd` | `demo123` | সাধারণ নাগরিক ও জমি ক্রেতা |
-| **🏛️ কর্মকর্তা (Officer)** | বেগম ফরিদা পারভীন | `officer@landguard.gov.bd` | `demo123` | সহকারী কমিশনার (ভূমি) / AC Land |
-| **⚙️ অ্যাডমিন (Admin)** | মোঃ বায়েজিদ (Bayazid) | `admin@landguard.gov.bd` | `demo123` | প্রধান সিস্টেম অ্যাডমিনিস্ট্রেটর |
+নিরাপত্তার জন্য কোনো ডিফল্ট ডেমো পাসওয়ার্ড নেই। নাগরিকরা নিবন্ধন ফর্ম থেকে অ্যাকাউন্ট খুলবেন। কর্মকর্তা অ্যাকাউন্ট তৈরিতে অ্যাডমিন ড্যাশবোর্ড ব্যবহার করুন; প্রাথমিক অ্যাডমিন অ্যাকাউন্ট trusted server shell থেকে তৈরি করুন:
+
+```powershell
+python backend/bootstrap_user.py --role admin
+```
+
+স্ক্রিপ্টটি বিদ্যমান PostgreSQL ব্যবহার করে এবং কোনো পুরোনো রেকর্ড মুছে না।
+
+## Password recovery
+
+Forgot-password recovery checks the registered mobile number and NID against PostgreSQL, then allows a password reset without an OTP. Twilio credentials are not required. A stable `JWT_SECRET` (at least 32 characters) is required to protect recovery tokens. **Security note:** anyone who knows a user's registered phone number and NID may reset that account's password; use this only if that risk is acceptable for your deployment.
+
+## Usernames and registration migration
+
+Registration uses an 8-character minimum password and a required case-insensitive unique username. On startup, PostgreSQL adds a username column and assigns existing accounts `user_<id>` usernames without deleting account data. These generated usernames are visible in the profile and admin user list. The migration adds unique indexes for usernames and normalized, non-empty NIDs; if legacy NIDs conflict after normalization, startup stops with a migration error so the records can be reviewed without automatic edits.
 
 ---
 
@@ -218,7 +227,7 @@ curl http://127.0.0.1:8000/api/chat/status
 
 ### ব্যাকএন্ড (Backend)
 - **ফ্রেমওয়ার্ক:** FastAPI 0.143 (Python 3.13)
-- **ডেটাবেজ:** SQLite 3 (B-Tree indexed search O(log N) — ১০০-৫০০ মিলিয়ন ডেটায় সাব-মিলিমিলেসেকেন্ড অনুসন্ধান)
+- **ডেটাবেজ:** PostgreSQL (parameterized queries and indexed search)
 - **পাসওয়ার্ড সিকিউরিটি:** PBKDF2-HMAC-SHA256 (১,০০,০০০ ইটারেশন ও সল্ট)
 - **অ্যানোমালি ইঞ্জিন:** Scikit-learn (Isolation Forest) + Transparent Rule Engine
 

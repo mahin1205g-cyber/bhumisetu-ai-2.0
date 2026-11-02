@@ -1,3 +1,4 @@
+import Button from './Button';
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import BhumiSathiLogo from './BhumiSathiLogo';
@@ -40,34 +41,34 @@ export default function Footer({ setActiveTab }) {
             </h4>
             <ul className="space-y-1.5 text-[#64748B] dark:text-gray-400">
               <li>
-                <button onClick={() => setActiveTab('deed-search')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
+                <Button onClick={() => setActiveTab('deed-search')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
                   • {lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number'}
-                </button>
+                </Button>
               </li>
               <li>
-                <button onClick={() => setActiveTab('deed-verify')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
+                <Button onClick={() => setActiveTab('deed-verify')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
                   • {t('navDeedVerify')}
-                </button>
+                </Button>
               </li>
               <li>
-                <button onClick={() => setActiveTab('mutation')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
+                <Button onClick={() => setActiveTab('mutation')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
                   • {t('navMutation')}
-                </button>
+                </Button>
               </li>
               <li>
-                <button onClick={() => setActiveTab('due-diligence')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
+                <Button onClick={() => setActiveTab('due-diligence')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
                   • {t('navDueDiligence')}
-                </button>
+                </Button>
               </li>
               <li>
-                <button onClick={() => setActiveTab('properties')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
+                <Button onClick={() => setActiveTab('properties')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
                   • {t('navProperties')}
-                </button>
+                </Button>
               </li>
               <li>
-                <button onClick={() => setActiveTab('audit-logs')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
+                <Button onClick={() => setActiveTab('audit-logs')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition">
                   • {t('navAudit')}
-                </button>
+                </Button>
               </li>
             </ul>
           </div>
@@ -79,16 +80,16 @@ export default function Footer({ setActiveTab }) {
             </h4>
             <ul className="space-y-1.5 text-[#64748B] dark:text-gray-400">
               <li>
-                <button onClick={() => setActiveTab('help')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition flex items-center gap-1">
+                <Button onClick={() => setActiveTab('help')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition flex items-center gap-1">
                   <HelpCircle className="w-3 h-3 text-[#F5B544]" />
                   <span>{t('navHelp')}</span>
-                </button>
+                </Button>
               </li>
               <li>
-                <button onClick={() => setActiveTab('disclaimer')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition flex items-center gap-1">
+                <Button onClick={() => setActiveTab('disclaimer')} className="hover:text-[#047857] dark:hover:text-emerald-300 transition flex items-center gap-1">
                   <FileText className="w-3 h-3 text-[#047857]" />
                   <span>{t('navDisclaimer')}</span>
-                </button>
+                </Button>
               </li>
               <li>
                 <a href="https://land.gov.bd" target="_blank" rel="noopener noreferrer" className="hover:text-[#047857] dark:hover:text-emerald-300 transition flex items-center gap-1">

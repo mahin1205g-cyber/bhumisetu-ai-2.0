@@ -1,3 +1,4 @@
+import Button from '../components/Button';
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import PageHeader from '../components/PageHeader';
@@ -36,7 +37,7 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
 
           <div className="space-y-1">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-              {user?.role === 'admin' ? 'Md Bayazid Hossain' : (user?.name || 'ব্যবহারকারী')}
+              {user?.name || (lang === 'bn' ? 'ব্যবহারকারী' : 'User')}
             </h2>
             <div className="flex items-center gap-2">
               <span className="text-xs font-semibold px-2.5 py-0.5 rounded-full bg-[#fef9e7] text-[#c59b27] border border-[#c59b27]/30 dark:bg-amber-950/40 dark:text-amber-300">
@@ -51,13 +52,27 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
           <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 space-y-1">
             <span className="text-gray-500 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-emerald-600" />
+              {lang === 'bn' ? 'ইউজারনেম' : 'Username'}
+            </span>
+            <strong className="text-gray-900 dark:text-white block font-mono">{user?.username || '—'}</strong>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 space-y-1">
+            <span className="text-gray-500 flex items-center gap-1.5">
+              <User className="w-3.5 h-3.5 text-emerald-600" />
+              {lang === 'bn' ? 'ইউজারনেম' : 'Username'}
+            </span>
+            <strong className="text-gray-900 dark:text-white block font-mono">{user?.username || '—'}</strong>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 space-y-1">
+            <span className="text-gray-500 flex items-center gap-1.5">
               <Mail className="w-3.5 h-3.5 text-emerald-600" />
               {lang === 'bn' ? 'ইমেইল ঠিকানা' : 'Email Address'}
             </span>
             <strong className="text-gray-900 dark:text-white block font-mono">
-              {user?.role === 'admin' 
-                ? (user?.email && user.email !== 'admin@bhumisetu.gov.bd' && user.email !== 'admin@bhumisathi.gov.bd' && user.email !== 'admin@landguard.gov.bd' ? user.email : 'dbscbayazid111@gmail.com') 
-                : (user?.email || 'citizen@bhumisetu.gov.bd')}
+              {user?.email || '—'}
             </strong>
           </div>
 
@@ -67,9 +82,7 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
               {lang === 'bn' ? 'মোবাইল নম্বর' : 'Phone Number'}
             </span>
             <strong className="text-gray-900 dark:text-white block font-mono">
-              {user?.role === 'admin' 
-                ? (user?.phone && user.phone !== '০১৭১১০০২২৩৩' && user.phone !== '01711002233' ? user.phone : '01645241040') 
-                : (user?.phone || '01711002233')}
+              {user?.phone || '—'}
             </strong>
           </div>
 
@@ -78,7 +91,7 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
               <CreditCard className="w-3.5 h-3.5 text-purple-600" />
               {t('nid')}
             </span>
-            <strong className="text-gray-900 dark:text-white block font-mono">{user?.nid || '19902692518000123'}</strong>
+            <strong className="text-gray-900 dark:text-white block font-mono">{user?.nid || '—'}</strong>
           </div>
 
           <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 space-y-1">
@@ -97,21 +110,21 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
           </h3>
 
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <Button
               onClick={toggleLang}
               className="gov-btn-secondary text-xs py-2 px-4 flex items-center gap-2"
             >
               <Globe className="w-4 h-4 text-[#c59b27]" />
               <span>{lang === 'bn' ? 'ভাষা: বাংলা (English-এ পরিবর্তন করুন)' : 'Language: English (Switch to বাংলা)'}</span>
-            </button>
+            </Button>
 
-            <button
+            <Button
               onClick={toggleTheme}
               className="gov-btn-secondary text-xs py-2 px-4 flex items-center gap-2"
             >
               {theme === 'dark' ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-emerald-600" />}
               <span>{theme === 'dark' ? (lang === 'bn' ? 'লাইট মোড অন করুন' : 'Switch to Light Mode') : (lang === 'bn' ? 'ডার্ক মোড অন করুন' : 'Switch to Dark Mode')}</span>
-            </button>
+            </Button>
           </div>
         </div>
       </div>

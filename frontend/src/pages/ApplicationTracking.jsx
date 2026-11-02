@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -145,7 +147,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
         <form onSubmit={handleSearch} className="flex gap-2">
           <div className="relative flex-1">
             <Search className="w-4 h-4 absolute left-3 top-3 text-gray-400" />
-            <input
+            <Input
               type="text"
               value={trackingNo}
               onChange={(e) => setTrackingNo(e.target.value)}
@@ -154,10 +156,10 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
               required
             />
           </div>
-          <button type="submit" disabled={loading} className="gov-btn-primary text-xs px-5 font-bold flex items-center gap-1.5">
+          <Button type="submit" disabled={loading} className="gov-btn-primary text-xs px-5 font-bold flex items-center gap-1.5">
             {loading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Search className="w-3.5 h-3.5" />}
             <span>{t('btnTrack')}</span>
-          </button>
+          </Button>
         </form>
 
         <div className="flex flex-wrap items-center gap-2 pt-1 text-xs text-gray-500">
@@ -167,7 +169,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
             { id: 'MUT-2026-CTG-1904', label: lang === 'bn' ? 'অনুমোদিত (Approved)' : 'Approved' },
             { id: 'MUT-2026-DHK-9012', label: lang === 'bn' ? 'সংশোধন প্রয়োজন (Correction Notice)' : 'Correction Notice' }
           ].map(p => (
-            <button
+            <Button
               key={p.id}
               type="button"
               onClick={() => {
@@ -177,7 +179,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
               className="px-2.5 py-1 rounded-lg bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 font-mono text-[11px] transition"
             >
               {p.id} ({p.label})
-            </button>
+            </Button>
           ))}
         </div>
       </div>
@@ -318,7 +320,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                     <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                       {lang === 'bn' ? 'আবেদনকারীর যোগাযোগ নম্বর' : 'Applicant Phone'}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       value={correctionPhone}
                       onChange={(e) => setCorrectionPhone(e.target.value)}
@@ -330,7 +332,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                     <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                       {lang === 'bn' ? 'বর্তমান যোগাযোগের ঠিকানা' : 'Contact Address'}
                     </label>
-                    <input
+                    <Input
                       type="text"
                       value={correctionAddress}
                       onChange={(e) => setCorrectionAddress(e.target.value)}
@@ -349,32 +351,32 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                     {attachedDocs.map((doc, idx) => (
                       <span key={idx} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-700 text-gray-800 dark:text-gray-200 text-[11px] font-medium shadow-sm">
                         <span>✓ {doc}</span>
-                        <button
+                        <Button
                           type="button"
                           onClick={() => handleRemoveDocument(doc)}
                           className="text-gray-400 hover:text-rose-500 font-bold ml-1"
                         >
                           ×
-                        </button>
+                        </Button>
                       </span>
                     ))}
                   </div>
 
                   <div className="flex gap-2">
-                    <input
+                    <Input
                       type="text"
                       value={newDocName}
                       onChange={(e) => setNewDocName(e.target.value)}
                       placeholder={lang === 'bn' ? 'যেমন: বায়া দলিল নং-D-4091 এর স্পষ্ট কপি' : 'e.g. Clear Baya Deed Copy'}
                       className="gov-input text-xs"
                     />
-                    <button
+                    <Button
                       type="button"
                       onClick={handleAddDocument}
                       className="gov-btn-secondary text-xs px-3 flex-shrink-0"
                     >
                       {lang === 'bn' ? 'ফাইল যোগ করুন' : 'Add File'}
-                    </button>
+                    </Button>
                   </div>
                 </div>
 
@@ -383,7 +385,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                   <label className="block font-semibold text-gray-700 dark:text-gray-300 mb-1">
                     {lang === 'bn' ? 'সংশোধনের বিবরণ ও ব্যাখ্যা' : 'Applicant Explanation / Notes'} *
                   </label>
-                  <textarea
+                  <Input as="textarea"
                     rows="3"
                     value={correctionNotes}
                     onChange={(e) => setCorrectionNotes(e.target.value)}
@@ -394,7 +396,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                 </div>
 
                 <div className="flex justify-end pt-1">
-                  <button
+                  <Button
                     type="submit"
                     disabled={resubmitting}
                     className="gov-btn-primary text-xs py-2 px-5 font-bold shadow-md flex items-center gap-2"
@@ -410,7 +412,7 @@ export default function ApplicationTracking({ initialTrackingNo, setActiveTab, n
                         <span>{lang === 'bn' ? 'সংশোধিত তথ্য দাখিল করুন (Resubmit)' : 'Resubmit Corrections'}</span>
                       </>
                     )}
-                  </button>
+                  </Button>
                 </div>
               </form>
             </div>

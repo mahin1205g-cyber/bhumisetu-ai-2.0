@@ -1,3 +1,4 @@
+import Button from './Button';
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { ArrowLeft, ChevronRight, Home, Shield, Sparkles } from 'lucide-react';
@@ -46,7 +47,7 @@ export default function PageHeader({
       <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-slate-200/80 dark:border-slate-800/80">
         <div className="flex items-center gap-2.5">
           {/* Universal Back Button */}
-          <button
+          <Button
             type="button"
             onClick={handleBack}
             className="group inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 hover:border-emerald-500/50 hover:bg-emerald-50/50 dark:hover:bg-emerald-950/20 hover:text-emerald-700 dark:hover:text-emerald-300 shadow-xs transition-all duration-150 focus:outline-none focus:ring-2 focus:ring-emerald-500/30 active:scale-95"
@@ -55,28 +56,28 @@ export default function PageHeader({
           >
             <ArrowLeft className="w-3.5 h-3.5 transition-transform duration-150 group-hover:-translate-x-0.5" />
             <span>{lang === 'bn' ? 'পেছনে' : 'Back'}</span>
-          </button>
+          </Button>
 
           {/* Breadcrumb Hierarchy */}
           <nav aria-label="Breadcrumb" className="hidden sm:flex items-center text-xs text-slate-500 dark:text-slate-400">
-            <button
+            <Button
               onClick={() => setActiveTab && setActiveTab('home')}
               className="inline-flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
               <Home className="w-3.5 h-3.5" />
               <span>{lang === 'bn' ? 'মূল পাতা' : 'Home'}</span>
-            </button>
+            </Button>
 
             {breadcrumbs.map((crumb, idx) => (
               <React.Fragment key={idx}>
                 <ChevronRight className="w-3 h-3 mx-1 text-slate-400" />
                 {crumb.tab && setActiveTab ? (
-                  <button
+                  <Button
                     onClick={() => setActiveTab(crumb.tab)}
                     className="hover:text-slate-900 dark:hover:text-white transition-colors truncate max-w-[140px]"
                   >
                     {crumb.label}
-                  </button>
+                  </Button>
                 ) : (
                   <span className="text-slate-700 dark:text-slate-200 font-medium truncate max-w-[160px]">
                     {crumb.label}

@@ -1,3 +1,5 @@
+import Input from '../components/Input';
+import Button from '../components/Button';
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
@@ -176,32 +178,32 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
           <span className="text-[11px] text-gray-500">{lang === 'bn' ? 'সরাসরি পূরণ' : '1-Click Auto Fill'}</span>
         </div>
         <div className="flex flex-wrap gap-2 pt-1">
-          <button
+          <Button
             type="button"
             onClick={() => loadScenario('clean')}
             className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition shadow-sm flex items-center gap-1.5"
           >
             <CheckCircle2 className="w-3 h-3 text-emerald-600" />
             <span>{lang === 'bn' ? 'দৃশ্যকল্প ১: নিষ্কণ্টক জমি (Low Risk)' : 'Scenario 1: Clean Title (Low)'}</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
             onClick={() => loadScenario('duplicate')}
             className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-rose-300 dark:border-rose-800 text-xs font-semibold text-rose-800 dark:text-rose-300 hover:bg-rose-100 transition shadow-sm flex items-center gap-1.5"
           >
             <ShieldAlert className="w-3 h-3 text-rose-600" />
             <span>{lang === 'bn' ? 'দৃশ্যকল্প ২: একাধিকবার বিক্রি ও মামলা (High Risk)' : 'Scenario 2: Duplicate Sale & Dispute (High)'}</span>
-          </button>
+          </Button>
 
-          <button
+          <Button
             type="button"
             onClick={() => loadScenario('acquired')}
             className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-purple-300 dark:border-purple-800 text-xs font-semibold text-purple-800 dark:text-purple-300 hover:bg-purple-100 transition shadow-sm flex items-center gap-1.5"
           >
             <AlertTriangle className="w-3 h-3 text-purple-600" />
             <span>{lang === 'bn' ? 'দৃশ্যকল্প ৩: সরকারি অধিগ্রহণাধীন জমি (Acquired)' : 'Scenario 3: Govt Acquisition'}</span>
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -225,7 +227,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {t('sellerName')} <span className="text-rose-500">*</span>
                 </label>
-                <input
+                <Input
                   type="text"
                   name="seller_name"
                   value={form.seller_name}
@@ -240,7 +242,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'বিক্রেতার এনআইডি (ঐচ্ছিক)' : 'Seller NID (Optional)'}
                 </label>
-                <input
+                <Input
                   type="text"
                   name="seller_nid"
                   value={form.seller_nid}
@@ -261,48 +263,48 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('district')}</label>
-                <select name="district" value={form.district} onChange={handleChange} className="gov-select">
+                <Input as="select" name="district" value={form.district} onChange={handleChange} className="gov-select">
                   <option value="ঢাকা">ঢাকা (Dhaka)</option>
                   <option value="চট্টগ্রাম">চট্টগ্রাম (Chattogram)</option>
                   <option value="রাজশাহী">রাজশাহী (Rajshahi)</option>
                   <option value="সিলেট">সিলেট (Sylhet)</option>
-                </select>
+                </Input>
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('upazila')}</label>
-                <input type="text" name="upazila" value={form.upazila} onChange={handleChange} className="gov-input" />
+                <Input type="text" name="upazila" value={form.upazila} onChange={handleChange} className="gov-input" />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('mouza')}</label>
-                <input type="text" name="mouza" value={form.mouza} onChange={handleChange} className="gov-input" required />
+                <Input type="text" name="mouza" value={form.mouza} onChange={handleChange} className="gov-input" required />
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('plotNo')} *</label>
-                <input type="text" name="plot_no" value={form.plot_no} onChange={handleChange} placeholder="DHK-MIR-001" className="gov-input" required />
+                <Input type="text" name="plot_no" value={form.plot_no} onChange={handleChange} placeholder="DHK-MIR-001" className="gov-input" required />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('khatianNo')}</label>
-                <input type="text" name="khatian_no" value={form.khatian_no} onChange={handleChange} placeholder="BS-1045" className="gov-input" />
+                <Input type="text" name="khatian_no" value={form.khatian_no} onChange={handleChange} placeholder="BS-1045" className="gov-input" />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'খতিয়ানের মোট জমি' : 'Recorded Area'}
                 </label>
-                <input type="number" step="0.01" name="recorded_area" value={form.recorded_area} onChange={handleChange} className="gov-input" />
+                <Input type="number" step="0.01" name="recorded_area" value={form.recorded_area} onChange={handleChange} className="gov-input" />
               </div>
 
               <div>
                 <label className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                   {lang === 'bn' ? 'বিক্রির প্রস্তাবিত পরিমাণ' : 'Proposed Sale Area'} *
                 </label>
-                <input type="number" step="0.01" name="proposed_area" value={form.proposed_area} onChange={handleChange} className="gov-input" required />
+                <Input type="number" step="0.01" name="proposed_area" value={form.proposed_area} onChange={handleChange} className="gov-input" required />
               </div>
             </div>
           </div>
@@ -349,7 +351,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
               </span>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
-              <input
+              <Input
                 type="checkbox"
                 name="has_court_dispute"
                 checked={form.has_court_dispute}
@@ -360,7 +362,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
             </label>
           </div>
 
-          <button
+          <Button
             type="submit"
             disabled={loading}
             className="w-full gov-btn-gold justify-center text-xs py-3 font-bold shadow-md"
@@ -376,7 +378,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
                 <span>{lang === 'bn' ? 'প্রাক-ক্রয় ঝুঁকি বিশ্লেষণ করুন (Generate Due Diligence Report)' : 'Assess Land Purchase Risk'}</span>
               </>
             )}
-          </button>
+          </Button>
         </form>
       </div>
     </div>

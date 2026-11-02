@@ -1,3 +1,4 @@
+import Button from '../components/Button';
 import React from 'react';
 import { useApp } from '../context/AppContext';
 import { AlertCircle, Home, ArrowLeft } from 'lucide-react';
@@ -26,21 +27,21 @@ export default function NotFoundPage({ setActiveTab, navigateBack }) {
       </div>
 
       <div className="flex items-center justify-center gap-3 pt-2">
-        <button
+        <Button
           onClick={() => navigateBack ? navigateBack('dashboard') : setActiveTab('dashboard')}
           className="gov-btn-primary text-xs py-2 px-4 flex items-center gap-1.5"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span>{lang === 'bn' ? 'পেছনে যান' : 'Go Back'}</span>
-        </button>
+        </Button>
 
-        <button
+        <Button
           onClick={() => setActiveTab('home')}
           className="gov-btn-secondary text-xs py-2 px-4 flex items-center gap-1.5"
         >
           <Home className="w-3.5 h-3.5" />
           <span>{t('navHome')}</span>
-        </button>
+        </Button>
       </div>
     </div>
   );

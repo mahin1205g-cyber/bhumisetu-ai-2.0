@@ -101,42 +101,28 @@ export const api = {
       body: { identifier, password },
     }),
 
-  loginWithOTP: (destination, code) =>
-    request("/auth/login-otp", {
-      method: "POST",
-      body: { destination, code },
-    }),
-
-  sendOTP: (destination, purpose = "login") =>
-    request("/auth/send-otp", {
-      method: "POST",
-      body: { destination, purpose },
-    }),
-
-  verifyOTP: (destination, code) =>
-    request("/auth/verify-otp", {
-      method: "POST",
-      body: { destination, code },
-    }),
-
   register: (data) =>
     request("/auth/register", {
       method: "POST",
       body: data,
     }),
 
-  getMe: (userId) =>
-    request(`/auth/me${userId ? `?user_id=${encode(userId)}` : ""}`),
+  checkUsernameAvailability: (username) =>
+    request(`/auth/username-availability?username=${encode(username)}`),
 
-  getDemoUsers: () => request("/auth/demo-users"),
+  startPasswordRecovery: (data) =>
+    request("/auth/recovery/start", { method: "POST", body: data }),
+
+  recoverUsername: (data) =>
+    request("/auth/recovery/username", { method: "POST", body: data }),
+
+  resetPassword: (data) =>
+    request("/auth/recovery/reset", { method: "POST", body: data }),
+
+  getMe: () => request("/auth/me"),
 
   // Dashboard and seed
   getDashboardStats: () => request("/dashboard/stats"),
-
-  resetSeedData: () =>
-    request("/seed", {
-      method: "POST",
-    }),
 
   // P2: Deed verification
   verifyDeed: (data, userId) =>
@@ -183,6 +169,15 @@ export const api = {
       method: "POST",
       body: data,
     }),
+
+  listAdminUsers: ({ q = "", role = "all", limit = 25, offset = 0 } = {}) =>
+    request(`/admin/users?q=${encode(q)}&role=${encode(role)}&limit=${encode(limit)}&offset=${encode(offset)}`),
+
+  createOfficer: (data) =>
+    request("/admin/officers", { method: "POST", body: data }),
+
+  listAdminData: (dataset, { q = "", limit = 25, offset = 0 } = {}) =>
+    request(`/admin/data/${encode(dataset)}?q=${encode(q)}&limit=${encode(limit)}&offset=${encode(offset)}`),
 
   // P4: E-Namjari / mutation
   applyMutation: (data, userId) =>
