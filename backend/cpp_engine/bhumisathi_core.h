@@ -11,48 +11,35 @@ extern "C" {
   #define BHUMI_EXPORT __attribute__((visibility("default")))
 #endif
 
-/**
- * @brief Returns the version and build details of the C++ Core Engine.
- */
 BHUMI_EXPORT const char* bhumi_version();
 
-/**
- * @brief Computes UTF-8 aware Levenshtein distance & similarity score (0.0 to 100.0).
- * Handles Bengali unicode characters and English strings.
+/* Returns a normalized UTF-8 Levenshtein similarity from 0 to 100.
+ * Empty or invalid inputs return 0; this is a similarity signal, not identity proof.
  */
 BHUMI_EXPORT double bhumi_fuzzy_match(const char* s1, const char* s2);
 
-/**
- * @brief Detects ownership cycles (cartel loops, A -> B -> C -> A),
- * double-sales, and rapid flip anomalies on a directed ownership transfer graph.
- * @param transfers_json JSON array of transfers: [{"seller": "...", "buyer": "...", "plot_id": "...", "sale_date": "...", "deed_no": "..."}]
- * @return JSON string containing detected anomalies, risk score, and execution time in microseconds.
+/* Analyze only transfers with a stable parcel_id or complete location + plot key.
+ * The legacy entry point uses a documented 30-day rapid-transfer window.
  */
 BHUMI_EXPORT const char* bhumi_detect_fraud_graph(const char* transfers_json);
+BHUMI_EXPORT const char* bhumi_detect_fraud_graph_with_options(
+    const char* transfers_json, int rapid_transfer_window_days);
 
-/**
- * @brief Fast memory-indexed O(log N) binary search across land records.
- * @param records_json JSON array of records to search within.
- * @param query Search query string (plot_id, khatian_no, deed_no, mouza).
- * @param limit Maximum results to return.
- * @return JSON string of matching records with microsecond timing.
+/* Linear scan over supplied records; never claims index or O(log N) behavior.
+ * Searchable keys: plot_id, khatian_no, deed_no, mouza.
  */
-BHUMI_EXPORT const char* bhumi_fast_search(const char* records_json, const char* query, int limit);
+BHUMI_EXPORT const char* bhumi_fast_search(
+    const char* records_json, const char* query, int limit);
 
-/**
- * @brief Runs an intense algorithmic benchmark in C++ and returns throughput and timing stats.
- * @param num_operations Number of iterations to execute.
- * @return JSON string with benchmark metrics.
- */
+/* Repeated fuzzy matching benchmark. This measures algorithm work only. */
+BHUMI_EXPORT const char* bhumi_run_fuzzy_benchmark(int num_operations);
 BHUMI_EXPORT const char* bhumi_run_benchmark(int num_operations);
 
-/**
- * @brief Safely frees memory of strings returned by C++ functions.
- */
+/* Free every allocated string returned by this library. */
 BHUMI_EXPORT void bhumi_free_string(char* ptr);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // BHUMISATHI_CORE_H
+#endif  // BHUMISATHI_CORE_H

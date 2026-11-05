@@ -66,7 +66,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
       // Clean low-risk parcel: DHK-MIR-002 owned by মোহাম্মদ রফিক
       setForm({
         seller_name: 'মোহাম্মদ রফিক',
-        seller_nid: '19852692518000777',
+        seller_nid: '',
         deed_no: 'D-8492',
         reg_year: 2023,
         district: 'ঢাকা',
@@ -88,7 +88,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
       // High-risk duplicate sale: Karim Hossain selling DHK-MIR-001 again
       setForm({
         seller_name: 'করিম হোসেন',
-        seller_nid: '19752692518000111',
+        seller_nid: '',
         deed_no: 'D-1002',
         reg_year: 2025,
         district: 'ঢাকা',
@@ -105,7 +105,7 @@ export default function DueDiligence({ setActiveTab, setDueDiligenceResult, navi
       // Acquired parcel: DHK-DHN-005
       setForm({
         seller_name: 'সোহরাব আলী',
-        seller_nid: '19702692518000333',
+        seller_nid: '',
         deed_no: 'D-3301',
         reg_year: 2024,
         district: 'ঢাকা',

@@ -82,7 +82,7 @@ export default function UserProfile({ setActiveTab, navigateBack }) {
               <CreditCard className="w-3.5 h-3.5 text-purple-600" />
               {t('nid')}
             </span>
-            <strong className="text-gray-900 dark:text-white block font-mono">{user?.nid || '—'}</strong>
+            <strong className="text-gray-900 dark:text-white block font-mono">{user?.nid_masked || '—'}</strong>
           </div>
 
           <div className="p-3.5 rounded-xl bg-gray-50 dark:bg-gray-800/40 border border-gray-200 dark:border-gray-700 space-y-1">

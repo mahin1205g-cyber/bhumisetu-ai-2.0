@@ -6,6 +6,8 @@ httpx
 pytest
 python-multipart
 pypdf
+PyMuPDF>=1.24.0
+PyTesseract>=0.3.10
 python-dotenv
 Pillow>=10.0.0
 psycopg[binary]

@@ -104,6 +104,8 @@ export default function App() {
   const [activeTab, setActiveTabState] = useState(getTabFromHash);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [verificationResult, setVerificationResult] = useState(null);
+  const [verificationDraft, setVerificationDraft] = useState(null);
+  const [deedSearchPrefill, setDeedSearchPrefill] = useState('');
   const [dueDiligenceResult, setDueDiligenceResult] = useState(null);
   const [selectedTracking, setSelectedTracking] = useState('');
 
@@ -152,6 +154,26 @@ export default function App() {
       // If direct deep link or no previous history, safely route to fallback
       navigate(fallbackTab, { replace: true });
     }
+  }, [navigate]);
+
+  const openDeedSearch = useCallback((deedNo = '', draft = null) => {
+    if (draft) setVerificationDraft(draft);
+    setDeedSearchPrefill(String(deedNo || ''));
+    navigate('deed-search');
+  }, [navigate]);
+
+  const selectDeedForVerification = useCallback((deed) => {
+    if (!deed?.id || !deed?.deed_no) return;
+    setVerificationDraft((previous) => ({
+      ...(previous || {}),
+      formData: { ...(previous?.formData || {}), deed_no: deed.deed_no },
+      selectedDeedId: deed.id,
+      selectedDeed: deed,
+      lookupState: 'DEED_FOUND',
+      lookupCandidates: [],
+    }));
+    setDeedSearchPrefill('');
+    navigate('deed-verify');
   }, [navigate]);
 
   // Backward compatibility wrapper
@@ -228,6 +250,9 @@ export default function App() {
             navigate={navigate}
             navigateBack={navigateBack}
             setVerificationResult={setVerificationResult}
+            verificationDraft={verificationDraft}
+            setVerificationDraft={setVerificationDraft}
+            onFindDeed={openDeedSearch}
           />
         );
       case 'deed-search':
@@ -235,6 +260,8 @@ export default function App() {
           <DeedSearch
             setActiveTab={setActiveTab}
             navigateBack={navigateBack}
+            initialDeedNo={deedSearchPrefill}
+            onSelectDeed={selectDeedForVerification}
           />
         );
       case 'verification-result':
@@ -244,6 +271,7 @@ export default function App() {
             setActiveTab={setActiveTab}
             navigate={navigate}
             navigateBack={navigateBack}
+            onFindDeed={(deedNo) => openDeedSearch(deedNo)}
           />
         );
       case 'mutation':
@@ -286,6 +314,7 @@ export default function App() {
         return (
           <DueDiligenceReport
             result={dueDiligenceResult}
+            verificationResult={verificationResult}
             setActiveTab={setActiveTab}
             navigate={navigate}
             navigateBack={navigateBack}

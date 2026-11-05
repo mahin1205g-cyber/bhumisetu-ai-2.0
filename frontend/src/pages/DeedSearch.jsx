@@ -14,8 +14,8 @@ import {
 const EMPTY_FILTERS = {
   district: '',
   upazila: '',
-  sub_registry_office: '',
   reg_year: '',
+  deed_type: '',
   seller_name: '',
   buyer_name: '',
   mouza: '',
@@ -60,9 +60,20 @@ function formatArea(value, lang) {
   return lang === 'bn' ? `${toBnDigits(numeric)} শতক` : `${numeric} decimal`;
 }
 
-function DeedCard({ deed, lang, onDetail, index = 0 }) {
+function getDeedTypeLabel(code, deedTypes, lang) {
+  if (!code) return null;
+  const normalize = (value) => String(value || '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+  const selected = normalize(code);
+  const item = (deedTypes || []).find((type) => (
+    [type.code, type.name_bn, type.name_en].some((alias) => normalize(alias) === selected)
+  ));
+  return item ? (lang === 'bn' ? item.name_bn : item.name_en) : code;
+}
+
+function DeedCard({ deed, lang, onDetail, onSelect, index = 0, deedTypes = [] }) {
   const area = formatArea(deed.area, lang);
   const facts = [
+    { label: lang === 'bn' ? 'দলিলের ধরন' : 'Deed Type', value: getDeedTypeLabel(deed.deed_type, deedTypes, lang), icon: FileText },
     { label: lang === 'bn' ? 'সাব-রেজিস্ট্রি অফিস' : 'Sub-registry Office', value: deed.sub_registry_office, icon: Building2 },
     { label: lang === 'bn' ? 'জেলা' : 'District', value: deed.district, icon: MapPin },
     { label: lang === 'bn' ? 'উপজেলা' : 'Upazila', value: deed.upazila, icon: MapPin },
@@ -95,14 +106,26 @@ function DeedCard({ deed, lang, onDetail, index = 0 }) {
           </p>
         </div>
 
-        <Button
-          type="button"
-          onClick={() => onDetail(deed.id)}
-          className="gov-btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
-        >
-          <Eye className="w-3.5 h-3.5" />
-          <span>{lang === 'bn' ? 'বিস্তারিত দেখুন' : 'View details'}</span>
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            onClick={() => onDetail(deed.id)}
+            className="gov-btn-secondary text-xs py-1.5 px-3 flex-shrink-0"
+          >
+            <Eye className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'বিস্তারিত দেখুন' : 'View details'}</span>
+          </Button>
+          {onSelect && (
+            <Button
+              type="button"
+              onClick={() => onSelect(deed)}
+              className="gov-btn-primary text-xs py-1.5 px-3 flex-shrink-0"
+            >
+              <CheckCircle2 className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'এই দলিল যাচাই করুন' : 'Verify this deed'}</span>
+            </Button>
+          )}
+        </div>
       </div>
 
       <dl className="grid grid-cols-1 min-[360px]:grid-cols-2 lg:grid-cols-4 gap-x-4 gap-y-3">
@@ -177,11 +200,11 @@ function CardSkeleton() {
   );
 }
 
-export default function DeedSearch({ setActiveTab, navigateBack }) {
+export default function DeedSearch({ setActiveTab, navigateBack, initialDeedNo = '', onSelectDeed }) {
   const { lang } = useApp();
   const bn = lang === 'bn';
 
-  const [numberQuery, setNumberQuery] = useState('');
+  const [numberQuery, setNumberQuery] = useState(String(initialDeedNo || ''));
   const [numberError, setNumberError] = useState('');
   const [numberResult, setNumberResult] = useState(null);
   const [numberLoading, setNumberLoading] = useState(false);
@@ -192,6 +215,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
   const [advancedResult, setAdvancedResult] = useState(null);
   const [advancedLoading, setAdvancedLoading] = useState(false);
   const [advancedError, setAdvancedError] = useState('');
+  const [deedTypes, setDeedTypes] = useState([]);
 
   const [protection, setProtection] = useState(null);
   const [countdown, setCountdown] = useState(0);
@@ -206,6 +230,75 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
   const resultRef = useRef(null);
 
   const locked = Boolean(protection?.locked);
+  const isAdvancedNoMatch = advancedResult?.found === false;
+  const reportedUnmatchedFields = Array.isArray(advancedResult?.unmatched_fields)
+    ? advancedResult.unmatched_fields
+    : [];
+  const advancedWarningFieldKeys = isAdvancedNoMatch
+    ? (reportedUnmatchedFields.length ? reportedUnmatchedFields : Object.keys(appliedFilters || {}))
+    : [];
+  const activeAdvancedWarningFields = advancedWarningFieldKeys.filter((key) => (
+    String(filters[key] ?? '').trim()
+    && String(filters[key]) === String(appliedFilters?.[key] ?? '')
+  ));
+  const advancedWarningLabels = {
+    district: bn ? 'জেলা' : 'District',
+    upazila: bn ? 'উপজেলা' : 'Upazila',
+    reg_year: bn ? 'দলিলের সাল' : 'Registration year',
+    deed_type: bn ? 'দলিলের ধরন' : 'Deed type',
+    seller_name: bn ? 'বিক্রেতার নাম' : 'Seller name',
+    buyer_name: bn ? 'ক্রেতার নাম' : 'Buyer name',
+    mouza: bn ? 'মৌজার নাম' : 'Mouza name',
+    plot_id: bn ? 'দাগ নম্বর' : 'Dag number',
+    khatian_no: bn ? 'খতিয়ান নম্বর' : 'Khatian number',
+  };
+  const advancedFieldHasWarning = (key) => activeAdvancedWarningFields.includes(key);
+  const advancedWarningValue = (key) => key === 'deed_type'
+    ? (getDeedTypeLabel(appliedFilters?.[key], deedTypes, lang) || appliedFilters?.[key])
+    : appliedFilters?.[key];
+  const advancedFieldWarningId = (key) => `advanced-field-warning-${key}`;
+  const advancedFieldClass = (key, baseClass) => (
+    advancedFieldHasWarning(key)
+      ? `${baseClass} !border-amber-500 !ring-1 !ring-amber-300/70`
+      : baseClass
+  );
+  const advancedFieldLabel = (key, label) => (
+    <>
+      {label}
+      {advancedFieldHasWarning(key) && <AlertTriangle aria-hidden="true" className="ml-1 inline h-3.5 w-3.5 text-amber-600" />}
+    </>
+  );
+  const advancedFieldWarning = (key) => advancedFieldHasWarning(key) && (
+    <p id={advancedFieldWarningId(key)} className="mt-1 text-[11px] font-medium text-amber-700 dark:text-amber-300" role="status">
+      {reportedUnmatchedFields.includes(key)
+        ? (bn ? 'এই মানে আলাদাভাবে কোনো রেকর্ড মেলেনি। সংশোধন করুন।' : 'No record matched this value by itself. Please correct it.')
+        : (bn ? 'এই মান অন্য ফিল্টারের সঙ্গে মিলে রেকর্ড দেয়নি। অন্য ফিল্টার যাচাই বা খালি করে দেখুন।' : 'This value did not match when combined with the other filters. Review or clear some filters.')}
+    </p>
+  );
+  const advancedFilterWarningMessage = reportedUnmatchedFields.length
+    ? (bn
+      ? 'চিহ্নিত ফিল্ডগুলোর দেওয়া মান আলাদাভাবে ডেটাবেজে মেলেনি। মান ঠিক করুন অথবা ফিল্টারটি খালি রেখে আবার খুঁজুন।'
+      : 'The marked values did not match any database record individually. Correct them or clear those filters and search again.')
+    : (bn
+      ? 'সব ফিল্টার একসাথে দিলে কোনো রেকর্ড মেলেনি। চিহ্নিত ফিল্ডগুলো যাচাই করুন অথবা কিছু ফিল্টার খালি রেখে আবার খুঁজুন।'
+      : 'No record matched all filters together. Review the marked fields or clear some filters and search again.');
+
+  useEffect(() => {
+    if (!initialDeedNo) return;
+    setNumberQuery(String(initialDeedNo));
+    setNumberError('');
+    setNumberResult(null);
+  }, [initialDeedNo]);
+
+  useEffect(() => {
+    let active = true;
+    api.getVerificationDeedTypes().then((response) => {
+      if (active) setDeedTypes(response.items || []);
+    }).catch(() => {
+      if (active) setDeedTypes([]);
+    });
+    return () => { active = false; };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -450,7 +543,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
         </div>
         <div className="grid grid-cols-1 gap-3">
           {result.results?.map((deed, index) => (
-            <DeedCard key={`${deed.id ?? deed.deed_no}-${index}`} deed={deed} lang={lang} onDetail={openDetail} index={index} />
+            <DeedCard key={`${deed.id ?? deed.deed_no}-${index}`} deed={deed} lang={lang} onDetail={openDetail} onSelect={onSelectDeed} index={index} deedTypes={deedTypes} />
           ))}
         </div>
       </div>
@@ -602,82 +695,99 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
           <form onSubmit={handleAdvancedSearch} className="space-y-4 pt-1" noValidate>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
               <div>
-                <label htmlFor="filter-district" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'জেলা' : 'District'}
+                <label htmlFor="filter-district" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('district') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('district', bn ? 'জেলা' : 'District')}
                 </label>
-                <Input as="select" id="filter-district" name="district" value={filters.district} onChange={updateFilter} className="gov-select" disabled={advancedLoading}>
+                <Input as="select" id="filter-district" name="district" value={filters.district} onChange={updateFilter} className={advancedFieldClass('district', 'gov-select')} aria-invalid={advancedFieldHasWarning('district')} aria-describedby={advancedFieldHasWarning('district') ? advancedFieldWarningId('district') : undefined} disabled={advancedLoading}>
                   <option value="">{bn ? 'সব জেলা' : 'All districts'}</option>
                   {DISTRICTS.map((district) => (
                     <option key={district} value={district}>{district}</option>
                   ))}
                 </Input>
+                {advancedFieldWarning('district')}
               </div>
 
               <div>
-                <label htmlFor="filter-upazila" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'উপজেলা' : 'Upazila'}
+                <label htmlFor="filter-upazila" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('upazila') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('upazila', bn ? 'উপজেলা' : 'Upazila')}
                 </label>
-                <Input id="filter-upazila" name="upazila" value={filters.upazila} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: মিরপুর' : 'e.g. Mirpur'} disabled={advancedLoading} />
+                <Input id="filter-upazila" name="upazila" value={filters.upazila} onChange={updateFilter} maxLength={120} className={advancedFieldClass('upazila', 'gov-input')} aria-invalid={advancedFieldHasWarning('upazila')} aria-describedby={advancedFieldHasWarning('upazila') ? advancedFieldWarningId('upazila') : undefined} placeholder={bn ? 'যেমন: মিরপুর' : 'e.g. Mirpur'} disabled={advancedLoading} />
+                {advancedFieldWarning('upazila')}
               </div>
 
               <div>
-                <label htmlFor="filter-sro" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'সাব-রেজিস্ট্রি অফিস' : 'Sub-registry office'}
+                <label htmlFor="filter-year" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('reg_year') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('reg_year', bn ? 'দলিলের সাল' : 'Registration year')}
                 </label>
-                <Input id="filter-sro" name="sub_registry_office" value={filters.sub_registry_office} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: মিরপুর সাব-রেজিস্ট্রি অফিস' : 'e.g. Mirpur SRO'} disabled={advancedLoading} />
+                <Input id="filter-year" name="reg_year" type="number" inputMode="numeric" min="1950" max={new Date().getFullYear()} value={filters.reg_year} onChange={updateFilter} className={advancedFieldClass('reg_year', 'gov-input')} aria-invalid={advancedFieldHasWarning('reg_year')} aria-describedby={advancedFieldHasWarning('reg_year') ? advancedFieldWarningId('reg_year') : undefined} placeholder="2025" disabled={advancedLoading} />
+                {advancedFieldWarning('reg_year')}
               </div>
 
               <div>
-                <label htmlFor="filter-year" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'দলিলের সাল' : 'Registration year'}
+                <label htmlFor="filter-deed-type" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('deed_type') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('deed_type', bn ? 'দলিলের ধরন' : 'Deed type')}
                 </label>
-                <Input id="filter-year" name="reg_year" type="number" inputMode="numeric" min="1950" max={new Date().getFullYear()} value={filters.reg_year} onChange={updateFilter} className="gov-input" placeholder="2025" disabled={advancedLoading} />
-              </div>
-
-              <div>
-                <label htmlFor="filter-deed-type" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'দলিলের ধরন' : 'Deed type'}
-                </label>
-                <Input as="select" id="filter-deed-type" className="gov-select opacity-70" disabled>
-                  <option>{bn ? 'এই ডেটাবেজে সংরক্ষিত নেই' : 'Not stored in this database'}</option>
+                <Input as="select" id="filter-deed-type" name="deed_type" value={filters.deed_type} onChange={updateFilter} className={advancedFieldClass('deed_type', 'gov-select')} aria-invalid={advancedFieldHasWarning('deed_type')} aria-describedby={advancedFieldHasWarning('deed_type') ? advancedFieldWarningId('deed_type') : undefined} disabled={advancedLoading}>
+                  <option value="">{bn ? 'সব ধরনের দলিল' : 'All deed types'}</option>
+                  {deedTypes.map((item) => (
+                    <option key={item.code} value={item.code}>{bn ? item.name_bn : item.name_en}</option>
+                  ))}
                 </Input>
+                {advancedFieldWarning('deed_type')}
               </div>
 
               <div>
-                <label htmlFor="filter-mouza" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'মৌজার নাম' : 'Mouza name'}
+                <label htmlFor="filter-mouza" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('mouza') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('mouza', bn ? 'মৌজার নাম' : 'Mouza name')}
                 </label>
-                <Input id="filter-mouza" name="mouza" value={filters.mouza} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'যেমন: পাইকপাড়া' : 'e.g. Paikpara'} disabled={advancedLoading} />
+                <Input id="filter-mouza" name="mouza" value={filters.mouza} onChange={updateFilter} maxLength={120} className={advancedFieldClass('mouza', 'gov-input')} aria-invalid={advancedFieldHasWarning('mouza')} aria-describedby={advancedFieldHasWarning('mouza') ? advancedFieldWarningId('mouza') : undefined} placeholder={bn ? 'যেমন: পাইকপাড়া' : 'e.g. Paikpara'} disabled={advancedLoading} />
+                {advancedFieldWarning('mouza')}
               </div>
 
               <div>
-                <label htmlFor="filter-seller" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'বিক্রেতার নাম' : 'Seller name'}
+                <label htmlFor="filter-seller" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('seller_name') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('seller_name', bn ? 'বিক্রেতার নাম' : 'Seller name')}
                 </label>
-                <Input id="filter-seller" name="seller_name" value={filters.seller_name} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'বিক্রেতার নাম' : 'Seller name'} disabled={advancedLoading} />
+                <Input id="filter-seller" name="seller_name" value={filters.seller_name} onChange={updateFilter} maxLength={120} className={advancedFieldClass('seller_name', 'gov-input')} aria-invalid={advancedFieldHasWarning('seller_name')} aria-describedby={advancedFieldHasWarning('seller_name') ? advancedFieldWarningId('seller_name') : undefined} placeholder={bn ? 'বিক্রেতার নাম' : 'Seller name'} disabled={advancedLoading} />
+                {advancedFieldWarning('seller_name')}
               </div>
 
               <div>
-                <label htmlFor="filter-buyer" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'ক্রেতার নাম' : 'Buyer name'}
+                <label htmlFor="filter-buyer" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('buyer_name') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('buyer_name', bn ? 'ক্রেতার নাম' : 'Buyer name')}
                 </label>
-                <Input id="filter-buyer" name="buyer_name" value={filters.buyer_name} onChange={updateFilter} maxLength={120} className="gov-input" placeholder={bn ? 'ক্রেতার নাম' : 'Buyer name'} disabled={advancedLoading} />
+                <Input id="filter-buyer" name="buyer_name" value={filters.buyer_name} onChange={updateFilter} maxLength={120} className={advancedFieldClass('buyer_name', 'gov-input')} aria-invalid={advancedFieldHasWarning('buyer_name')} aria-describedby={advancedFieldHasWarning('buyer_name') ? advancedFieldWarningId('buyer_name') : undefined} placeholder={bn ? 'ক্রেতার নাম' : 'Buyer name'} disabled={advancedLoading} />
+                {advancedFieldWarning('buyer_name')}
               </div>
 
               <div>
-                <label htmlFor="filter-plot" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'দাগ নম্বর' : 'Dag number'}
+                <label htmlFor="filter-plot" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('plot_id') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('plot_id', bn ? 'দাগ নম্বর' : 'Dag number')}
                 </label>
-                <Input id="filter-plot" name="plot_id" value={filters.plot_id} onChange={updateFilter} maxLength={80} className="gov-input" placeholder={bn ? 'যেমন: DHK-MIR-001' : 'e.g. DHK-MIR-001'} disabled={advancedLoading} />
+                <Input id="filter-plot" name="plot_id" value={filters.plot_id} onChange={updateFilter} maxLength={80} className={advancedFieldClass('plot_id', 'gov-input')} aria-invalid={advancedFieldHasWarning('plot_id')} aria-describedby={advancedFieldHasWarning('plot_id') ? advancedFieldWarningId('plot_id') : undefined} placeholder={bn ? 'যেমন: DHK-MIR-001' : 'e.g. DHK-MIR-001'} disabled={advancedLoading} />
+                {advancedFieldWarning('plot_id')}
               </div>
 
               <div>
-                <label htmlFor="filter-khatian" className="block text-xs font-semibold text-[#17212B] dark:text-slate-200 mb-1">
-                  {bn ? 'খতিয়ান নম্বর' : 'Khatian number'}
+                <label htmlFor="filter-khatian" className={`block text-xs font-semibold mb-1 ${advancedFieldHasWarning('khatian_no') ? 'text-amber-800 dark:text-amber-300' : 'text-[#17212B] dark:text-slate-200'}`}>
+                  {advancedFieldLabel('khatian_no', bn ? 'খতিয়ান নম্বর' : 'Khatian number')}
                 </label>
-                <Input id="filter-khatian" name="khatian_no" value={filters.khatian_no} onChange={updateFilter} maxLength={80} className="gov-input" placeholder={bn ? 'যেমন: BS-1045' : 'e.g. BS-1045'} disabled={advancedLoading} />
+                <Input id="filter-khatian" name="khatian_no" value={filters.khatian_no} onChange={updateFilter} maxLength={80} className={advancedFieldClass('khatian_no', 'gov-input')} aria-invalid={advancedFieldHasWarning('khatian_no')} aria-describedby={advancedFieldHasWarning('khatian_no') ? advancedFieldWarningId('khatian_no') : undefined} placeholder={bn ? 'যেমন: BS-1045' : 'e.g. BS-1045'} disabled={advancedLoading} />
+                {advancedFieldWarning('khatian_no')}
               </div>
             </div>
+
+            {activeAdvancedWarningFields.length > 0 && (
+              <div id="advanced-filter-warning" className="flex items-start gap-2 rounded-lg border border-amber-300 bg-amber-50/80 p-3 text-amber-900 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-200" role="alert">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                <div className="min-w-0 space-y-1">
+                  <p className="text-xs font-semibold">{advancedFilterWarningMessage}</p>
+                  <p className="text-[11px] leading-relaxed">
+                    {activeAdvancedWarningFields.map((key) => `${advancedWarningLabels[key] || key}: ${advancedWarningValue(key)}`).join(' · ')}
+                  </p>
+                </div>
+              </div>
+            )}
 
             <div className="flex items-start gap-2 p-3 rounded-lg bg-[#F7FAF8] dark:bg-[#111A16] border border-[#E2E8F0] dark:border-gray-800">
               <Info className="w-3.5 h-3.5 text-[#047857] dark:text-emerald-400 flex-shrink-0 mt-0.5" />
@@ -814,6 +924,7 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
                   <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-5 gap-y-4">
                     {[
                       [bn ? 'সাব-রেজিস্ট্রি অফিস' : 'Sub-registry office', detailResult.sub_registry_office],
+                      [bn ? 'দলিলের ধরন' : 'Deed type', getDeedTypeLabel(detailResult.deed_type, deedTypes, lang)],
                       [bn ? 'জেলা' : 'District', detailResult.district],
                       [bn ? 'উপজেলা' : 'Upazila', detailResult.upazila],
                       [bn ? 'মৌজা' : 'Mouza', detailResult.mouza],
@@ -837,9 +948,11 @@ export default function DeedSearch({ setActiveTab, navigateBack }) {
                   </dl>
 
                   <div className="p-3 rounded-lg bg-[#F7FAF8] dark:bg-[#111A16] border border-[#E2E8F0] dark:border-gray-800 space-y-1.5">
-                    <p className="text-[11px] leading-relaxed text-[#64748B] dark:text-slate-400">
-                      {bn ? 'দলিলের ধরন (Deed Type) এই ডেটাবেজে সংরক্ষিত নেই, তাই দেখানো হচ্ছে না।' : 'Deed type is not stored in this database, so it is not shown.'}
-                    </p>
+                    {!detailResult.deed_type && (
+                      <p className="text-[11px] leading-relaxed text-[#64748B] dark:text-slate-400">
+                        {bn ? 'এই রেকর্ডে দলিলের ধরন দেওয়া নেই।' : 'No deed type is stored for this record.'}
+                      </p>
+                    )}
                     <p className="text-[11px] leading-relaxed text-[#64748B] dark:text-slate-400">
                       {bn ? SCOPE_NOTE_BN : 'This reflects only records available in the Bhumisetu database. A missing record does not mean the deed is fake, invalid, or legally nonexistent.'}
                     </p>

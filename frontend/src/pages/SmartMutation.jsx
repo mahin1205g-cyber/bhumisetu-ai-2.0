@@ -18,7 +18,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
 
   const [form, setForm] = useState({
     applicant_name: user?.name || 'মোঃ রফিকুল ইসলাম',
-    applicant_nid: user?.nid || '19902692518000123',
+    applicant_nid: '',
     applicant_phone: user?.phone || '01711002233',
     applicant_address: 'বাড়ি-১২, রোড-৪, ব্লক-বি, মিরপুর-১, ঢাকা',
     applicant_relation: 'Self',
@@ -66,7 +66,7 @@ export default function SmartMutation({ setActiveTab, setSelectedTracking, navig
   const handlePresetFill = () => {
     setForm({
       applicant_name: 'মোঃ জাহিদ হাসান',
-      applicant_nid: '19942692518000888',
+      applicant_nid: '',
       applicant_phone: '01819991122',
       applicant_address: 'মিরপুর-২, ঢাকা',
       applicant_relation: 'Self',

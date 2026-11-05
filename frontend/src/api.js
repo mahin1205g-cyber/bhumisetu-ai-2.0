@@ -209,6 +209,26 @@ export const api = {
   getDashboardStats: () => request("/dashboard/stats", { timeoutMs: 20000 }),
 
   // P2: Deed verification
+  getLocationDivisions: ({ q = "", limit = 50 } = {}) =>
+    request(`/locations/divisions?q=${encode(q)}&limit=${encode(limit)}`),
+
+  getLocationDistricts: ({ q = "", limit = 200, divisionId = "" } = {}) =>
+    request(`/locations/districts?q=${encode(q)}&limit=${encode(limit)}${divisionId ? `&division_id=${encode(divisionId)}` : ""}`),
+
+  getLocationUpazilas: (districtId, { q = "", limit = 300 } = {}) =>
+    request(`/locations/upazilas?district_id=${encode(districtId)}&q=${encode(q)}&limit=${encode(limit)}`),
+
+  getLocationThanas: (districtId, { q = "", limit = 300 } = {}) =>
+    request(`/locations/thanas?district_id=${encode(districtId)}&q=${encode(q)}&limit=${encode(limit)}`),
+
+  getLocationMouzas: ({ upazilaId, thanaId, q = "", limit = 500 } = {}) => {
+    const parent = upazilaId ? `upazila_id=${encode(upazilaId)}` : `thana_id=${encode(thanaId)}`;
+    return request(`/locations/mouzas?${parent}&q=${encode(q)}&limit=${encode(limit)}`);
+  },
+
+  getLocationUnions: (upazilaId, { q = "", limit = 100 } = {}) =>
+    request(`/locations/unions?upazila_id=${encode(upazilaId)}&q=${encode(q)}&limit=${encode(limit)}`),
+
   verifyDeed: (data, userId) =>
     request(
       `/verification/verify-deed${userId ? `?user_id=${encode(userId)}` : ""}`,
@@ -217,6 +237,8 @@ export const api = {
         body: data,
       }
     ),
+
+  getVerificationDeedTypes: () => request("/verification/deed-types"),
 
   uploadDeed: (formData) =>
     request("/verification/upload-deed", {

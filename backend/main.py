@@ -25,17 +25,18 @@ from threading import Lock
 
 
 
-from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, status, Request, Response, Cookie
+from fastapi import FastAPI, HTTPException, Header, UploadFile, File, Form, Query, status, Request, Response, Cookie
 
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi.responses import FileResponse, JSONResponse
 
 from fastapi.staticfiles import StaticFiles
+from starlette.concurrency import run_in_threadpool
 
 from pydantic import BaseModel, Field
 from psycopg import OperationalError
-from psycopg.errors import UniqueViolation
+from psycopg.errors import UniqueViolation, UndefinedTable
 from PIL import Image, UnidentifiedImageError
 import warnings
 
@@ -82,6 +83,16 @@ except ImportError:
         cpp_bridge = None
 
 
+try:
+
+    import location_service
+    import ocr_service
+
+except ImportError:
+
+    from backend import location_service, ocr_service
+
+
 
 try:
 
@@ -118,9 +129,16 @@ async def lifespan(app: FastAPI):
             raise RuntimeError("DATABASE_URL must be configured in production")
         if not os.environ.get("CORS_ORIGINS") or "*" in os.environ["CORS_ORIGINS"].split(","):
             raise RuntimeError("CORS_ORIGINS must contain explicit production origins")
-    engine.init()
-    print("Database initialization successful.")
-    yield
+        if any(not origin.strip().lower().startswith("https://") for origin in os.environ["CORS_ORIGINS"].split(",") if origin.strip()):
+            raise RuntimeError("Production CORS_ORIGINS must use HTTPS")
+    try:
+        engine.init()
+        print("Database initialization successful.")
+        yield
+    finally:
+        close_pool = getattr(engine, "close_pool", None)
+        if close_pool:
+            close_pool()
 
 
 app = FastAPI(
@@ -128,9 +146,9 @@ app = FastAPI(
     description="Digital Land Security Platform for Bangladesh (P2 + P4 + P5)",
     version="2.0.0",
     lifespan=lifespan,
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
+    docs_url=None if os.environ.get("APP_ENV", "development").lower() == "production" else "/docs",
+    redoc_url=None if os.environ.get("APP_ENV", "development").lower() == "production" else "/redoc",
+    openapi_url=None if os.environ.get("APP_ENV", "development").lower() == "production" else "/openapi.json",
 )
 
 
@@ -168,7 +186,9 @@ app.add_middleware(
 
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
 
-    allow_headers=["Authorization", "Content-Type", "Accept"],
+    allow_headers=["Authorization", "Content-Type", "Accept", "X-Request-ID"],
+
+    expose_headers=["X-Request-ID", "Retry-After"],
 
 )
 
@@ -216,21 +236,81 @@ def _normalize_profile_picture(data: bytes, content_type: str) -> bytes:
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
-    response = await call_next(request)
+    incoming_request_id = request.headers.get("x-request-id", "").strip()
+    request_id = (
+        incoming_request_id
+        if re.fullmatch(r"[A-Za-z0-9._-]{1,64}", incoming_request_id)
+        else secrets.token_hex(12)
+    )
+    request.state.request_id = request_id
+    started_at = time.perf_counter()
+    logger = logging.getLogger("uvicorn.error")
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        duration_ms = (time.perf_counter() - started_at) * 1000
+        logger.error(
+            "request_failed request_id=%s method=%s path=%s duration_ms=%.2f exception_type=%s",
+            request_id,
+            request.method,
+            request.url.path,
+            duration_ms,
+            type(exc).__name__,
+        )
+        response = JSONResponse(
+            status_code=500,
+            content={"detail": "Internal server error", "request_id": request_id},
+        )
+
+    duration_ms = (time.perf_counter() - started_at) * 1000
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_complete request_id=%s method=%s path=%s status=%s duration_ms=%.2f",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    if request.url.path.startswith("/api/"):
+        response.headers.setdefault("Cache-Control", "no-store")
     if os.environ.get("APP_ENV", "development").lower() == "production":
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; "
+            "object-src 'none'; base-uri 'self'; frame-ancestors 'none'; form-action 'self'",
+        )
     return response
 
 
 
 @app.get("/health")
 def health_check():
-    """Lightweight process health endpoint; does not expose secrets."""
+    """Liveness probe: confirms the API process can serve requests."""
     return {"status": "ok", "service": "Bhumisetu API"}
+
+
+@app.get("/ready")
+def readiness_check():
+    """Readiness probe: confirms the API can reach PostgreSQL."""
+    try:
+        engine.ping_database(timeout=1.5)
+    except Exception as exc:
+        logging.getLogger(__name__).warning(
+            "Readiness check failed (%s)", type(exc).__name__
+        )
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "unready", "database": "unavailable"},
+            headers={"Retry-After": "2"},
+        )
+    return {"status": "ready", "database": "ok"}
 
 
 
@@ -392,9 +472,13 @@ class DeedVerifyRequest(BaseModel):
 
     deed_no: Optional[str] = ""
 
-    reg_year: Optional[int] = 2025
+    selected_deed_id: Optional[int] = Field(default=None, gt=0)
 
-    district: Optional[str] = "ঢাকা"
+    reg_year: Optional[int] = None
+
+    deed_type: Optional[str] = Field(default="", max_length=60)
+
+    district: Optional[str] = ""
 
     upazila: Optional[str] = ""
 
@@ -406,7 +490,25 @@ class DeedVerifyRequest(BaseModel):
 
     owner_name: Optional[str] = ""
 
+    buyer_name: Optional[str] = Field(default="", max_length=200)
+
+    seller_name: Optional[str] = Field(default="", max_length=200)
+
+    union_ward: Optional[str] = Field(default="", max_length=200)
+
+    union_id: Optional[int] = Field(default=None, gt=0)
+
     notes: Optional[str] = ""
+
+    division_id: Optional[int] = Field(default=None, gt=0)
+
+    district_id: Optional[int] = Field(default=None, gt=0)
+
+    location_id: Optional[int] = Field(default=None, gt=0)
+
+    location_type: Optional[Literal["upazila", "police_thana"]] = None
+
+    mouza_id: Optional[int] = Field(default=None, gt=0)
 
 
 
@@ -655,6 +757,8 @@ def login(req: LoginRequest, request: Request):
             detail="ইমেইল/ব্যবহারকারীর নাম অথবা পাসওয়ার্ড সঠিক নয় (Invalid credentials)",
         )
 
+    authenticated_user["nid_masked"] = _mask_nid(authenticated_user.pop("nid", None))
+
     engine.log_audit(
         authenticated_user["name"], authenticated_user["role"], "USER_LOGIN", "AUTH",
         f"Successful login for {authenticated_user['email']}",
@@ -663,7 +767,7 @@ def login(req: LoginRequest, request: Request):
     return {
         "success": True,
         "token": token,
-        "user": authenticated_user,
+        "user": _public_user_data(authenticated_user),
         "message": "লগইন সফল হয়েছে (Login successful)",
     }
 
@@ -678,6 +782,19 @@ def _normalize_nid(value: str) -> str:
     if not re.fullmatch(r"^(?:[0-9]{10}|[0-9]{13}|[0-9]{17})$", nid):
         raise HTTPException(status_code=422, detail="Invalid NID. Only 10, 13 or 17 digits are accepted.")
     return nid
+
+
+def _mask_nid(value: Optional[str]) -> Optional[str]:
+    text = str(value or "")
+    return ("••••••••" + text[-4:]) if text else None
+
+
+def _public_user_data(user: dict) -> dict:
+    allowed = (
+        "id", "name", "username", "email", "phone", "role", "designation",
+        "profile_picture", "nid_masked", "created_at",
+    )
+    return {key: user.get(key) for key in allowed if key in user}
 
 
 def _valid_username(username: str) -> bool:
@@ -708,7 +825,9 @@ def username_availability(username: str = ""):
 
 
 @app.post("/api/auth/register")
-def register(req: RegisterRequest):
+def register(req: RegisterRequest, request: Request = None):
+    client_ip = request.client.host if request and request.client else "unit-or-unknown"
+    _enforce_login_ip_rate_limit(client_ip, "register")
     email = req.email.strip().lower()
     username = req.username.strip()
     username_key = username.lower()
@@ -757,7 +876,7 @@ def register(req: RegisterRequest):
 
         "token": token,
 
-        "user": user,
+        "user": _public_user_data(user),
 
         "message": "নিবন্ধন সফল হয়েছে (Registration successful)"
 
@@ -772,12 +891,38 @@ _login_ip_attempts = defaultdict(deque)
 _login_ip_attempts_lock = Lock()
 _recovery_ip_attempts = defaultdict(deque)
 _recovery_ip_attempts_lock = Lock()
+_upload_attempts = defaultdict(deque)
+_upload_attempts_lock = Lock()
 _LOGIN_IP_WINDOW_SECONDS = 15 * 60
 _LOGIN_IP_MAX_REQUESTS = 30
 _LOGIN_MAX_FAILURES = 5
 _LOGIN_LOCK_SECONDS = 10 * 60 * 60
 _RECOVERY_IP_WINDOW_SECONDS = 60
 _RECOVERY_IP_MAX_REQUESTS = 30
+
+
+def _enforce_upload_rate_limit(ip: str, user_id: int, upload_type: str):
+    """Per-process upload guard; authenticated account and source are both scoped."""
+    window_seconds = 15 * 60
+    request_limit = 10 if upload_type == "deed" else 20
+    key = (upload_type, int(user_id), (ip or "unknown")[:128])
+    now = time.monotonic()
+    with _upload_attempts_lock:
+        attempts = _upload_attempts[key]
+        while attempts and now - attempts[0] >= window_seconds:
+            attempts.popleft()
+        if len(attempts) >= request_limit:
+            retry_after = max(1, int(window_seconds - (now - attempts[0])))
+            raise HTTPException(
+                status_code=429,
+                detail={"code": "upload_rate_limited", "retry_after_seconds": retry_after},
+                headers={"Retry-After": str(retry_after)},
+            )
+        attempts.append(now)
+        if len(_upload_attempts) > 4096:
+            expired_before = now - window_seconds
+            for stale_key in [key for key, values in _upload_attempts.items() if not values or values[-1] <= expired_before]:
+                _upload_attempts.pop(stale_key, None)
 
 
 def _enforce_login_ip_rate_limit(ip: str, identifier: str):
@@ -867,6 +1012,8 @@ def _raise_login_lockout(remaining_seconds: int):
 def _auth_secret() -> bytes:
     configured = os.environ.get("JWT_SECRET", "").strip()
     if configured:
+        if os.environ.get("APP_ENV", "development").lower() == "production" and len(configured.encode("utf-8")) < 32:
+            raise RuntimeError("JWT_SECRET must contain at least 32 bytes in production")
         return configured.encode("utf-8")
     if os.environ.get("APP_ENV", "development").lower() == "production":
         raise RuntimeError("JWT_SECRET must be configured in production")
@@ -989,8 +1136,17 @@ def _recovery_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
+def _require_recovery_delivery():
+    if os.environ.get("APP_ENV", "development").lower() == "production":
+        raise HTTPException(
+            status_code=503,
+            detail="Account recovery is disabled until a verified out-of-band delivery provider is configured.",
+        )
+
+
 @app.post("/api/auth/recovery/start")
 def recovery_start(req: RecoveryIdentityRequest, request: Request):
+    _require_recovery_delivery()
     username = req.username.strip()
     if not _valid_username(username):
         raise HTTPException(status_code=422, detail="Enter a valid username")
@@ -1043,6 +1199,7 @@ def _normalize_recovery_name(value: str) -> str:
 
 @app.post("/api/auth/recovery/username")
 def recover_username(req: ForgotUsernameRequest, request: Request):
+    _require_recovery_delivery()
     full_name = _normalize_recovery_name(req.full_name)
     if len(full_name) < 2:
         raise HTTPException(status_code=422, detail="Enter the full name on the account")
@@ -1080,6 +1237,7 @@ def recover_username(req: ForgotUsernameRequest, request: Request):
 
 @app.post("/api/auth/recovery/reset")
 def recovery_reset(req: RecoveryResetRequest, request: Request):
+    _require_recovery_delivery()
     if req.password != req.password_confirmation:
         raise HTTPException(status_code=422, detail="Passwords do not match")
     ip_hash = _recovery_hash("ip:" + _recovery_ip(request))
@@ -1148,6 +1306,7 @@ def get_current_user(authorization: Optional[str] = Header(None)):
         "id": user["id"],
         "name": user.get("name") or "",
         "username": user.get("username") or "",
+        "nid_masked": user.get("nid_masked"),
         "profile_picture": user.get("profile_picture"),
         "email": user.get("email") or "",
         "role": user.get("role") or "",
@@ -1161,8 +1320,8 @@ async def upload_profile_picture(file: UploadFile = File(...), authorization: Op
     if not user:
         await file.close()
         raise HTTPException(status_code=401, detail="Authentication required")
-
     try:
+        _enforce_upload_rate_limit("authenticated", user["id"], "profile_picture")
         data = await file.read(PROFILE_PICTURE_MAX_BYTES + 1)
     finally:
         await file.close()
@@ -1217,7 +1376,7 @@ def get_profile_picture(user_id: int, authorization: Optional[str] = Header(None
     return Response(
         content=bytes(picture["image_data"]),
         media_type="image/webp",
-        headers={"Cache-Control": "private, max-age=31536000, immutable"},
+        headers={"Cache-Control": "private, no-store"},
     )
 
 
@@ -1230,152 +1389,294 @@ def get_profile_picture(user_id: int, authorization: Optional[str] = Header(None
 
 
 
+def _location_db_call(callback):
+    try:
+        return callback()
+    except UndefinedTable as exc:
+        raise HTTPException(status_code=503, detail="Location tables are unavailable. Apply the location registry migration first.") from exc
+    except OperationalError as exc:
+        raise HTTPException(status_code=503, detail="Location database is temporarily unavailable.") from exc
+
+
+@app.get("/api/locations/districts")
+def get_location_districts(
+    q: str = Query("", max_length=100),
+    limit: int = Query(200, ge=1, le=500),
+    division_id: Optional[int] = Query(None, gt=0),
+):
+    if division_id is not None and not _location_db_call(lambda: location_service.division_exists(division_id)):
+        raise HTTPException(status_code=404, detail="Division not found")
+    items = _location_db_call(lambda: location_service.list_districts(q, limit, division_id))
+    return {"items": items, "coverage": _location_db_call(location_service.coverage_status)}
+
+
+@app.get("/api/locations/divisions")
+def get_location_divisions(q: str = Query("", max_length=100), limit: int = Query(50, ge=1, le=100)):
+    items = _location_db_call(lambda: location_service.list_divisions(q, limit))
+    return {"items": items, "coverage": _location_db_call(location_service.coverage_status)}
+
+
+@app.get("/api/locations/upazilas")
+def get_location_upazilas(district_id: int = Query(..., gt=0), q: str = Query("", max_length=100), limit: int = Query(300, ge=1, le=500)):
+    if not _location_db_call(lambda: location_service.district_exists(district_id)):
+        raise HTTPException(status_code=404, detail="District not found")
+    items = _location_db_call(lambda: location_service.list_district_children("upazilas", district_id, q, limit))
+    return {"items": items, "coverage": _location_db_call(location_service.coverage_status)}
+
+
+@app.get("/api/locations/thanas")
+def get_location_thanas(district_id: int = Query(..., gt=0), q: str = Query("", max_length=100), limit: int = Query(300, ge=1, le=500)):
+    if not _location_db_call(lambda: location_service.district_exists(district_id)):
+        raise HTTPException(status_code=404, detail="District not found")
+    items = _location_db_call(lambda: location_service.list_district_children("police_thanas", district_id, q, limit))
+    return {"items": items, "coverage": _location_db_call(location_service.coverage_status)}
+
+
+@app.get("/api/locations/mouzas")
+def get_location_mouzas(
+    upazila_id: Optional[int] = Query(None, gt=0),
+    thana_id: Optional[int] = Query(None, gt=0),
+    q: str = Query("", max_length=100),
+    limit: int = Query(500, ge=1, le=1000),
+):
+    if (upazila_id is None) == (thana_id is None):
+        raise HTTPException(status_code=422, detail="Provide exactly one of upazila_id or thana_id")
+    parent_type = "upazila" if upazila_id is not None else "police_thana"
+    parent_id = upazila_id if upazila_id is not None else thana_id
+    if not _location_db_call(lambda: location_service.parent_exists(parent_type, parent_id)):
+        raise HTTPException(status_code=404, detail="Selected Upazila/Thana not found")
+    items = _location_db_call(lambda: location_service.list_mouzas(parent_type, parent_id, q, limit))
+    return {"items": items, "coverage": _location_db_call(location_service.coverage_status)}
+
+
+@app.get("/api/locations/unions")
+def get_location_unions(
+    upazila_id: int = Query(..., gt=0),
+    q: str = Query("", max_length=100),
+    limit: int = Query(100, ge=1, le=500),
+):
+    if not _location_db_call(lambda: location_service.parent_exists("upazila", upazila_id)):
+        raise HTTPException(status_code=404, detail="Selected Upazila not found")
+    items = _location_db_call(lambda: location_service.list_upazila_unions(upazila_id, q, limit))
+    return {"items": items}
+
+
+@app.get("/api/locations/districts/{district_id}/hierarchy")
+def get_location_hierarchy(district_id: int):
+    try:
+        district = _location_db_call(lambda: location_service.get_district_hierarchy(district_id))
+    except location_service.LocationNotFound as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return {"district": district, "coverage": _location_db_call(location_service.coverage_status)}
+
+
+def _resolve_location_payload(district_id, location_type, location_id, mouza_id):
+    try:
+        return _location_db_call(lambda: location_service.resolve_selection(district_id, location_type, location_id, mouza_id))
+    except location_service.LocationNotFound as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _normalized_location_name(value: str) -> str:
+    normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
+    normalized = re.sub(r"[\W_]+", "", normalized, flags=re.UNICODE)
+    # DGHS GeoCodes stores Pubail in English, while deed OCR commonly reads
+    # the Bengali spelling. Treat those official/source spellings as equal.
+    return {"পুবাইল": "pubail", "পূবাইল": "pubail"}.get(normalized, normalized)
+
+
 @app.post("/api/verification/verify-deed")
 
 def verify_deed_api(req: DeedVerifyRequest, authorization: Optional[str] = Header(None)):
     user = extract_user_from_auth_header(authorization)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    res = engine.verify_deed(req.model_dump(), user_id=user["id"], user_name=user["name"])
 
-    return res
+    field_errors = {}
+    required_fields = {
+        "deed_no": req.deed_no,
+        "deed_type": req.deed_type,
+        "mouza": req.mouza,
+        "plot_id": req.plot_id,
+        "khatian_no": req.khatian_no,
+        "buyer_name": req.buyer_name,
+        "seller_name": req.seller_name,
+    }
+    for field_name, value in required_fields.items():
+        if not str(value or "").strip():
+            field_errors[field_name] = "This field is required."
+    current_year = datetime.now().year
+    if req.reg_year is None or req.reg_year < 1950 or req.reg_year > current_year:
+        field_errors["reg_year"] = f"Enter a registration year from 1950 through {current_year}."
+    if req.division_id is None:
+        field_errors["division_id"] = "Select a division."
+    if req.district_id is None:
+        field_errors["district_id"] = "Choose a district from the official location list."
+    if req.location_id is None or req.location_type is None:
+        field_errors["location_id"] = "Choose an Upazila or Thana from the official location list."
+    if req.union_id is not None and req.location_type != "upazila":
+        field_errors["union_ward"] = "An official Union can only be selected under an Upazila."
+    if req.deed_type and not engine.is_supported_deed_type(req.deed_type):
+        field_errors["deed_type"] = "Choose a deed type from the list."
+    if field_errors:
+        raise HTTPException(status_code=422, detail={"field_errors": field_errors})
+
+    data = req.model_dump()
+    data["owner_name"] = req.buyer_name
+    if not _location_db_call(
+        lambda: location_service.district_belongs_to_division(req.district_id, req.division_id)
+    ):
+        raise HTTPException(status_code=422, detail={
+            "field_errors": {
+                "district_id": "The selected district does not belong to the selected division."
+            }
+        })
+    try:
+        resolved = _resolve_location_payload(req.district_id, req.location_type, req.location_id, req.mouza_id)
+    except HTTPException as exc:
+        raise HTTPException(status_code=422, detail={
+            "field_errors": {"location_id": str(exc.detail)}
+        }) from exc
+    data.update(
+        division=resolved["division"], division_id=resolved["division_id"],
+        district=resolved["district"], upazila=resolved["location"],
+        mouza=resolved["mouza"] if req.mouza_id is not None else (req.mouza or "").strip(),
+        district_id=resolved["district_id"], upazila_id=resolved["upazila_id"],
+        police_thana_id=resolved["police_thana_id"], mouza_id=resolved["mouza_id"],
+    )
+    data["union_ward"] = (req.union_ward or "").strip()
+    data["union_id"] = None
+    if req.union_id is not None:
+        try:
+            selected_union = _location_db_call(
+                lambda: location_service.resolve_upazila_union(req.union_id, req.location_id)
+            )
+        except location_service.LocationNotFound as exc:
+            raise HTTPException(status_code=422, detail={
+                "field_errors": {"union_ward": str(exc)}
+            }) from exc
+        data["union_id"] = selected_union["id"]
+        data["union_ward"] = selected_union["name_bn"] or selected_union["name_en"]
+    result = engine.verify_deed(data, user_id=user["id"], user_name=user["name"])
+    if result.get("lookup_status") == "AMBIGUOUS":
+        candidates = deed_search.lookup_by_deed_number(req.deed_no or "")
+        result["candidates"] = [
+            deed_search.public_deed_fields(candidate, user.get("role"))
+            for candidate in candidates
+        ]
+    elif result.get("lookup_status") == "INVALID_INPUT":
+        raise HTTPException(status_code=409, detail={
+            "code": "SELECTED_DEED_INVALID",
+            "message_bn": result.get("message_bn"),
+            "message_en": result.get("message_en"),
+        })
+    return result
 
 
 
+
+
+@app.get("/api/verification/deed-types")
+def get_verification_deed_types():
+    return {"items": engine.list_deed_types()}
 
 
 @app.post("/api/verification/upload-deed")
-
-async def upload_deed_api(file: UploadFile = File(...), authorization: Optional[str] = Header(None)):
-
+async def upload_deed_api(
+    request: Request,
+    file: UploadFile = File(...),
+    selected_district: Optional[str] = Form(None),
+    selected_upazila: Optional[str] = Form(None),
+    selected_mouza: Optional[str] = Form(None),
+    division_id: Optional[int] = Form(None),
+    district_id: Optional[int] = Form(None),
+    location_id: Optional[int] = Form(None),
+    location_type: Optional[str] = Form(None),
+    mouza_id: Optional[int] = Form(None),
+    authorization: Optional[str] = Header(None),
+):
     user = extract_user_from_auth_header(authorization)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
 
     filename = Path(file.filename or "uploaded_document").name
-    file_ext = Path(filename).suffix.lower()
-    if file_ext not in {".pdf", ".txt"}:
-        raise HTTPException(status_code=415, detail="Only PDF and plain text files are accepted")
-    contents = await file.read(10 * 1024 * 1024 + 1)
-    if len(contents) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Uploaded file exceeds the 10 MB limit")
-    if file_ext == ".pdf" and not contents.startswith(b"%PDF-"):
-        raise HTTPException(status_code=415, detail="Uploaded file is not a valid PDF")
+    resolved = None
+    if any(value is not None for value in (division_id, district_id, location_id, location_type, mouza_id)):
+        if district_id is None or location_id is None or location_type not in {"upazila", "police_thana"}:
+            raise HTTPException(status_code=422, detail="A complete district and Upazila/Thana selection is required")
+        if division_id is not None and not _location_db_call(
+            lambda: location_service.district_belongs_to_division(district_id, division_id)
+        ):
+            raise HTTPException(status_code=422, detail="Selected district does not belong to the selected division")
+        resolved = _resolve_location_payload(district_id, location_type, location_id, mouza_id)
+        selected_district = resolved["district"]
+        selected_upazila = resolved["location"]
+        if mouza_id is not None:
+            selected_mouza = resolved["mouza"]
 
-
-
-    extracted_text = ""
-
-    deed_no = ""
-
-    plot_id = ""
-
-    mouza = ""
-
-    area = 0.0
-
-    seller = ""
-
-    buyer = ""
-
-
-
-    # Try pypdf extraction if PDF
-
-    if file_ext == ".pdf":
-
+    try:
+        _enforce_upload_rate_limit(request.client.host if request.client else "unknown", user["id"], "deed")
+        contents = await file.read(10 * 1024 * 1024 + 1)
+        if len(contents) > 10 * 1024 * 1024:
+            raise HTTPException(status_code=413, detail="Uploaded file exceeds the 10 MB limit")
         try:
+            extraction = await run_in_threadpool(ocr_service.extract_document_text, filename, contents)
+        except ocr_service.DocumentProcessingError as exc:
+            raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    finally:
+        await file.close()
 
-            import pypdf
+    extracted_fields = await run_in_threadpool(ocr_service.parse_deed_fields, extraction.text)
+    selected_locations = {
+        "district": selected_district or "",
+        "upazila": selected_upazila or "",
+        "mouza": selected_mouza or "",
+    }
+    mismatches = []
+    labels = {
+        "district": ("জেলা", "District"),
+        "upazila": ("উপজেলা / থানা", "Upazila / Thana"),
+        "mouza": ("মৌজা", "Mouza"),
+    }
+    for field, selected_value in selected_locations.items():
+        extracted_value = extracted_fields.get(field) or ""
+        if selected_value and extracted_value and _normalized_location_name(selected_value) != _normalized_location_name(extracted_value):
+            label_bn, label_en = labels[field]
+            mismatches.append({
+                "field": field,
+                "selected": selected_value,
+                "extracted": extracted_value,
+                "message_bn": f"নির্বাচিত {label_bn} এবং OCR-এ পাওয়া নামের মধ্যে অমিল আছে। যাচাই করে ঠিক করুন।",
+                "message_en": f"The selected {label_en} differs from the name read by OCR. Please review it.",
+            })
 
-            reader = pypdf.PdfReader(io.BytesIO(contents))
-
-            for page in reader.pages:
-
-                extracted_text += page.extract_text() or ""
-
-        except Exception:
-            raise HTTPException(status_code=422, detail="Could not read this PDF file")
-
+    recognized_count = sum(
+        bool(value) for key, value in extracted_fields.items()
+        if key not in {"reg_year", "area", "upazila_type"}
+    ) + int(extracted_fields.get("reg_year") is not None)
+    ocr_warnings = list(extraction.warnings)
+    if recognized_count == 0:
+        ocr_warnings.append(
+            "No required deed fields could be read confidently. Use a clearer scan or enter them from the original document."
+        )
+        message_bn = "ছবি থেকে কিছু লেখা পাওয়া গেছে, তবে প্রয়োজনীয় দলিলের তথ্য নিশ্চিতভাবে শনাক্ত হয়নি। পরিষ্কার স্ক্যান দিন বা মূল দলিল দেখে ফর্ম পূরণ করুন।"
+        message_en = "Some text was read, but required deed fields could not be identified confidently. Upload a clearer scan or enter them from the original document."
     else:
-
-        try:
-
-            extracted_text = contents.decode("utf-8", errors="ignore")
-
-        except Exception:
-
-            extracted_text = ""
-
-
-
-    # Parse key patterns
-
-    if extracted_text:
-
-        # Match deed numbers like D-1001 or 8492
-
-        d_match = re.search(r"(?:দলিল\s*নং?|Deed\s*N&#x6F;**\\.**?)\s*[:**\\-**]?\s*([A-Za-z0-&#x39;**\\-**]+)", extracted_text, re.IGNORECASE)
-
-        if d_match:
-
-            deed_no = d_match.group(1)
-
-
-
-        p_match = re.search(r"(?:দাগ\s*নং?|প্লট|Plot\s*N&#x6F;**\\.**?)\s*[:**\\-**]?\s*([A-Za-z0-&#x39;**\\-**]+)", extracted_text, re.IGNORECASE)
-
-        if p_match:
-
-            plot_id = p_match.group(1)
-
-
-
-        m_match = re.search(r"(?:মৌজা|Mouza)\s*[:**\\-**]?\s*([\u0980-\u09FF\w]+)", extracted_text, re.IGNORECASE)
-
-        if m_match:
-
-            mouza = m_match.group(1)
-
-
-
-    if not deed_no and not plot_id:
-        raise HTTPException(status_code=422, detail="Could not extract a deed number or plot number from this file")
-
-    # Run verification against extracted info
-
-    verif_res = engine.verify_deed({
-
-        "deed_no": deed_no,
-
-        "reg_year": 2025,
-
-        "district": "ঢাকা",
-
-        "upazila": "মিরপুর",
-
-        "mouza": mouza,
-
-        "plot_id": plot_id,
-
-        "khatian_no": "BS-1045",
-
-        "owner_name": buyer or "সালমা বেগম",
-
-        "notes": f"Uploaded file: {filename}"
-
-    }, user_id=user["id"], user_name=user["name"])
-
-
-
-    verif_res["filename"] = filename
-
-    verif_res["extracted_raw_text"] = extracted_text[:800]
-
-    return verif_res
-
-
-
+        message_bn = "OCR থেকে পাওয়া তথ্য যাচাই করে ফর্মে ব্যবহার করুন। OCR একা মালিকানা প্রমাণ করে না।"
+        message_en = "Review the OCR fields before using them. OCR alone does not prove ownership."
+    return {
+        "filename": filename,
+        "extracted_fields": extracted_fields,
+        "selected_locations": selected_locations,
+        "location_mismatches": mismatches,
+        "ocr_warnings": ocr_warnings,
+        "raw_text_preview": extraction.text[:1600],
+        "recognized_field_count": recognized_count,
+        "review_required": True,
+        "verification_status": "not_run",
+        "message_bn": message_bn,
+        "message_en": message_en,
+    }
 
 
 @app.get("/api/verification/reports")
@@ -1500,6 +1801,8 @@ def search_deed_by_number(
 
             "found": False,
 
+            "lookup_status": "DEED_NOT_FOUND",
+
             "count": 0,
 
             "results": [],
@@ -1539,6 +1842,8 @@ def search_deed_by_number(
     return {
 
         "found": True,
+
+        "lookup_status": "AMBIGUOUS" if len(records) > 1 else "DEED_FOUND",
 
         "count": len(records),
 
@@ -1585,48 +1890,10 @@ def advanced_deed_search(
     filters = req.model_dump()
 
     usable = {
-
         k: v for k, v in filters.items()
-
-        if k not in ("page", "page_size", "deed_type") and str(v or "").strip()
-
+        if k not in ("page", "page_size") and str(v or "").strip()
     }
-
     unsupported = []
-
-    if filters.get("deed_type") and str(filters.get("deed_type")).strip():
-
-        unsupported.append("deed_type")
-
-    if not usable and unsupported:
-
-        return {
-
-                "found": False,
-
-                "total": 0,
-
-                "page": 1,
-
-                "page_size": req.page_size or 10,
-
-                "pages": 1,
-
-                "results": [],
-
-                "unsupported_fields": unsupported,
-
-                "message_bn": "দলিলের ধরন এই ডেটাবেজে সংরক্ষিত নেই বলে সেই শর্তটি প্রয়োগ করা যায়নি। অন্যান্য তথ্য দিয়ে অনুসন্ধান করুন।",
-
-                "scope_note_bn": deed_search.SCOPE_NOTE_BN,
-
-                "scope_note_en": deed_search.SCOPE_NOTE_EN,
-
-                "data_source": "application_database",
-
-                "is_official_registry": False,
-
-            }
 
     if not usable:
 
@@ -1667,6 +1934,10 @@ def advanced_deed_search(
         "is_official_registry": False,
 
         "is_synthetic_demo_record": all(deed_search.is_demo_record(row) for row in rows),
+
+        "unmatched_fields": result.get("unmatched_fields", []),
+
+        "filter_conflict": bool(result.get("filter_conflict")),
 
         "unsupported_fields": unsupported,
 
@@ -1788,7 +2059,9 @@ def admin_list_users(
             f"SELECT COUNT(*) AS total FROM users WHERE (name ILIKE %s OR email ILIKE %s OR username ILIKE %s) {role_clause}", params
         ).fetchone()["total"]
         rows = c.execute(
-            f"""SELECT id,name,username,email,phone,role,nid,designation,created_at,profile_picture FROM users
+            f"""SELECT id,name,username,email,phone,role,
+                       CASE WHEN COALESCE(nid,'')='' THEN NULL ELSE '••••••••' || RIGHT(nid,4) END AS nid_masked,
+                       designation,created_at,profile_picture FROM users
                 WHERE (name ILIKE %s OR email ILIKE %s OR username ILIKE %s) {role_clause}
                 ORDER BY id DESC LIMIT %s OFFSET %s""",
             params + [limit, offset],
@@ -1834,7 +2107,7 @@ def admin_create_officer(req: OfficerCreateRequest, authorization: Optional[str]
         _raise_user_unique_conflict(exc)
     created = engine.get_user_by_id(inserted["id"])
     engine.log_audit(admin["name"], "admin", "USER_CREATE_OFFICER", "USER_MANAGEMENT", f"Created officer account {email}")
-    return created
+    return _public_user_data(created)
 
 
 @app.get("/api/admin/data/{dataset}")
@@ -1849,7 +2122,7 @@ def admin_list_data(
     if not admin or admin.get("role") != "admin":
         raise HTTPException(status_code=403, detail="Admin access required")
     tables = {
-        "applications": ("mutation_applications", "id,tracking_no,applicant_name,applicant_nid,district,upazila,plot_no,status,created_at", "tracking_no ILIKE %s OR applicant_name ILIKE %s OR plot_no ILIKE %s"),
+        "applications": ("mutation_applications", "id,tracking_no,applicant_name,CASE WHEN COALESCE(applicant_nid,'')='' THEN NULL ELSE '••••••••' || RIGHT(applicant_nid,4) END AS applicant_nid,district,upazila,plot_no,status,created_at", "tracking_no ILIKE %s OR applicant_name ILIKE %s OR plot_no ILIKE %s"),
         "properties": ("properties", "id,plot_id,district,upazila,mouza,khatian_no,area,current_owner,status,created_at", "plot_id ILIKE %s OR current_owner ILIKE %s"),
         "deeds": ("deeds", "id,deed_no,reg_year,district,upazila,plot_id,khatian_no,seller_name,buyer_name,area,price,reg_date", "deed_no ILIKE %s OR plot_id ILIKE %s OR buyer_name ILIKE %s OR seller_name ILIKE %s"),
         "verifications": ("deed_verifications", "id,verification_ref,user_id,deed_no,result_status,match_score,created_at", "verification_ref ILIKE %s OR deed_no ILIKE %s"),

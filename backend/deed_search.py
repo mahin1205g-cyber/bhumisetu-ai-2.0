@@ -212,6 +212,7 @@ def public_deed_fields(row: dict, role: Optional[str], *, include_parties: bool 
     data = {
         "id": row.get("id"),
         "deed_no": row.get("deed_no"),
+        "deed_type": row.get("deed_type"),
         "reg_year": row.get("reg_year"),
         "district": row.get("district"),
         "upazila": row.get("upazila"),
@@ -229,7 +230,6 @@ def public_deed_fields(row: dict, role: Optional[str], *, include_parties: bool 
         data["buyer_name"] = redact_name(row.get("buyer_name"), role)
         if role in ("officer", "admin"):
             data["price"] = row.get("price")
-    # deed_type is not stored in the current schema
     return {k: v for k, v in data.items() if v is not None and v != ""}
 
 
@@ -521,14 +521,38 @@ def lookup_by_deed_number(deed_no: str) -> list[dict]:
     needle = normalize_deed_number(deed_no)
     if not needle:
         return []
+    raw_number = str(deed_no or "").strip()
     with engine.conn() as c:
-        rows = c.execute(
+        # Preserve the indexed exact lookup, then merge normalized spellings
+        # so an exact hit cannot hide another record written with Bengali
+        # digits, different case, or spacing.
+        exact_rows = c.execute(
             """SELECT * FROM deeds
-               WHERE REPLACE(UPPER(deed_no), ' ', '') = %s
+               WHERE deed_no = %s
                ORDER BY reg_year DESC, id DESC""",
-            (needle,),
+            (raw_number,),
         ).fetchall()
-        return [dict(r) for r in rows]
+        normalized_rows = c.execute(
+            """SELECT * FROM deeds
+               WHERE REGEXP_REPLACE(TRANSLATE(UPPER(deed_no), '০১২৩৪৫৬৭৮৯', '0123456789'), '[[:space:]]+', '', 'g') = %s
+                 AND deed_no IS DISTINCT FROM %s
+               ORDER BY reg_year DESC, id DESC""",
+            (needle, raw_number),
+        ).fetchall()
+
+        unique_rows = {}
+        for row in [*exact_rows, *normalized_rows]:
+            record = dict(row)
+            row_id = record.get("id")
+            unique_rows[row_id if row_id is not None else (
+                record.get("deed_no"), record.get("reg_year"), record.get("district"),
+                record.get("upazila"), record.get("plot_id"),
+            )] = record
+        return sorted(
+            unique_rows.values(),
+            key=lambda row: (row.get("reg_year") or 0, row.get("id") or 0),
+            reverse=True,
+        )
 
 
 def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZE) -> dict:
@@ -538,11 +562,14 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
 
     clauses = []
     params: list[Any] = []
+    diagnostic_conditions: list[tuple[str, str, Any]] = []
 
     deed_no = normalize_deed_number(filters.get("deed_no") or "")
     if deed_no:
-        clauses.append("REPLACE(UPPER(deed_no), ' ', '') = %s")
+        clause = "REPLACE(UPPER(deed_no), ' ', '') = %s"
+        clauses.append(clause)
         params.append(deed_no)
+        diagnostic_conditions.append(("deed_no", clause, deed_no))
 
     year = filters.get("reg_year")
     if year not in (None, "", 0, "0"):
@@ -551,8 +578,35 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
         except (TypeError, ValueError):
             year_i = None
         if year_i:
-            clauses.append("reg_year = %s")
+            clause = "reg_year = %s"
+            clauses.append(clause)
             params.append(year_i)
+            diagnostic_conditions.append(("reg_year", clause, year_i))
+
+    deed_type = normalize_text(filters.get("deed_type") or "")
+    if deed_type:
+        catalog_rows = [
+            {"code": item[0], "name_bn": item[1], "name_en": item[2]}
+            for item in engine.DEED_TYPE_CATALOG
+        ]
+        deed_type_ref = engine.resolve_deed_type_reference(deed_type, catalog_rows)
+        if deed_type_ref:
+            deed_type_aliases = [
+                engine.normalize_deed_type_value(alias)
+                for alias in (
+                    deed_type_ref.get("code"),
+                    deed_type_ref.get("name_bn"),
+                    deed_type_ref.get("name_en"),
+                )
+                if alias
+            ]
+            clause = "LOWER(BTRIM(deed_type)) = ANY(%s)"
+            deed_type = deed_type_aliases
+        else:
+            clause = "LOWER(BTRIM(deed_type)) = LOWER(BTRIM(%s))"
+        clauses.append(clause)
+        params.append(deed_type)
+        diagnostic_conditions.append(("deed_type", clause, deed_type))
 
     exactish = (
         ("district", "district"),
@@ -565,8 +619,11 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
         value = normalize_text(filters.get(key) or "")
         if not value:
             continue
-        clauses.append(f"LOWER({column}) LIKE LOWER(%s)")
-        params.append(like_pattern(value))
+        clause = f"LOWER({column}) LIKE LOWER(%s)"
+        pattern = like_pattern(value)
+        clauses.append(clause)
+        params.append(pattern)
+        diagnostic_conditions.append((key, clause, pattern))
 
     partial = (
         ("seller_name", "seller_name"),
@@ -577,8 +634,11 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
         value = normalize_text(filters.get(key) or "")
         if not value:
             continue
-        clauses.append(f"LOWER({column}) LIKE LOWER(%s)")
-        params.append(like_pattern(value))
+        clause = f"LOWER({column}) LIKE LOWER(%s)"
+        pattern = like_pattern(value)
+        clauses.append(clause)
+        params.append(pattern)
+        diagnostic_conditions.append((key, clause, pattern))
 
     where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
     offset = (page - 1) * page_size
@@ -590,6 +650,22 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
                 LIMIT %s OFFSET %s""",
             (*params, page_size, offset),
         ).fetchall()
+        unmatched_fields = []
+        filter_conflict = False
+        if int(total or 0) == 0 and diagnostic_conditions:
+            checks = [
+                f"EXISTS(SELECT 1 FROM deeds WHERE {clause}) AS filter_{key}"
+                for key, clause, _ in diagnostic_conditions
+            ]
+            check_params = [value for _, _, value in diagnostic_conditions]
+            diagnostic_row = c.execute(
+                "SELECT " + ", ".join(checks), check_params
+            ).fetchone() or {}
+            unmatched_fields = [
+                key for key, _, _ in diagnostic_conditions
+                if not diagnostic_row.get(f"filter_{key}", False)
+            ]
+            filter_conflict = not unmatched_fields
 
     return {
         "total": int(total),
@@ -597,6 +673,8 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
         "page_size": page_size,
         "pages": max(1, (int(total) + page_size - 1) // page_size) if total else 1,
         "records": [dict(r) for r in rows],
+        "unmatched_fields": unmatched_fields,
+        "filter_conflict": filter_conflict,
     }
 
 

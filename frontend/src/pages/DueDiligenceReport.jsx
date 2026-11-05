@@ -1,14 +1,154 @@
 import Button from '../components/Button';
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import QRCodeCanvas from '../components/QRCodeCanvas';
 import {
-  AlertOctagon, Printer, ArrowLeft, ShieldAlert, CheckCircle2,
+  AlertOctagon, Printer, ArrowLeft, ShieldAlert, CheckCircle2, ShieldCheck,
   AlertTriangle, FileText, Info, HelpCircle, Home
 } from 'lucide-react';
+import { classifyRiskFromMatch, formatPercent } from '../utils/verificationChartData';
 
-export default function DueDiligenceReport({ result, setActiveTab, navigateBack }) {
+const LOCATION_FIELDS = new Set(['division', 'district', 'upazila', 'mouza', 'union_ward']);
+const RISK_SCORE_RADIUS = 44;
+const RISK_SCORE_CIRCUMFERENCE = 2 * Math.PI * RISK_SCORE_RADIUS;
+
+const MATCH_RISK_PRESENTATIONS = {
+  NO_RISK: {
+    color: '#0F9D78', label_bn: 'কোনো ঝুঁকি নেই', label_en: 'No Risk',
+    status_bn: 'সব মূল্যায়নযোগ্য ফিল্ডে পূর্ণ মিল আছে।',
+    status_en: 'All evaluated fields match.',
+    Icon: ShieldCheck,
+  },
+  LOW_RISK: {
+    color: '#2878B5', label_bn: 'কম ঝুঁকি', label_en: 'Low Risk',
+    status_bn: 'অধিকাংশ মূল্যায়নযোগ্য তথ্য মিলেছে; কিছু অমিল বা আংশিক মিল আছে।',
+    status_en: 'Most eligible fields match; some mismatches or partial matches remain.',
+    Icon: Info,
+  },
+  LOW_MEDIUM_RISK: {
+    color: '#5B8DB8', label_bn: 'নিম্ন-মাঝারি ঝুঁকি', label_en: 'Low-Medium Risk',
+    status_bn: 'তথ্যের একটি অংশ আংশিক মিলেছে বা মেলেনি।',
+    status_en: 'A portion of the evaluated information is partial or mismatched.',
+    Icon: Info,
+  },
+  MEDIUM_RISK: {
+    color: '#D98A35', label_bn: 'মাঝারি ঝুঁকি', label_en: 'Medium Risk',
+    status_bn: 'মূল্যায়নযোগ্য তথ্যে উল্লেখযোগ্য অমিল আছে।',
+    status_en: 'There are notable mismatches in the evaluated information.',
+    Icon: AlertTriangle,
+  },
+  HIGH_MEDIUM_RISK: {
+    color: '#E47732', label_bn: 'উচ্চ-মাঝারি ঝুঁকি', label_en: 'High-Medium Risk',
+    status_bn: 'মূল্যায়নযোগ্য তথ্যে বড় অংশের অমিল বা আংশিক মিল আছে।',
+    status_en: 'A substantial share of evaluated information is partial or mismatched.',
+    Icon: AlertOctagon,
+  },
+  HIGH_RISK: {
+    color: '#D9485F', label_bn: 'উচ্চ ঝুঁকি', label_en: 'High Risk',
+    status_bn: 'প্রদত্ত তথ্যের সঙ্গে ডেটাবেজের অনেক তথ্য মেলেনি।',
+    status_en: 'Many evaluated fields do not match the application record.',
+    Icon: AlertOctagon,
+  },
+  EXTREME_RISK: {
+    color: '#B42336', label_bn: 'চরম ঝুঁকি', label_en: 'Extreme Risk',
+    status_bn: 'প্রদত্ত তথ্যের সঙ্গে ডেটাবেজের অধিকাংশ তথ্য মেলেনি।',
+    status_en: 'Most evaluated fields do not match the application record.',
+    Icon: AlertOctagon,
+  },
+};
+
+function normalizeComparison(value) {
+  return String(value ?? '').normalize('NFKC').trim().replace(/\s+/g, ' ').toLocaleLowerCase();
+}
+
+function getVerificationRiskSummary(verificationResult, targetPlot) {
+  if (!verificationResult) return { available: false, reason: 'missing' };
+
+  const extracted = verificationResult.extracted_summary && typeof verificationResult.extracted_summary === 'object'
+    ? verificationResult.extracted_summary
+    : {};
+  const submitted = verificationResult.submitted_summary && typeof verificationResult.submitted_summary === 'object'
+    ? verificationResult.submitted_summary
+    : {};
+  const sourcePlot = submitted.plot_id || submitted.plot_no || verificationResult.plot_id || verificationResult.plot_no;
+  if (!sourcePlot || normalizeComparison(sourcePlot) !== normalizeComparison(targetPlot)) {
+    return { available: false, reason: 'different_plot' };
+  }
+  if (!(verificationResult.record_found ?? extracted.record_found)) {
+    return { available: false, reason: 'record_missing' };
+  }
+
+  const checks = Array.isArray(verificationResult.field_checks)
+    ? verificationResult.field_checks
+    : Array.isArray(extracted.verification_fields) ? extracted.verification_fields : [];
+  if (!checks.length) return { available: false, reason: 'fields_missing' };
+
+  const rows = checks.filter((field) => field && field.key !== 'property_status' && !field.reference_only);
+  let matched = 0;
+  let partial = 0;
+  let mismatched = 0;
+  for (const field of rows) {
+    let status = field.status;
+    const hasLocationIds = field.submitted_location_id !== null
+      && field.submitted_location_id !== undefined
+      && field.recorded_location_id !== null
+      && field.recorded_location_id !== undefined;
+    if (LOCATION_FIELDS.has(field.key) && status === 'MISMATCH' && !hasLocationIds) status = 'UNAVAILABLE';
+
+    if (!['MATCHED', 'PARTIAL_MATCH', 'MISMATCH', 'UNAVAILABLE', 'NOT_PROVIDED', 'AVAILABLE', 'PENDING'].includes(status)) {
+      if (field.optional && !field.submitted) status = 'NOT_PROVIDED';
+      else if (field.key === 'deed_type' && field.submitted_names?.code && field.recorded_names?.code) {
+        status = field.submitted_names.code === field.recorded_names.code ? 'MATCHED' : 'MISMATCH';
+      }
+      else if (!field.available || field.recorded === null || field.recorded === undefined || field.recorded === '') status = 'UNAVAILABLE';
+      else if (field.reference_only) status = 'AVAILABLE';
+      else if (!field.submitted) status = 'NOT_PROVIDED';
+      else if (LOCATION_FIELDS.has(field.key)) {
+        status = !hasLocationIds
+          ? 'UNAVAILABLE'
+          : String(field.submitted_location_id) === String(field.recorded_location_id) ? 'MATCHED' : 'MISMATCH';
+      } else {
+        status = normalizeComparison(field.submitted) === normalizeComparison(field.recorded) ? 'MATCHED' : 'MISMATCH';
+      }
+    }
+
+    if (field.optional && status === 'NOT_PROVIDED') continue;
+    if (status === 'MATCHED') matched += 1;
+    else if (status === 'PARTIAL_MATCH') partial += 1;
+    else if (status === 'MISMATCH') mismatched += 1;
+  }
+
+  const eligibleCount = matched + partial + mismatched;
+  const percentage = eligibleCount > 0 ? ((matched + partial * 0.5) / eligibleCount) * 100 : null;
+  const classification = classifyRiskFromMatch(percentage);
+  return {
+    available: Boolean(classification),
+    matched,
+    partial,
+    mismatched,
+    eligibleCount,
+    percentage,
+    classification,
+    presentation: MATCH_RISK_PRESENTATIONS[classification],
+  };
+}
+
+export default function DueDiligenceReport({ result, verificationResult, setActiveTab, navigateBack }) {
   const { lang, t } = useApp();
+  const [riskChartReady, setRiskChartReady] = useState(false);
+  const prefersReducedMotion = typeof window !== 'undefined'
+    && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  useEffect(() => {
+    setRiskChartReady(false);
+    if (!result) return undefined;
+    if (prefersReducedMotion) {
+      setRiskChartReady(true);
+      return undefined;
+    }
+    const frame = window.requestAnimationFrame(() => setRiskChartReady(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [result?.report_ref, result?.risk_score, prefersReducedMotion]);
 
   if (!result) {
     return (
@@ -83,6 +223,30 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
   };
 
   const LevelIcon = levelStyles.icon;
+  const parsedRiskScore = risk_score === null || risk_score === undefined || risk_score === ''
+    ? null
+    : Number(risk_score);
+  const riskScoreValue = Number.isFinite(parsedRiskScore)
+    ? Math.max(0, Math.min(100, parsedRiskScore))
+    : null;
+  const riskScoreOffset = riskScoreValue === null
+    ? RISK_SCORE_CIRCUMFERENCE
+    : RISK_SCORE_CIRCUMFERENCE * (1 - riskScoreValue / 100);
+  const indicatorList = Array.isArray(indicators) ? indicators : [];
+  const severityCategories = [
+    { key: 'high', color: '#D9485F', label: lang === 'bn' ? 'উচ্চ' : 'High' },
+    { key: 'medium', color: '#D98A35', label: lang === 'bn' ? 'মাঝারি' : 'Medium' },
+    { key: 'low', color: '#6B95D6', label: lang === 'bn' ? 'কম' : 'Low' },
+    { key: 'other', color: '#94A3B8', label: lang === 'bn' ? 'অন্যান্য' : 'Other' },
+  ].map((category) => ({
+    ...category,
+    count: category.key === 'other'
+      ? indicatorList.filter((indicator) => !['high', 'medium', 'low'].includes(String(indicator?.severity || '').toLowerCase())).length
+      : indicatorList.filter((indicator) => String(indicator?.severity || '').toLowerCase() === category.key).length,
+  }));
+  const indicatorTotal = severityCategories.reduce((sum, category) => sum + category.count, 0);
+  const matchRisk = getVerificationRiskSummary(verificationResult, plot_no);
+  const MatchRiskIcon = matchRisk.presentation?.Icon || Info;
 
   const handlePrint = () => {
     window.print();
@@ -145,31 +309,87 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
           </div>
         </div>
 
-        {/* Risk Banner & Score */}
-        <div className={`p-5 rounded-xl border flex flex-wrap items-center justify-between gap-4 ${levelStyles.bg}`}>
-          <div className="flex items-center gap-3">
-            <LevelIcon className={`w-10 h-10 ${levelStyles.color} flex-shrink-0`} />
-            <div>
-              <div className="text-xs text-gray-500 uppercase font-semibold">
-                {lang === 'bn' ? 'সার্বিক ঝুঁকি মাত্রা (Overall Preliminary Risk)' : 'Overall Preliminary Risk'}
+        {/* Risk Cards: due diligence score and the moved deed-match risk */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <div className={`p-5 rounded-xl border flex flex-wrap items-center justify-between gap-4 ${levelStyles.bg}`}>
+            <div className="flex items-center gap-3">
+              <LevelIcon className={`w-10 h-10 ${levelStyles.color} flex-shrink-0`} />
+              <div>
+                <div className="text-xs text-gray-500 uppercase font-semibold">
+                  {lang === 'bn' ? 'সার্বিক ঝুঁকি মাত্রা (Overall Preliminary Risk)' : 'Overall Preliminary Risk'}
+                </div>
+                <div className={`text-lg sm:text-xl font-black ${levelStyles.color}`}>
+                  {levelStyles.label}
+                </div>
               </div>
-              <div className={`text-lg sm:text-xl font-black ${levelStyles.color}`}>
-                {levelStyles.label}
+            </div>
+
+            <div className="flex items-center gap-3 bg-white dark:bg-[#18231e] px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
+              <div className="text-right">
+                <span className="text-[11px] text-gray-500 block leading-tight">
+                  {lang === 'bn' ? 'ঝুঁকি স্কোর (Risk Score)' : 'Risk Score'}
+                </span>
+                <span className="text-[10px] text-gray-400">সর্বোচ্চ ১০০</span>
+              </div>
+              <div className={`text-2xl font-black ${levelStyles.color}`}>
+                {risk_score}/100
               </div>
             </div>
           </div>
 
-          <div className="flex items-center gap-3 bg-white dark:bg-[#18231e] px-4 py-2 rounded-lg border border-gray-200 dark:border-gray-700">
-            <div className="text-right">
-              <span className="text-[11px] text-gray-500 block leading-tight">
-                {lang === 'bn' ? 'ঝুঁকি স্কোর (Risk Score)' : 'Risk Score'}
-              </span>
-              <span className="text-[10px] text-gray-400">সর্বোচ্চ ১০০</span>
+          <article
+            className="rounded-xl border border-l-4 bg-white p-5 shadow-sm dark:bg-gray-900/60 motion-safe:transition-all motion-safe:duration-300"
+            style={{ borderColor: `${matchRisk.presentation?.color || '#64748B'}66`, borderLeftColor: matchRisk.presentation?.color || '#64748B' }}
+            aria-label={lang === 'bn' ? 'দলিলের মিলভিত্তিক ঝুঁকি' : 'Deed match-based risk'}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-4">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+                  style={{ color: matchRisk.presentation?.color || '#64748B', backgroundColor: `${matchRisk.presentation?.color || '#64748B'}18` }}
+                >
+                  <MatchRiskIcon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <div className="min-w-0">
+                  <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+                    {lang === 'bn' ? 'দলিল যাচাইয়ের ঝুঁকি' : 'Deed Verification Risk'}
+                  </span>
+                  <span
+                    className="mt-1 inline-flex max-w-full items-center rounded-full border px-3 py-1 text-sm font-bold"
+                    style={{ color: matchRisk.presentation?.color || '#64748B', borderColor: `${matchRisk.presentation?.color || '#64748B'}55`, backgroundColor: `${matchRisk.presentation?.color || '#64748B'}12` }}
+                  >
+                    {matchRisk.available
+                      ? (lang === 'bn' ? matchRisk.presentation.label_bn : matchRisk.presentation.label_en)
+                      : (lang === 'bn' ? 'ঝুঁকি মূল্যায়ন অনুপলব্ধ' : 'Risk Assessment Unavailable')}
+                  </span>
+                </div>
+              </div>
+              <div className="shrink-0 sm:text-right">
+                <strong className="block text-3xl font-black leading-none tabular-nums text-slate-900 dark:text-white">
+                  {formatPercent(matchRisk.percentage, lang)}
+                </strong>
+                <span className="mt-1 block text-[10px] font-medium text-slate-500">
+                  {lang === 'bn' ? 'সার্বিক মিল' : 'Overall Match'}
+                </span>
+              </div>
             </div>
-            <div className={`text-2xl font-black ${levelStyles.color}`}>
-              {risk_score}/100
-            </div>
-          </div>
+            <p className="mt-3 text-xs leading-relaxed text-slate-600 dark:text-slate-300">
+              {matchRisk.available
+                ? (lang === 'bn' ? matchRisk.presentation.status_bn : matchRisk.presentation.status_en)
+                : (matchRisk.reason === 'record_missing'
+                  ? (lang === 'bn' ? 'এই দাগের যাচাইয়ে কোনো দলিল রেকর্ড পাওয়া যায়নি; তাই মিলভিত্তিক ঝুঁকি নির্ধারণ করা যায়নি।' : 'No deed record was found for this parcel verification, so a match-based risk level is unavailable.')
+                  : matchRisk.reason === 'different_plot'
+                    ? (lang === 'bn' ? 'সর্বশেষ দলিল যাচাইটি এই রিপোর্টের দাগ নম্বরের জন্য নয়। একই দাগের দলিল যাচাই করলে এখানে ফল দেখাবে।' : 'The latest deed verification is for a different parcel. Verify this parcel to show its match-based result here.')
+                    : (lang === 'bn' ? 'এই দাগের জন্য দলিল যাচাইয়ের ফল নেই; একই দাগের দলিল যাচাই করলে এখানে ফল দেখাবে।' : 'No deed verification is available for this parcel. Verify its deed to show the match-based result here.'))}
+            </p>
+            {matchRisk.available && (
+              <p className="mt-2 text-[10px] text-slate-500">
+                {lang === 'bn'
+                  ? `মিলেছে ${matchRisk.matched}, আংশিক ${matchRisk.partial}, অমিল ${matchRisk.mismatched} · ${matchRisk.eligibleCount}টি মূল্যায়নযোগ্য ফিল্ড`
+                  : `Matched ${matchRisk.matched}, partial ${matchRisk.partial}, mismatched ${matchRisk.mismatched} · ${matchRisk.eligibleCount} eligible fields`}
+              </p>
+            )}
+          </article>
         </div>
 
         {/* Parcel Profile Summary */}
@@ -191,6 +411,87 @@ export default function DueDiligenceReport({ result, setActiveTab, navigateBack 
             <strong>{proposed_area} শতক</strong> {recorded_area ? `(রেকর্ড: ${recorded_area} শতক)` : ''}
           </div>
         </div>
+
+        {/* Animated risk score and evidence severity chart */}
+        <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-700 dark:bg-gray-900/50" aria-labelledby="dd-risk-chart-title">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h3 id="dd-risk-chart-title" className="text-sm font-bold text-gray-900 dark:text-white">
+                {lang === 'bn' ? 'ঝুঁকি স্কোর ও সূচকের চার্ট' : 'Risk Score & Indicator Chart'}
+              </h3>
+              <p className="mt-1 text-[10px] text-gray-500">
+                {lang === 'bn' ? 'রিংটি backend ঝুঁকি স্কোর / ১০০ এবং বারটি রিপোর্টের সূচকগুলোর severity দেখায়।' : 'The ring shows the backend risk score out of 100; the bar shows indicator severity counts from this report.'}
+              </p>
+            </div>
+            <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-1 text-[10px] text-gray-500 dark:border-gray-700 dark:bg-gray-800">
+              {indicatorList.length} {lang === 'bn' ? 'টি সূচক' : 'indicators'}
+            </span>
+          </div>
+
+          <div className="mt-4 grid grid-cols-1 sm:grid-cols-[150px_1fr] items-center gap-5">
+            <div className="mx-auto w-36" role="img" aria-label={lang === 'bn' ? `ঝুঁকি স্কোর ${riskScoreValue ?? 'অনুপলব্ধ'} / ১০০` : `Risk score ${riskScoreValue ?? 'unavailable'} out of 100`}>
+              <svg viewBox="0 0 112 112" className="w-full overflow-visible">
+                <circle cx="56" cy="56" r={RISK_SCORE_RADIUS} fill="none" stroke="#E2E8F0" strokeWidth="10" className="dark:stroke-gray-700" />
+                {riskScoreValue !== null && (
+                  <circle
+                    cx="56"
+                    cy="56"
+                    r={RISK_SCORE_RADIUS}
+                    fill="none"
+                    stroke={risk_level === 'high' ? '#D9485F' : risk_level === 'medium' ? '#D98A35' : risk_level === 'low' ? '#6B95D6' : '#94A3B8'}
+                    strokeWidth="10"
+                    strokeLinecap="round"
+                    strokeDasharray={RISK_SCORE_CIRCUMFERENCE}
+                    strokeDashoffset={riskChartReady ? riskScoreOffset : RISK_SCORE_CIRCUMFERENCE}
+                    transform="rotate(-90 56 56)"
+                    style={{ transition: prefersReducedMotion ? 'none' : 'stroke-dashoffset 1000ms cubic-bezier(0.22, 1, 0.36, 1)' }}
+                  />
+                )}
+                <text x="56" y="53" textAnchor="middle" className="fill-slate-900 text-[22px] font-black dark:fill-white">
+                  {riskScoreValue ?? '—'}
+                </text>
+                <text x="56" y="69" textAnchor="middle" className="fill-slate-500 text-[9px] font-semibold">
+                  {lang === 'bn' ? '/ ১০০' : '/ 100'}
+                </text>
+              </svg>
+            </div>
+
+            <div className="min-w-0 space-y-3">
+              <div className="h-3 w-full overflow-hidden rounded-full bg-slate-100 dark:bg-gray-800" role="img" aria-label={lang === 'bn' ? 'ঝুঁকি সূচকের severity বণ্টন' : 'Risk indicator severity distribution'}>
+                <div className="flex h-full w-full">
+                  {severityCategories.filter((category) => category.count > 0).map((category) => (
+                    <span
+                      key={category.key}
+                      className="h-full motion-safe:transition-[width] motion-safe:duration-1000 motion-safe:ease-out motion-reduce:transition-none"
+                      style={{
+                        width: `${riskChartReady && indicatorTotal ? (category.count / indicatorTotal) * 100 : 0}%`,
+                        backgroundColor: category.color,
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+                {severityCategories.map((category) => (
+                  <div key={category.key} className="flex items-center justify-between gap-2 text-[11px]">
+                    <span className="flex min-w-0 items-center gap-2 text-gray-600 dark:text-gray-300">
+                      <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ backgroundColor: category.color }} />
+                      <span className="truncate">{category.label}</span>
+                    </span>
+                    <strong className="tabular-nums text-gray-900 dark:text-white">
+                      {category.count}{indicatorTotal ? ` · ${formatPercent((category.count / indicatorTotal) * 100, lang)}` : ` · ${formatPercent(0, lang)}`}
+                    </strong>
+                  </div>
+                ))}
+              </div>
+              {indicatorTotal === 0 && (
+                <p className="text-[10px] text-gray-500">
+                  {lang === 'bn' ? 'এই রিপোর্টে কোনো ঝুঁকি সূচক রেকর্ড হয়নি।' : 'No risk indicators were recorded in this report.'}
+                </p>
+              )}
+            </div>
+          </div>
+        </section>
 
         {/* Individual Risk Indicators with Transparent Scoring */}
         <div className="space-y-3">

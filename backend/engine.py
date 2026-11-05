@@ -16,6 +16,7 @@ import re
 import secrets
 import psycopg
 import time
+import unicodedata
 
 from datetime import datetime, date
 from contextlib import contextmanager
@@ -44,6 +45,38 @@ _schema_init_lock = Lock()
 
 _pool = None
 _pool_lock = Lock()
+
+DEED_TYPE_CATALOG = [
+    ("sale", "বিক্রয় / হস্তান্তর দলিল", "Sale / conveyance deed", "https://bdlaws.minlaw.gov.bd/act-print-48.html", 10),
+    ("contract_for_sale", "বায়নাপত্র / বিক্রয় চুক্তি", "Contract for sale", "https://bdlaws.minlaw.gov.bd/act-print-48.html", 20),
+    ("gift", "দানপত্র", "Gift deed", "https://bdlaws.minlaw.gov.bd/act-print-90.html", 30),
+    ("heba", "হেবা / হেবা ঘোষণা", "Heba declaration", "https://bdlaws.minlaw.gov.bd/act-print-90.html", 40),
+    ("mortgage", "বন্ধক দলিল", "Mortgage deed", "https://bdlaws.minlaw.gov.bd/act-print-90.html", 50),
+    ("partition", "বণ্টননামা", "Partition deed", "https://bdlaws.minlaw.gov.bd/act-print-90.html", 60),
+    ("lease", "ইজারা / লিজ দলিল", "Lease deed", "https://bdlaws.minlaw.gov.bd/act-print-90.html", 70),
+    ("power_of_attorney", "আমমোক্তারনামা", "Power of attorney", "https://rd.gov.bd/pages/forms", 80),
+    ("other", "অন্যান্য", "Other", "https://rd.gov.bd/pages/forms", 90),
+]
+
+
+def normalize_deed_type_value(value):
+    """Normalize a deed type code or localized catalog label for exact lookup."""
+    return " ".join(unicodedata.normalize("NFKC", str(value or "")).casefold().split())
+
+
+def resolve_deed_type_reference(value, catalog_rows):
+    """Resolve a code or Bengali/English label only when it identifies one active type."""
+    normalized = normalize_deed_type_value(value)
+    if not normalized:
+        return None
+
+    matches = {}
+    for row in catalog_rows or []:
+        entry = dict(row)
+        aliases = (entry.get("code"), entry.get("name_bn"), entry.get("name_en"))
+        if any(normalize_deed_type_value(alias) == normalized for alias in aliases if alias):
+            matches[str(entry.get("code"))] = entry
+    return next(iter(matches.values())) if len(matches) == 1 else None
 
 
 def _get_pool():
@@ -78,6 +111,18 @@ def _get_pool():
     return _pool
 
 
+def close_pool(timeout: float = 12.0):
+    """Close the shared PostgreSQL pool during application shutdown/reload."""
+    global _pool
+    with _pool_lock:
+        pool = _pool
+        _pool = None
+    if pool is not None:
+        # Connection attempts may take up to connect_timeout (10 seconds).
+        # Give pool workers time to finish before Uvicorn reloads the process.
+        pool.close(timeout=timeout)
+
+
 @contextmanager
 def conn():
     database_url = os.environ.get("DATABASE_URL")
@@ -99,6 +144,27 @@ def conn():
 
     with pool.connection(timeout=30) as c:
         yield c
+
+
+def ping_database(timeout: float = 1.5) -> bool:
+    """Check PostgreSQL readiness with a bounded wait and no schema writes."""
+    database_url = os.environ.get("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL environment variable is not set")
+
+    pool = _get_pool()
+    if pool is None:
+        with psycopg.connect(
+            database_url,
+            row_factory=dict_row,
+            connect_timeout=max(1, int(timeout)),
+        ) as connection:
+            connection.execute("SELECT 1").fetchone()
+        return True
+
+    with pool.connection(timeout=timeout) as connection:
+        connection.execute("SELECT 1").fetchone()
+    return True
 
 def init():
     global _schema_initialized
@@ -214,14 +280,37 @@ def init():
                raw_text TEXT,
                created_at TEXT NOT NULL
            )""")
+            c.execute("ALTER TABLE deeds ADD COLUMN IF NOT EXISTS division TEXT")
+            c.execute("ALTER TABLE deeds ADD COLUMN IF NOT EXISTS division_id BIGINT")
+            c.execute("ALTER TABLE deeds ADD COLUMN IF NOT EXISTS union_id BIGINT")
+            c.execute("ALTER TABLE deeds ADD COLUMN IF NOT EXISTS union_ward TEXT")
+            c.execute("ALTER TABLE deeds ADD COLUMN IF NOT EXISTS deed_type TEXT")
 
             # 5. Deed Verifications (P2)
          # 5. Deed Verifications (P2)
+            c.execute("""CREATE TABLE IF NOT EXISTS deed_types(
+                code TEXT PRIMARY KEY,
+                name_bn TEXT NOT NULL,
+                name_en TEXT NOT NULL,
+                official_source TEXT NOT NULL,
+                sort_order INTEGER NOT NULL,
+                is_active BOOLEAN NOT NULL DEFAULT TRUE
+            )""")
+            for deed_type in DEED_TYPE_CATALOG:
+                c.execute(
+                    """INSERT INTO deed_types (code, name_bn, name_en, official_source, sort_order, is_active)
+                       VALUES (%s, %s, %s, %s, %s, TRUE)
+                       ON CONFLICT (code) DO UPDATE SET name_bn=EXCLUDED.name_bn,
+                           name_en=EXCLUDED.name_en, official_source=EXCLUDED.official_source,
+                           sort_order=EXCLUDED.sort_order, is_active=TRUE""",
+                    deed_type,
+                )
             c.execute("""CREATE TABLE IF NOT EXISTS deed_verifications(
         id INTEGER GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY,
         verification_ref TEXT UNIQUE NOT NULL,
         user_id INTEGER,
         deed_no TEXT NOT NULL,
+        deed_type TEXT,
         reg_year INTEGER NOT NULL,
         district TEXT NOT NULL,
         upazila TEXT NOT NULL,
@@ -229,6 +318,8 @@ def init():
         plot_id TEXT,
         khatian_no TEXT,
         owner_name TEXT,
+        buyer_name TEXT,
+        seller_name TEXT,
         result_status TEXT NOT NULL,
         match_score INTEGER,
         discrepancies TEXT,
@@ -236,6 +327,13 @@ def init():
         notes TEXT,
         created_at TEXT NOT NULL
               )""")
+            c.execute("ALTER TABLE deed_verifications ADD COLUMN IF NOT EXISTS deed_type TEXT")
+            c.execute("ALTER TABLE deed_verifications ADD COLUMN IF NOT EXISTS buyer_name TEXT")
+            c.execute("ALTER TABLE deed_verifications ADD COLUMN IF NOT EXISTS seller_name TEXT")
+            c.execute("ALTER TABLE deed_verifications ADD COLUMN IF NOT EXISTS division TEXT")
+            c.execute("ALTER TABLE deed_verifications ADD COLUMN IF NOT EXISTS division_id BIGINT")
+            c.execute("ALTER TABLE deed_verifications ADD COLUMN IF NOT EXISTS union_id BIGINT")
+            c.execute("ALTER TABLE deed_verifications ADD COLUMN IF NOT EXISTS union_ward TEXT")
             # 6. Smart E-Namjari Mutation Applications (P4)
           
             c.execute("""CREATE TABLE IF NOT EXISTS mutation_applications(
@@ -302,8 +400,11 @@ def init():
         indicators TEXT,
         evidence TEXT,
         recommendations TEXT,
+        cpp_graph_analysis TEXT,
         created_at TEXT NOT NULL
     )""")
+            if os.environ.get("APP_ENV", "development").lower() != "production":
+                c.execute("ALTER TABLE due_diligence_reports ADD COLUMN IF NOT EXISTS cpp_graph_analysis TEXT")
 
     # 9. Audit Logs
             c.execute("""CREATE TABLE IF NOT EXISTS audit_logs(
@@ -591,19 +692,32 @@ def authenticate_user(identifier: str, password: str):
 def get_user_by_id(uid: int):
     init()
     with conn() as c:
-        u = c.execute("SELECT * FROM users WHERE id = %s", (uid,)).fetchone()
+        u = c.execute(
+            """SELECT id,name,username,email,phone,role,designation,created_at,updated_at,
+                      profile_picture,auth_version,
+                      CASE WHEN COALESCE(nid,'')='' THEN NULL ELSE '••••••••' || RIGHT(nid,4) END AS nid_masked
+               FROM users WHERE id = %s""",
+            (uid,),
+        ).fetchone()
         if not u:
             return None
         d = dict(u)
-        d.pop("password_hash", None)
-        d.pop("salt", None)
         return d
+
+
+def _mask_nid_value(value):
+    text = str(value or "")
+    return ("••••••••" + text[-4:]) if text else None
 
 
 def get_all_users():
     init()
     with conn() as c:
-        rows = c.execute("SELECT id, name, username, email, phone, role, nid, designation, created_at, profile_picture FROM users ORDER BY id ASC").fetchall()
+        rows = c.execute(
+            """SELECT id,name,username,email,phone,role,designation,created_at,profile_picture,
+                      CASE WHEN COALESCE(nid,'')='' THEN NULL ELSE '••••••••' || RIGHT(nid,4) END AS nid_masked
+               FROM users ORDER BY id ASC"""
+        ).fetchall()
         return [dict(r) for r in rows]
 
 
@@ -668,48 +782,213 @@ def mark_notification_read(nid: int):
 # P2: DIGITAL DEED & OWNERSHIP VERIFICATION ENGINE
 # =====================================================================
 
+def _normalize_deed_lookup_number(value):
+    """Normalize deed-number spelling consistently with the deed search API."""
+    text = str(value or "").translate(str.maketrans("০১২৩৪৫৬৭৮৯", "0123456789"))
+    return "".join(text.split()).upper()
+
+
+def _select_deed_candidate(candidates, input_data=None, requested_year=None):
+    """Select only a unique deed, optionally narrowed by an exact registration year."""
+    rows = list(candidates or [])
+    if requested_year:
+        exact_year_rows = [
+            row for row in rows
+            if int(row.get("reg_year") or 0) == int(requested_year)
+        ]
+        if exact_year_rows:
+            rows = exact_year_rows
+    if not rows:
+        return None, False
+    if len(rows) == 1:
+        return rows[0], False
+    # Supporting fields must not silently pick among two deeds. The user must
+    # select the candidate explicitly on the existing Find Deed screen.
+    return None, True
+
+
 def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
     init()
     deed_no = str(input_data.get("deed_no", "")).strip()
+    deed_type = str(input_data.get("deed_type", "")).strip()
     reg_year = int(input_data.get("reg_year", 0) or 0)
+    division = str(input_data.get("division", "")).strip()
+    division_id = input_data.get("division_id")
     district = str(input_data.get("district", "")).strip()
     upazila = str(input_data.get("upazila", "")).strip()
     mouza = str(input_data.get("mouza", "")).strip()
     plot_id = str(input_data.get("plot_id", "")).strip()
     khatian_no = str(input_data.get("khatian_no", "")).strip()
-    owner_name = str(input_data.get("owner_name", "")).strip()
+    buyer_name = str(input_data.get("buyer_name") or input_data.get("owner_name", "")).strip()
+    owner_name = buyer_name
+    seller_name = str(input_data.get("seller_name", "")).strip()
+    union_ward = str(input_data.get("union_ward", "")).strip()
+    union_id = input_data.get("union_id")
     notes = str(input_data.get("notes", "")).strip()
+    selected_deed_id = input_data.get("selected_deed_id")
+    submitted_location_ref = {}
+    recorded_location_ref = {}
+    submitted_union_ref = None
+    recorded_union_ref = None
 
     with conn() as c:
         deed_record = None
+        deed_lookup_ambiguous = False
+        deed_candidates = []
+        invalid_selected_deed = False
+        query = """SELECT d.*,
+                          COALESCE(NULLIF(BTRIM(d.division), ''), v.name_bn, v.name_en) AS resolved_division,
+                          COALESCE(NULLIF(BTRIM(d.union_ward), ''), u.name_bn, u.name_en) AS resolved_union
+                   FROM deeds AS d
+                   LEFT JOIN divisions AS v ON v.id=d.division_id
+                   LEFT JOIN admin_unions AS u ON u.id=d.union_id"""
+        if selected_deed_id:
+            selected = c.execute(query + " WHERE d.id = %s", (selected_deed_id,)).fetchone()
+            if selected and _normalize_deed_lookup_number(selected.get("deed_no")) == _normalize_deed_lookup_number(deed_no):
+                deed_record = selected
+            else:
+                invalid_selected_deed = True
         if deed_no:
-            query = "SELECT * FROM deeds WHERE LOWER(deed_no) = LOWER(%s)"
-            params = [deed_no]
-            if reg_year > 0:
-                query += " AND reg_year = %s"
-                params.append(reg_year)
-            deed_record = c.execute(query, params).fetchone()
+            if not deed_record and not selected_deed_id:
+                # Use the existing raw deed_no btree for the common exact case.
+                exact_candidates = c.execute(
+                    query + " WHERE d.deed_no = %s ORDER BY d.reg_year DESC, d.id DESC LIMIT 51",
+                    (deed_no,),
+                ).fetchall()
+                normalized_no = _normalize_deed_lookup_number(deed_no)
+                normalized_candidates = []
+                if len(exact_candidates) < 51:
+                    normalized_candidates = c.execute(
+                        query + " WHERE REGEXP_REPLACE(TRANSLATE(UPPER(d.deed_no), '০১২৩৪৫৬৭৮৯', '0123456789'), '[[:space:]]+', '', 'g') = %s AND d.deed_no IS DISTINCT FROM %s ORDER BY d.reg_year DESC, d.id DESC LIMIT 51",
+                        (normalized_no, deed_no),
+                    ).fetchall()
+                unique_candidates = {}
+                for candidate in [*exact_candidates, *normalized_candidates]:
+                    unique_candidates[candidate["id"]] = candidate
+                deed_candidates = sorted(
+                    unique_candidates.values(),
+                    key=lambda candidate: (candidate.get("reg_year") or 0, candidate.get("id") or 0),
+                    reverse=True,
+                )[:51]
+                deed_record, deed_lookup_ambiguous = _select_deed_candidate(
+                    deed_candidates, input_data, reg_year
+                )
+
+        if invalid_selected_deed:
+            return {
+                "lookup_status": "INVALID_INPUT",
+                "result_status": "POTENTIAL_INCONSISTENCY",
+                "record_found": False,
+                "message_bn": "নির্বাচিত দলিলটি আর এই দলিল নম্বরের সঙ্গে মেলে না। আবার দলিল খুঁজুন।",
+                "message_en": "The selected deed no longer matches this deed number. Search for the deed again.",
+                "data_source": "application_database",
+            }
+        if deed_lookup_ambiguous:
+            return {
+                "lookup_status": "AMBIGUOUS",
+                "result_status": "POTENTIAL_INCONSISTENCY",
+                "overall_category": "INSUFFICIENT_DATA",
+                "record_found": False,
+                "candidate_count": len(deed_candidates),
+                "message_bn": "এই দলিল নম্বরে একাধিক রেকর্ড আছে। যাচাইয়ের আগে সঠিক দলিলটি বেছে নিন।",
+                "message_en": "Multiple records share this deed number. Select the correct deed before verification.",
+                "data_source": "application_database",
+            }
+        if not deed_record:
+            return {
+                "lookup_status": "DEED_NOT_FOUND",
+                "result_status": "RECORD_NOT_FOUND",
+                "overall_category": "RECORD_NOT_FOUND",
+                "record_found": False,
+                "verification_ref": None,
+                "match_score": None,
+                "field_checks": [],
+                "fields": [],
+                "message_bn": "আপনার দেওয়া দলিল নম্বরটি আমাদের ডেটাবেজে পাওয়া যায়নি। অনুগ্রহ করে সঠিক দলিল নম্বর দিন অথবা আপনার দলিল খুঁজে দেখুন।",
+                "message_en": "Your submitted deed number was not found in our database. Please check the number or find your deed.",
+                "data_source": "application_database",
+                "is_official_registry": False,
+            }
+
+        deed_type_catalog_rows = [dict(row) for row in c.execute(
+            """SELECT code, name_bn, name_en
+               FROM deed_types WHERE is_active=TRUE ORDER BY sort_order, code"""
+        ).fetchall()]
+        submitted_deed_type_ref = resolve_deed_type_reference(deed_type, deed_type_catalog_rows)
+        recorded_deed_type_value = deed_record.get("deed_type")
+        recorded_deed_type_ref = resolve_deed_type_reference(recorded_deed_type_value, deed_type_catalog_rows)
 
         prop_record = None
-        if plot_id:
+        if deed_record and deed_record.get("plot_id"):
             prop_record = c.execute(
-                "SELECT * FROM properties WHERE LOWER(plot_id) = LOWER(%s)", (plot_id,)
+                """SELECT * FROM properties
+                   WHERE LOWER(BTRIM(plot_id)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(district)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(upazila)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(mouza)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(khatian_no)) = LOWER(BTRIM(%s))
+                   LIMIT 1""",
+                (deed_record["plot_id"], deed_record["district"], deed_record["upazila"], deed_record["mouza"], deed_record["khatian_no"]),
             ).fetchone()
-        elif deed_record and deed_record["plot_id"]:
-            prop_record = c.execute(
-                "SELECT * FROM properties WHERE LOWER(plot_id) = LOWER(%s)", (deed_record["plot_id"],)
-            ).fetchone()
+
+        history_scope = {
+            "district": deed_record.get("district"),
+            "upazila": deed_record.get("upazila"),
+            "mouza": deed_record.get("mouza"),
+            "plot_id": deed_record.get("plot_id"),
+        }
+        history_rows = []
+        history_truncated = False
+        if all(history_scope.values()):
+            rows = c.execute(
+                """SELECT id, deed_no, deed_type, reg_year, reg_date,
+                          seller_name, buyer_name, division, division_id,
+                          district, upazila, mouza, plot_id, khatian_no
+                   FROM deeds
+                   WHERE LOWER(BTRIM(district)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(upazila)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(mouza)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(plot_id)) = LOWER(BTRIM(%s))
+                   ORDER BY reg_year ASC, reg_date ASC, id ASC
+                   LIMIT 101""",
+                (history_scope["district"], history_scope["upazila"],
+                 history_scope["mouza"], history_scope["plot_id"]),
+            ).fetchall()
+            history_truncated = len(rows) > 100
+            history_rows = [dict(row) for row in rows[:100]]
+
+        # Resolve bilingual legacy deed/property labels only when the exact
+        # catalog label is unique within its verified parent hierarchy.
+        try:
+            import location_service
+        except ImportError:
+            from . import location_service
+        submitted_location_ref = location_service.resolve_location_reference(c, input_data)
+        source_location_record = deed_record or prop_record or {}
+        recorded_location_ref = location_service.resolve_location_reference(c, source_location_record)
+        submitted_union_ref = location_service.resolve_union_reference(
+            c, submitted_location_ref.get("location_id"), union_ward, union_id
+        )
+        recorded_union_ref = location_service.resolve_union_reference(
+            c, recorded_location_ref.get("location_id"),
+            (deed_record.get("resolved_union") or deed_record.get("union_ward")) if deed_record else None,
+            deed_record.get("union_id") if deed_record else None,
+        )
 
     discrepancies = []
-    weighted_score = 0.0
-    evaluated_weight = 0.0
+    if deed_lookup_ambiguous:
+        discrepancies.append({
+            "field": "দলিল নম্বর",
+            "field_en": "Deed Number",
+            "severity": "medium",
+            "code": "AMBIGUOUS_DEED_NUMBER",
+            "message_bn": "এই দলিল নম্বরে একাধিক রেকর্ড আছে; দেওয়া জমির শনাক্তকারী দিয়ে একটিকে নিশ্চিত করা যায়নি।",
+            "message_en": "Multiple records share this deed number; the submitted land identifiers did not uniquely identify one.",
+            "source": "Application deeds database",
+        })
 
-    def add_score(field, weight, similarity, expected=None, provided=None):
-        nonlocal weighted_score, evaluated_weight
-
+    def add_score(field, similarity, expected=None, provided=None):
         similarity = max(0.0, min(100.0, float(similarity)))
-        weighted_score += weight * similarity / 100
-        evaluated_weight += weight
 
         if similarity < 100:
             discrepancies.append({
@@ -745,14 +1024,399 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
 
     submitted_summary = {
         "deed_no": deed_no or None,
+        "deed_type": deed_type or None,
+        "deed_type_names": ({
+            "bn": submitted_deed_type_ref.get("name_bn"),
+            "en": submitted_deed_type_ref.get("name_en"),
+            "code": submitted_deed_type_ref.get("code"),
+        } if submitted_deed_type_ref else None),
         "reg_year": reg_year or None,
+        "division": division or None,
+        "division_id": division_id,
         "district": district or None,
+        "district_id": input_data.get("district_id"),
         "upazila": upazila or None,
+        "location_id": input_data.get("location_id"),
+        "location_type": input_data.get("location_type"),
         "mouza": mouza or None,
+        "mouza_id": input_data.get("mouza_id"),
+        "union_ward": union_ward or None,
+        "union_id": union_id,
         "plot_id": plot_id or None,
         "khatian_no": khatian_no or None,
         "owner_name": owner_name or None,
+        "buyer_name": buyer_name or None,
+        "seller_name": seller_name or None,
     }
+
+    field_checks = []
+
+    def normalize_comparison(value):
+        return " ".join(unicodedata.normalize("NFKC", str(value or "")).casefold().split())
+
+    def add_basic_check(
+        key, field, field_en, provided, recorded, source_en, source_bn=None,
+        required=True, optional=False, reference_only=False, fuzzy=False,
+        identifier_match=None, unresolved_location=False,
+        submitted_location_id=None, recorded_location_id=None,
+        submitted_location_names=None, recorded_location_names=None,
+        unresolved_comparison=False, submitted_names=None, recorded_names=None,
+    ):
+        if not provided and optional:
+            status_value = "NOT_PROVIDED"
+            similarity = None
+        elif reference_only:
+            status_value = "AVAILABLE" if recorded not in (None, "") else "UNAVAILABLE"
+            similarity = None
+        elif unresolved_location:
+            status_value = "UNAVAILABLE"
+            similarity = None
+        elif unresolved_comparison:
+            status_value = "UNAVAILABLE"
+            similarity = None
+        elif identifier_match is not None:
+            status_value = "MATCHED" if identifier_match else "MISMATCH"
+            similarity = None
+        elif recorded in (None, ""):
+            status_value = "UNAVAILABLE"
+            similarity = None
+        elif not provided:
+            status_value = "NOT_PROVIDED"
+            similarity = None
+        else:
+            exact_match = normalize_comparison(provided) == normalize_comparison(recorded)
+            if exact_match:
+                similarity = 100.0 if fuzzy else None
+                status_value = "MATCHED"
+            elif fuzzy:
+                similarity = text_similarity(provided, recorded)
+                if similarity is None:
+                    status_value = "NOT_PROVIDED"
+                elif similarity >= 80:
+                    # Fuzzy similarity is a review signal; only normalized
+                    # exact equality can produce MATCHED for names.
+                    status_value = "PARTIAL_MATCH"
+                else:
+                    status_value = "MISMATCH"
+            else:
+                similarity = None
+                status_value = "MISMATCH"
+
+        messages = {
+            "MATCHED": ("ডেটাবেজ রেকর্ডের সঙ্গে মিলেছে।", "Matched the application database record."),
+            "PARTIAL_MATCH": ("আংশিক মিল; মূল নথির সঙ্গে হাতে যাচাই করুন।", "Partial similarity; review against the original record."),
+            "MISMATCH": ("প্রদত্ত তথ্য ডেটাবেজ রেকর্ডের সঙ্গে মেলেনি।", "The submitted value differs from the application database record."),
+            "UNAVAILABLE": ("ডেটাবেজে এই তথ্য পাওয়া যায়নি।", "No database value is available for this field."),
+            "NOT_PROVIDED": ("ঐচ্ছিক তথ্য দেওয়া হয়নি।", "Optional information was not provided."),
+            "AVAILABLE": ("রেকর্ডে তথ্য আছে; জমাদেয়া নামের সঙ্গে তুলনা করা হয়নি।", "A record value is available; it was not compared with a submitted name."),
+        }
+        message_bn, message_en = messages[status_value]
+        if unresolved_location:
+            message_bn = "নামটি নির্দিষ্ট সরকারি অবস্থান ID-তে নিশ্চিতভাবে মেলেনি; তাই ফল অনুপলব্ধ।"
+            message_en = "The name could not be linked confidently to one location ID; comparison is unavailable."
+        if unresolved_comparison:
+            message_bn = "দলিলের ধরনটি সক্রিয় তালিকার সঙ্গে নিশ্চিতভাবে মেলেনি; তাই তুলনা করা যায়নি।"
+            message_en = "The deed type could not be resolved uniquely in the active catalog; comparison is unavailable."
+        if key == "seller_name" and status_value == "UNAVAILABLE":
+            message_bn = "বিক্রেতার রেকর্ড পাওয়া যায়নি।"
+            message_en = "Seller Record Unavailable."
+        check = {
+            "key": key,
+            "field": field,
+            "field_en": field_en,
+            "required": required,
+            "optional": optional,
+            "submitted": provided or None,
+            "recorded": recorded or None,
+            "status": status_value,
+            "similarity_score": round(float(similarity), 2) if similarity is not None else None,
+            "source": source_en,
+            "source_bn": source_bn or source_en,
+            "source_en": source_en,
+            "evidence_ref": (
+                f"deeds:{deed_record.get('id')}"
+                if "deeds" in source_en and deed_record and deed_record.get("id") is not None
+                else f"properties:{prop_record.get('id')}"
+                if "properties" in source_en and prop_record and prop_record.get("id") is not None
+                else None
+            ),
+            "message_bn": message_bn,
+            "message_en": message_en,
+            "explanation_bn": message_bn,
+            "explanation_en": message_en,
+        }
+        if submitted_location_id is not None or recorded_location_id is not None:
+            check["submitted_location_id"] = submitted_location_id
+            check["recorded_location_id"] = recorded_location_id
+        if submitted_location_names:
+            check["submitted_location_names"] = submitted_location_names
+        if recorded_location_names:
+            check["recorded_location_names"] = recorded_location_names
+        if submitted_names:
+            check["submitted_names"] = submitted_names
+        if recorded_names:
+            check["recorded_names"] = recorded_names
+        field_checks.append(check)
+        return status_value
+
+    def location_name_pair(reference, key):
+        row = reference.get(key) if reference else None
+        if not row:
+            return None
+        return {"bn": row.get("name_bn"), "en": row.get("name_en"), "code": row.get("code")}
+
+    recorded_division = None
+    recorded_union = None
+    if deed_record:
+        recorded_division = deed_record.get("resolved_division") or deed_record.get("division")
+        recorded_union = deed_record.get("resolved_union") or deed_record.get("union_ward")
+        recorded_division_id = recorded_location_ref.get("division_id")
+        submitted_division_id = submitted_location_ref.get("division_id")
+        if recorded_division_id is not None and submitted_division_id is not None:
+            division_similarity = 100.0 if int(recorded_division_id) == int(submitted_division_id) else 0.0
+        else:
+            division_similarity = None
+        if division_similarity is not None:
+            add_score("বিভাগ", division_similarity, recorded_division, division)
+        if union_id is not None or union_ward:
+            recorded_union_id = recorded_union_ref.get("id") if recorded_union_ref else None
+            submitted_union_id = submitted_union_ref.get("id") if submitted_union_ref else None
+            if recorded_union_id is not None and submitted_union_id is not None:
+                union_similarity = 100.0 if int(recorded_union_id) == int(submitted_union_id) else 0.0
+                add_score("ইউনিয়ন / ওয়ার্ড", union_similarity, recorded_union, union_ward)
+    recorded_owner = prop_record.get("current_owner") if prop_record else None
+    property_source = "Application properties record"
+    deed_source = "Application deeds record"
+    add_basic_check(
+        "deed_no", "দলিল নম্বর", "Deed Number", deed_no,
+        deed_record.get("deed_no") if deed_record else None, deed_source,
+        "অ্যাপের deeds রেকর্ড", required=True,
+    )
+    add_basic_check(
+        "reg_year", "নিবন্ধনের বছর", "Registration Year", reg_year or None,
+        deed_record.get("reg_year") if deed_record else None, deed_source,
+        "অ্যাপের deeds রেকর্ড", required=True,
+    )
+    add_basic_check(
+        "deed_type", "দলিলের ধরন", "Deed Type", deed_type or None,
+        recorded_deed_type_value if deed_record else None, deed_source,
+        "অ্যাপের deeds রেকর্ড", required=False, optional=True,
+        identifier_match=(
+            submitted_deed_type_ref.get("code") == recorded_deed_type_ref.get("code")
+            if submitted_deed_type_ref and recorded_deed_type_ref else None
+        ),
+        unresolved_comparison=bool(deed_type and recorded_deed_type_value)
+        and not (submitted_deed_type_ref and recorded_deed_type_ref),
+        submitted_names=({
+            "bn": submitted_deed_type_ref.get("name_bn"),
+            "en": submitted_deed_type_ref.get("name_en"),
+            "code": submitted_deed_type_ref.get("code"),
+        } if submitted_deed_type_ref else None),
+        recorded_names=({
+            "bn": recorded_deed_type_ref.get("name_bn"),
+            "en": recorded_deed_type_ref.get("name_en"),
+            "code": recorded_deed_type_ref.get("code"),
+        } if recorded_deed_type_ref else None),
+    )
+    add_basic_check(
+        "seller_name", "বিক্রেতার নাম", "Seller Name", seller_name,
+        deed_record.get("seller_name") if deed_record else None, deed_source,
+        "অ্যাপের deeds রেকর্ড", required=True, fuzzy=True,
+    )
+    add_basic_check(
+        "buyer_name", "দলিলে ক্রেতার নাম", "Buyer Named in Deed", buyer_name,
+        deed_record.get("buyer_name") if deed_record else None, deed_source,
+        "অ্যাপের deeds রেকর্ড", required=True, fuzzy=True,
+    )
+    add_basic_check(
+        "recorded_owner", "রেকর্ডভুক্ত বর্তমান মালিক", "Recorded Current Owner", None,
+        recorded_owner, property_source, "অ্যাপের properties রেকর্ড",
+        required=False, reference_only=True,
+    )
+    add_basic_check(
+        "division", "বিভাগ", "Division", division,
+        (recorded_division or (f"ID {deed_record.get('division_id')}" if deed_record and deed_record.get("division_id") is not None else None)), deed_source,
+        "অ্যাপের deeds রেকর্ড", required=True,
+        identifier_match=(int(submitted_location_ref["division_id"]) == int(recorded_location_ref["division_id"]))
+        if submitted_location_ref.get("division_id") is not None and recorded_location_ref.get("division_id") is not None else None,
+        unresolved_location=bool(deed_record and recorded_division and (
+            submitted_location_ref.get("division_id") is None or recorded_location_ref.get("division_id") is None
+        )),
+        submitted_location_id=submitted_location_ref.get("division_id"),
+        recorded_location_id=recorded_location_ref.get("division_id"),
+        submitted_location_names=location_name_pair(submitted_location_ref, "division"),
+        recorded_location_names=location_name_pair(recorded_location_ref, "division"),
+    )
+    for key, field_bn, field_en, provided in (
+        ("district", "জেলা", "District", district),
+        ("upazila", "উপজেলা / থানা", "Upazila / Thana", upazila),
+        ("mouza", "মৌজা", "Mouza", mouza),
+        ("plot_id", "দাগ / প্লট নম্বর", "Dag / Plot Number", plot_id),
+        ("khatian_no", "খতিয়ান নম্বর", "Khatian Number", khatian_no),
+    ):
+        recorded_value = None
+        if deed_record:
+            recorded_value = deed_record.get(key)
+        elif prop_record:
+            prop_key = "plot_id" if key == "plot_id" else key
+            recorded_value = prop_record.get(prop_key)
+        source_en = deed_source if deed_record else property_source
+        source_bn = "অ্যাপের deeds রেকর্ড" if deed_record else "অ্যাপের properties রেকর্ড"
+        if key in {"district", "upazila", "mouza"}:
+            ref_key = {"district": "district", "upazila": "location", "mouza": "mouza"}[key]
+            submitted_ref_id = {
+                "district": submitted_location_ref.get("district_id"),
+                "upazila": submitted_location_ref.get("location_id"),
+                "mouza": submitted_location_ref.get("mouza_id"),
+            }[key]
+            recorded_ref_id = {
+                "district": recorded_location_ref.get("district_id"),
+                "upazila": recorded_location_ref.get("location_id"),
+                "mouza": recorded_location_ref.get("mouza_id"),
+            }[key]
+            if key == "mouza" and submitted_ref_id is None and recorded_ref_id is None:
+                # The app's Mouza catalog can be incomplete. Identical manual
+                # Mouza text is only compared within the same resolved parent.
+                same_parent = (
+                    submitted_location_ref.get("location_id") is not None
+                    and str(submitted_location_ref.get("location_id")) == str(recorded_location_ref.get("location_id"))
+                )
+                if same_parent and normalize_comparison(provided) == normalize_comparison(recorded_value):
+                    identifier_match = True
+                    unresolved = False
+                else:
+                    identifier_match = None
+                    unresolved = bool(recorded_value)
+            else:
+                identifier_match = (
+                    int(submitted_ref_id) == int(recorded_ref_id)
+                    if submitted_ref_id is not None and recorded_ref_id is not None else None
+                )
+                unresolved = bool(recorded_value and (submitted_ref_id is None or recorded_ref_id is None))
+            add_basic_check(
+                key, field_bn, field_en, provided, recorded_value,
+                source_en, source_bn, required=key != "mouza", optional=key == "mouza",
+                identifier_match=identifier_match,
+                unresolved_location=unresolved,
+                submitted_location_id=submitted_ref_id,
+                recorded_location_id=recorded_ref_id,
+                submitted_location_names=location_name_pair(submitted_location_ref, ref_key),
+                recorded_location_names=location_name_pair(recorded_location_ref, ref_key),
+            )
+        else:
+            add_basic_check(
+                key, field_bn, field_en, provided, recorded_value,
+                source_en, source_bn, required=True,
+            )
+    if submitted_union_ref and recorded_union_ref:
+        union_identifier_match = int(submitted_union_ref["id"]) == int(recorded_union_ref["id"])
+        union_unresolved = False
+    elif union_ward and recorded_union and normalize_comparison(union_ward) == normalize_comparison(recorded_union) \
+            and submitted_location_ref.get("location_id") is not None \
+            and str(submitted_location_ref.get("location_id")) == str(recorded_location_ref.get("location_id")):
+        union_identifier_match = True
+        union_unresolved = False
+    else:
+        union_identifier_match = None
+        union_unresolved = bool((union_ward or recorded_union) and deed_record and (
+            not submitted_union_ref or not recorded_union_ref
+        ))
+    add_basic_check(
+        "union_ward", "ইউনিয়ন / ওয়ার্ড", "Union / Ward", union_ward or None,
+        (recorded_union or (f"ID {deed_record.get('union_id')}" if deed_record and deed_record.get("union_id") is not None else None)), deed_source,
+        "অ্যাপের deeds রেকর্ড", required=False, optional=True,
+        identifier_match=union_identifier_match,
+        unresolved_location=union_unresolved,
+        submitted_location_id=submitted_union_ref.get("id") if submitted_union_ref else None,
+        recorded_location_id=recorded_union_ref.get("id") if recorded_union_ref else None,
+        submitted_location_names=({"bn": submitted_union_ref.get("name_bn"), "en": submitted_union_ref.get("name_en"), "code": submitted_union_ref.get("code")} if submitted_union_ref else None),
+        recorded_location_names=({"bn": recorded_union_ref.get("name_bn"), "en": recorded_union_ref.get("name_en"), "code": recorded_union_ref.get("code")} if recorded_union_ref else None),
+    )
+    add_basic_check(
+        "property_status", "অ্যাপের জমি রেকর্ডের অবস্থা", "Application Property Record Status", None,
+        prop_record.get("status") if prop_record else None, property_source,
+        "অ্যাপের properties রেকর্ড; আইনি স্বত্ব নয়", required=False, reference_only=True,
+    )
+
+    ownership_history = {
+        "status": "PARTIAL_SOURCE" if history_rows else "UNAVAILABLE",
+        "source": "application_database.deeds",
+        "complete": False,
+        "truncated": history_truncated,
+        "scope": history_scope if all(history_scope.values()) else None,
+        "items": [{
+            "seller_name": row.get("seller_name"),
+            "buyer_name": row.get("buyer_name"),
+            "transfer_date": row.get("reg_date"),
+            "deed_no": row.get("deed_no"),
+            "reg_year": row.get("reg_year"),
+            "evidence_ref": f"deeds:{row.get('id')}",
+        } for row in history_rows],
+    }
+    name_engine = cpp_bridge.get_engine_info() if cpp_bridge else {"engine_version": "unavailable"}
+    name_comparisons = [{
+        "key": check["key"],
+        "submitted": check["submitted"],
+        "recorded": check["recorded"],
+        "status": check["status"],
+        "similarity_score": check["similarity_score"],
+        "source": check["source"],
+        "evidence_ref": check["evidence_ref"],
+        "method": name_engine.get("engine_version", "unavailable"),
+        "identity_verified": False,
+    } for check in field_checks if check["key"] in ("seller_name", "buyer_name")]
+    seller_owner_similarity = text_similarity(seller_name, recorded_owner)
+    seller_owner_status = (
+        "NOT_PROVIDED" if not seller_name else
+        "UNAVAILABLE" if not recorded_owner else
+        "MATCHED" if normalize_comparison(seller_name) == normalize_comparison(recorded_owner) else
+        "PARTIAL_MATCH" if seller_owner_similarity is not None and seller_owner_similarity >= 80 else
+        "MISMATCH"
+    )
+    name_comparisons.append({
+        "key": "seller_vs_recorded_owner",
+        "submitted": seller_name or None,
+        "recorded": recorded_owner,
+        "status": seller_owner_status,
+        "similarity_score": round(float(seller_owner_similarity), 2) if seller_owner_similarity is not None else None,
+        "source": property_source,
+        "evidence_ref": f"properties:{prop_record.get('id')}" if prop_record and prop_record.get("id") is not None else None,
+        "method": name_engine.get("engine_version", "unavailable"),
+        "required": False,
+        "identity_verified": False,
+    })
+
+    graph_transfers = [{
+        "seller": row.get("seller_name") or "",
+        "buyer": row.get("buyer_name") or "",
+        "district": row.get("district") or history_scope["district"],
+        "upazila": row.get("upazila") or history_scope["upazila"],
+        "mouza": row.get("mouza") or history_scope["mouza"],
+        "plot_id": row.get("plot_id") or history_scope["plot_id"],
+        "sale_date": row.get("reg_date") or "",
+        "deed_no": row.get("deed_no") or "",
+        "transfer_id": f"deeds:{row.get('id')}",
+    } for row in history_rows]
+    cpp_graph_analysis = cpp_bridge.detect_fraud_graph(graph_transfers) if cpp_bridge else {
+        "error": "C++/Python graph bridge unavailable", "anomalies": [],
+    }
+    graph_anomalies = cpp_graph_analysis.get("anomalies", [])
+    for anomaly in graph_anomalies:
+        explanation = anomaly.get("explanation", "Parcel history needs review.")
+        refs = anomaly.get("evidence_refs", [])
+        discrepancies.append({
+            "field": "দলিলের ধারাবাহিকতা",
+            "field_en": "Recorded Parcel History Observation",
+            "severity": "medium",
+            "code": anomaly.get("type", "PARCEL_HISTORY_OBSERVATION"),
+            "message_bn": "দলিলের রেকর্ডে ধারাবাহিকতা-সংক্রান্ত সংকেত আছে; মূল দলিল হাতে মিলিয়ে দেখুন।",
+            "message_en": explanation,
+            "explanation_bn": "দলিলের রেকর্ডে ধারাবাহিকতা-সংক্রান্ত সংকেত আছে; মূল দলিল হাতে মিলিয়ে দেখুন।",
+            "explanation_en": explanation,
+            "evidence_refs": refs,
+            "source": "application_database.deeds / parcel graph analysis",
+            "risk_points": 0,
+        })
 
     if not deed_record and not prop_record:
         result_status = "RECORD_NOT_FOUND"
@@ -774,25 +1438,25 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
 
         # 1. Deed Number — 8%
         if deed_no and deed_record:
-            add_score("দলিল নম্বর", 8, 100, deed_record["deed_no"], deed_no)
+            add_score("দলিল নম্বর", 100, deed_record["deed_no"], deed_no)
 
         # 2. Mouza + Upazila — 8% (4% each)
         if deed_record:
             if mouza:
                 sim = text_similarity(mouza, deed_record["mouza"])
                 if sim is not None:
-                    add_score("মৌজা", 4, sim, deed_record["mouza"], mouza)
+                    add_score("মৌজা", sim, deed_record["mouza"], mouza)
 
             if upazila:
                 sim = text_similarity(upazila, deed_record["upazila"])
                 if sim is not None:
-                    add_score("উপজেলা", 4, sim, deed_record["upazila"], upazila)
+                    add_score("উপজেলা", sim, deed_record["upazila"], upazila)
 
         # 3. Plot / Daag Number — 8%
         if plot_id and deed_record:
             sim = text_similarity(plot_id, deed_record["plot_id"])
             if sim is not None:
-                add_score("দাগ / প্লট নম্বর", 8, sim,
+                add_score("দাগ / প্লট নম্বর", sim,
                           deed_record["plot_id"], plot_id)
 
         # 4. Owner Name — 60%
@@ -800,7 +1464,13 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
             rec_owner = deed_record["buyer_name"]
             sim = text_similarity(owner_name, rec_owner)
             if sim is not None:
-                add_score("মালিকের নাম", 60, sim, rec_owner, owner_name)
+                add_score("ক্রেতার নাম", sim, rec_owner, owner_name)
+
+        if seller_name and deed_record:
+            recorded_seller = deed_record["seller_name"]
+            sim = text_similarity(seller_name, recorded_seller)
+            if sim is not None:
+                add_score("বিক্রেতার নাম", sim, recorded_seller, seller_name)
 
         # 5. Land Area — 8%
         if deed_record:
@@ -809,7 +1479,7 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
 
             sim = number_similarity(provided_area, recorded_area)
             if sim is not None:
-                add_score("জমির পরিমাণ", 8, sim,
+                add_score("জমির পরিমাণ", sim,
                           recorded_area, provided_area)
 
         # 6. Land Status — 8%
@@ -817,10 +1487,10 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
             land_status = str(prop_record["status"]).lower()
 
             if land_status == "clear":
-                add_score("জমির অবস্থা", 8, 100, "clear", land_status)
+                add_score("জমির অবস্থা", 100, "clear", land_status)
 
             else:
-                add_score("জমির অবস্থা", 8, 0, "clear", land_status)
+                add_score("জমির অবস্থা", 0, "clear", land_status)
 
                 discrepancies.append({
                     "field": "জমির অবস্থা",
@@ -847,54 +1517,31 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
                     "source": "ভূমি রেকর্ড"
                 })
 
-        # Duplicate deed alert — informational; no extra weight deduction
-        if deed_no:
-            with conn() as c:
-                dup_check = c.execute(
-                    "SELECT plot_id FROM records WHERE deed_no = %s",
-                    (deed_no,)
-                ).fetchall()
-
-            plots_used = list(set(
-                x["plot_id"] for x in dup_check if x["plot_id"]
-            ))
-
-            if len(plots_used) > 1:
-                discrepancies.append({
-                    "field": "দলিল নম্বর পুনরাবৃত্তি",
-                    "field_en": "Duplicate Deed Number Alert",
-                    "severity": "high",
-                    "message_bn": "একই দলিল নম্বর একাধিক প্লটে পাওয়া গেছে।",
-                    "source": "এআই অসঙ্গতি শনাক্তকরণ"
-                })
-
-        if not deed_record:
-            # Core deed/ownership checks cannot run without a registry deed,
-            # so a normalized percentage would overstate what was verified.
-            match_score = None
-            result_status = "POTENTIAL_INCONSISTENCY"
-        else:
-            # Normalize score against fields that could actually be checked
-            match_score = (
-                round(weighted_score / evaluated_weight * 100)
-                if evaluated_weight > 0 else 0
-            )
-            match_score = max(0, min(100, match_score))
-
-            if match_score >= 85 and not discrepancies:
-                result_status = "MATCH"
-            else:
-                result_status = "POTENTIAL_INCONSISTENCY"
-
         extracted_summary = {
             "deed_no": deed_record["deed_no"] if deed_record else None,
+            "deed_type": deed_record.get("deed_type") if deed_record else None,
+            "deed_type_names": ({
+                "bn": recorded_deed_type_ref.get("name_bn"),
+                "en": recorded_deed_type_ref.get("name_en"),
+                "code": recorded_deed_type_ref.get("code"),
+            } if recorded_deed_type_ref else None),
             "reg_year": deed_record["reg_year"] if deed_record else None,
+            "division": (deed_record.get("resolved_division") or deed_record.get("division")) if deed_record else None,
+            "division_id": recorded_location_ref.get("division_id") if deed_record else None,
             "district": deed_record["district"] if deed_record else (prop_record["district"] if prop_record else None),
+            "district_id": recorded_location_ref.get("district_id") if (deed_record or prop_record) else None,
             "upazila": deed_record["upazila"] if deed_record else (prop_record["upazila"] if prop_record else None),
+            "location_id": recorded_location_ref.get("location_id") if (deed_record or prop_record) else None,
+            "location_type": recorded_location_ref.get("location_type") if (deed_record or prop_record) else None,
             "mouza": deed_record["mouza"] if deed_record else (prop_record["mouza"] if prop_record else None),
+            "mouza_id": recorded_location_ref.get("mouza_id") if (deed_record or prop_record) else None,
+            "union_ward": (deed_record.get("resolved_union") or deed_record.get("union_ward")) if deed_record else None,
+            "union_id": deed_record.get("union_id") if deed_record else None,
             "plot_id": deed_record["plot_id"] if deed_record else (prop_record["plot_id"] if prop_record else None),
             "khatian_no": deed_record["khatian_no"] if deed_record else (prop_record["khatian_no"] if prop_record else None),
             "owner_name": deed_record["buyer_name"] if deed_record else (prop_record["current_owner"] if prop_record else None),
+            "buyer_name": deed_record["buyer_name"] if deed_record else (prop_record["current_owner"] if prop_record else None),
+            "recorded_owner": recorded_owner,
             "recorded_seller": deed_record["seller_name"] if deed_record else None,
             "recorded_buyer": deed_record["buyer_name"] if deed_record else None,
             "recorded_area": deed_record["area"] if deed_record else (prop_record["area"] if prop_record else None),
@@ -902,33 +1549,132 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
             "property_status": prop_record["status"] if prop_record else None,
             "sub_registry_office": deed_record["sub_registry_office"] if deed_record else None,
             "record_found": bool(deed_record),
+            "deed_lookup_ambiguous": deed_lookup_ambiguous,
             "property_found": bool(prop_record),
             "data_source": "application_database",
         }
+        extracted_summary["location_names"] = {
+            key: location_name_pair(recorded_location_ref, ref_key)
+            for key, ref_key in (("division", "division"), ("district", "district"), ("upazila", "location"), ("mouza", "mouza"))
+        }
+        submitted_summary["location_names"] = {
+            key: location_name_pair(submitted_location_ref, ref_key)
+            for key, ref_key in (("division", "division"), ("district", "district"), ("upazila", "location"), ("mouza", "mouza"))
+        }
+
+    required_checks = [check for check in field_checks if check["required"]]
+    evaluated_statuses = {"MATCHED", "PARTIAL_MATCH", "MISMATCH"}
+    evaluated_checks = [check for check in required_checks if check["status"] in evaluated_statuses]
+    matched_count = sum(check["status"] == "MATCHED" for check in required_checks)
+    partial_count = sum(check["status"] == "PARTIAL_MATCH" for check in required_checks)
+    mismatch_count = sum(check["status"] == "MISMATCH" for check in required_checks)
+    unavailable_count = sum(check["status"] == "UNAVAILABLE" for check in required_checks)
+    not_provided_count = sum(check["status"] == "NOT_PROVIDED" for check in required_checks)
+
+    if not deed_record:
+        overall_category = "INSUFFICIENT_DATA" if deed_lookup_ambiguous else "RECORD_NOT_FOUND"
+        match_score = None
+        result_status = "POTENTIAL_INCONSISTENCY" if deed_lookup_ambiguous else "RECORD_NOT_FOUND"
+    elif unavailable_count or not_provided_count or len(evaluated_checks) != len(required_checks):
+        overall_category = "INSUFFICIENT_DATA"
+        match_score = None
+        # Keep the established result_status value for existing API consumers.
+        result_status = "POTENTIAL_INCONSISTENCY"
+    else:
+        match_score = round(matched_count / len(evaluated_checks) * 100) if evaluated_checks else None
+        if mismatch_count:
+            overall_category = "MISMATCH"
+            result_status = "POTENTIAL_INCONSISTENCY"
+        elif partial_count:
+            overall_category = "PARTIAL_MATCH"
+            result_status = "POTENTIAL_INCONSISTENCY"
+        elif discrepancies:
+            # Keep anomaly and consistency warnings separate from the field
+            # match percentage, but do not show an unqualified positive state.
+            overall_category = "POTENTIAL_INCONSISTENCY"
+            result_status = "POTENTIAL_INCONSISTENCY"
+        else:
+            overall_category = "MATCH"
+            result_status = "MATCH"
+
+    coverage = {
+        "required": len(required_checks),
+        "evaluated": len(evaluated_checks),
+        "matched": matched_count,
+        "partial": partial_count,
+        "mismatched": mismatch_count,
+        "unavailable": unavailable_count,
+        "not_provided": not_provided_count,
+    }
+    if extracted_summary is None:
+        extracted_summary = {}
+    extracted_summary.update({
+        "schema_version": 2,
+        "record_found": bool(deed_record),
+        "property_found": bool(prop_record),
+        "data_source": "application_database",
+        "overall_category": overall_category,
+        "coverage": coverage,
+        "verification_fields": field_checks,
+        "name_comparisons": name_comparisons,
+        "ownership_history": ownership_history,
+        "cpp_graph_analysis": cpp_graph_analysis,
+        "anomalies": graph_anomalies,
+    })
 
     ref_id = f"LG-VR-2026-{secrets.token_hex(3).upper()}"
     now_iso = datetime.now().isoformat()
 
     with conn() as c:
-        c.execute(
-            """INSERT INTO deed_verifications (verification_ref, user_id, deed_no, reg_year, district, upazila, mouza,
-               plot_id, khatian_no, owner_name, result_status, match_score, discrepancies, extracted_data, notes, created_at)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
-            (ref_id, user_id, deed_no, reg_year, district, upazila, mouza, plot_id, khatian_no, owner_name,
-             result_status, match_score, json.dumps(discrepancies, ensure_ascii=False),
-             json.dumps(extracted_summary, ensure_ascii=False), notes, now_iso)
+        location_ids = (
+            division_id,
+            input_data.get("district_id"),
+            input_data.get("upazila_id"),
+            input_data.get("police_thana_id"),
+            input_data.get("mouza_id"),
+            union_id,
         )
+        if any(value is not None for value in location_ids):
+            c.execute(
+                """INSERT INTO deed_verifications (verification_ref, user_id, deed_no, deed_type, reg_year, district, upazila, mouza,
+                   plot_id, khatian_no, owner_name, buyer_name, seller_name, result_status, match_score, discrepancies, extracted_data, notes, created_at,
+                   division, division_id, district_id, upazila_id, police_thana_id, mouza_id, union_id, union_ward)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (ref_id, user_id, deed_no, deed_type or None, reg_year, district, upazila, mouza, plot_id, khatian_no, owner_name, buyer_name or None, seller_name or None,
+                 result_status, match_score, json.dumps(discrepancies, ensure_ascii=False),
+                 json.dumps(extracted_summary, ensure_ascii=False), notes, now_iso, division or None, *location_ids, union_ward or None)
+            )
+        else:
+            c.execute(
+                """INSERT INTO deed_verifications (verification_ref, user_id, deed_no, deed_type, reg_year, district, upazila, mouza,
+                   plot_id, khatian_no, owner_name, buyer_name, seller_name, result_status, match_score, discrepancies, extracted_data, notes, created_at,
+                   division, division_id, union_id, union_ward)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                (ref_id, user_id, deed_no, deed_type or None, reg_year, district, upazila, mouza, plot_id, khatian_no, owner_name, buyer_name or None, seller_name or None,
+                 result_status, match_score, json.dumps(discrepancies, ensure_ascii=False),
+                 json.dumps(extracted_summary, ensure_ascii=False), notes, now_iso, division or None, division_id, union_id, union_ward or None)
+            )
 
     log_audit(user_name, "citizen" if not user_id else "user", "DEED_VERIFY", "P2_VERIFICATION",
               f"Verified deed {deed_no} (Status: {result_status}, Ref: {ref_id})")
 
     payload = {
+        "lookup_status": "DEED_FOUND",
         "verification_ref": ref_id,
         "result_status": result_status,
+        "overall_category": overall_category,
+        "schema_version": 2,
         "match_score": match_score,
+        "coverage": coverage,
         "discrepancies": discrepancies,
         "extracted_summary": extracted_summary,
         "submitted_summary": submitted_summary,
+        "field_checks": field_checks,
+        "fields": field_checks,
+        "name_comparisons": name_comparisons,
+        "ownership_history": ownership_history,
+        "cpp_graph_analysis": cpp_graph_analysis,
+        "anomalies": graph_anomalies,
         "record_found": bool(deed_record),
         "property_found": bool(prop_record),
         "created_at": now_iso,
@@ -956,6 +1702,24 @@ def get_deed_verification_by_ref(ref: str):
         d["discrepancies"] = json.loads(d["discrepancies"]) if d["discrepancies"] else []
         d["extracted_data"] = json.loads(d["extracted_data"]) if d["extracted_data"] else {}
         return d
+
+
+def list_deed_types():
+    init()
+    with conn() as c:
+        rows = c.execute(
+            """SELECT code, name_bn, name_en, official_source
+               FROM deed_types WHERE is_active=TRUE ORDER BY sort_order, code"""
+        ).fetchall()
+        return [dict(item) for item in rows]
+
+
+def is_supported_deed_type(code: str) -> bool:
+    init()
+    with conn() as c:
+        return c.execute(
+            "SELECT 1 FROM deed_types WHERE code=%s AND is_active=TRUE", (code,)
+        ).fetchone() is not None
 
 
 def list_deed_verifications(limit=20, user_id=None):
@@ -1179,6 +1943,7 @@ def get_mutation_application(tracking_no_or_id):
             return None
 
         d = dict(app)
+        d["applicant_nid"] = _mask_nid_value(d.get("applicant_nid"))
         d["supporting_docs"] = json.loads(d["supporting_docs"]) if d["supporting_docs"] else []
         d["status_info"] = STATUS_TRANSLATIONS.get(d["status"], {"bn": d["status"], "color": "slate"})
 
@@ -1215,6 +1980,7 @@ def list_mutation_applications(user_id=None, role=None, status_filter=None, limi
         result = []
         for r in rows:
             d = dict(r)
+            d["applicant_nid"] = _mask_nid_value(d.get("applicant_nid"))
             d["supporting_docs"] = json.loads(d["supporting_docs"]) if d["supporting_docs"] else []
             d["status_info"] = STATUS_TRANSLATIONS.get(d["status"], {"bn": d["status"], "color": "slate"})
             result.append(d)
@@ -1415,10 +2181,25 @@ def assess_due_diligence(data: dict, user_id=None, user_name="Citizen"):
     with conn() as c:
         # Check matching property
         prop = c.execute("SELECT * FROM properties WHERE LOWER(plot_id) = LOWER(%s)", (plot_no,)).fetchone()
-        # Check plot history in records
-        history_sales = c.execute("SELECT * FROM records WHERE LOWER(plot_id) = LOWER(%s) ORDER BY sale_date", (plot_no,)).fetchall()
-        # Check deeds
-        matching_deeds = c.execute("SELECT * FROM deeds WHERE LOWER(plot_id) = LOWER(%s)", (plot_no,)).fetchall()
+        # Only treat deeds with the same complete parcel scope as one history.
+        matching_deeds = []
+        if all((plot_no, district, upazila, mouza)):
+            matching_deeds = c.execute(
+                """SELECT * FROM deeds
+                   WHERE LOWER(BTRIM(plot_id)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(district)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(upazila)) = LOWER(BTRIM(%s))
+                     AND LOWER(BTRIM(mouza)) = LOWER(BTRIM(%s))
+                   ORDER BY reg_year ASC, reg_date ASC, id ASC""",
+                (plot_no, district, upazila, mouza),
+            ).fetchall()
+        history_sales = [{
+            "seller": row.get("seller_name") or "",
+            "buyer": row.get("buyer_name") or "",
+            "plot_id": row.get("plot_id") or "",
+            "sale_date": row.get("reg_date") or "",
+            "deed_no": row.get("deed_no") or "",
+        } for row in matching_deeds]
 
     indicators = []
     evidence = []
@@ -1494,43 +2275,39 @@ def assess_due_diligence(data: dict, user_id=None, user_name="Citizen"):
         except Exception:
             pass
 
-    # Rule 3B: C++ Graph Ownership Cycle & Land Cartel Anomaly (+45 pts)
-    graph_fraud_res = {}
-    if cpp_bridge and history_sales:
-        transfers_payload = []
-        for h in history_sales:
-            hd = dict(h)
-            transfers_payload.append({
-                "seller": hd.get("seller", ""),
-                "buyer": hd.get("buyer", ""),
-                "plot_id": hd.get("plot_id", ""),
-                "sale_date": hd.get("sale_date", ""),
-                "deed_no": hd.get("deed_no", "")
-            })
-        if seller_name:
-            transfers_payload.append({
-                "seller": seller_name,
-                "buyer": "Proposed Buyer",
-                "plot_id": plot_no,
-                "sale_date": date.today().isoformat(),
-                "deed_no": deed_no or "PROPOSED"
-            })
-        graph_fraud_res = cpp_bridge.detect_fraud_graph(transfers_payload)
-        if graph_fraud_res.get("has_cycle"):
-            pts = 45
-            score += pts
-            first_cycle = graph_fraud_res["cycles"][0] if graph_fraud_res.get("cycles") else ""
-            indicators.append({
-                "code": "CIRCULAR_OWNERSHIP_CARTEL_LOOP",
-                "title_bn": "চক্রাকার জমি হস্তান্তর চক্র শনাক্ত (C++ Graph Engine)",
-                "title_en": "Circular Transfer Cartel Loop Detected (C++ Graph Engine)",
-                "points": pts,
-                "severity": "high",
-                "explanation_bn": f"C++ গ্রাফ ট্রাভার্সাল ইঞ্জিনে জমির মালিকানায় চক্রাকার পুনরাবৃত্তি শনাক্ত হয়েছে: {first_cycle}। এটি জমি জালিয়াতি ও কৃত্রিম মূল্য বৃদ্ধির ক্লাসিক লক্ষণ।",
-                "explanation_en": f"C++ Graph Engine identified circular ownership transfers: {first_cycle}. Suspicious cartel wash-sale anomaly.",
-                "cycles": graph_fraud_res.get("cycles", [])
-            })
-            evidence.append(f"শনাক্তকৃত চক্রাকার হস্তান্তর: {first_cycle}")
+    # Graph observations use only completed deed rows for this exact parcel.
+    transfers_payload = [{
+        "seller": row.get("seller_name") or "",
+        "buyer": row.get("buyer_name") or "",
+        "division": row.get("division") or "",
+        "division_id": row.get("division_id"),
+        "district": row.get("district") or district,
+        "upazila": row.get("upazila") or upazila,
+        "mouza": row.get("mouza") or mouza,
+        "plot_id": row.get("plot_id") or plot_no,
+        "sale_date": row.get("reg_date") or "",
+        "deed_no": row.get("deed_no") or "",
+        "transfer_id": f"deeds:{row.get('id')}",
+    } for row in matching_deeds]
+    graph_fraud_res = cpp_bridge.detect_fraud_graph(transfers_payload) if cpp_bridge else {
+        "error": "C++/Python graph bridge unavailable", "anomalies": [],
+    }
+    for anomaly in graph_fraud_res.get("anomalies", []):
+        refs = anomaly.get("evidence_refs", [])
+        explanation = anomaly.get("explanation", "Recorded deed sequence needs review.")
+        indicators.append({
+            "code": anomaly.get("type", "PARCEL_HISTORY_OBSERVATION"),
+            "title_bn": "দলিলের ধারাবাহিকতা হাতে পর্যালোচনা করুন",
+            "title_en": "Review the recorded deed sequence",
+            "points": 0,
+            "severity": "review",
+            "explanation_bn": "দলিলের রেকর্ডে ধারাবাহিকতা-সংক্রান্ত সংকেত আছে; মূল দলিল হাতে মিলিয়ে দেখুন।",
+            "explanation_en": explanation,
+            "evidence_refs": refs,
+            "source": "application_database.deeds",
+            "risk_points": 0,
+        })
+        evidence.extend(ref for ref in refs if ref not in evidence)
 
     # Rule 4: Proposed Area Exceeds Recorded Area (+30 pts)
     rec_a = prop["area"] if prop else (recorded_area or 0)
@@ -1619,13 +2396,14 @@ def assess_due_diligence(data: dict, user_id=None, user_name="Citizen"):
             """INSERT INTO due_diligence_reports (
                 report_ref, user_id, seller_name, seller_nid, deed_no, reg_year, district, upazila, mouza,
                 khatian_no, plot_no, recorded_area, proposed_area, documents_provided,
-                risk_score, risk_level, indicators, evidence, recommendations, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+                risk_score, risk_level, indicators, evidence, recommendations, cpp_graph_analysis, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 report_ref, user_id, seller_name, seller_nid, deed_no, reg_year, district, upazila, mouza,
                 khatian_no, plot_no, rec_a, proposed_area, json.dumps(documents_held, ensure_ascii=False),
                 score, risk_level, json.dumps(indicators, ensure_ascii=False),
                 json.dumps(evidence, ensure_ascii=False), json.dumps(recommendations, ensure_ascii=False),
+                json.dumps(graph_fraud_res, ensure_ascii=False),
                 now_iso
             )
         )
@@ -1648,6 +2426,7 @@ def assess_due_diligence(data: dict, user_id=None, user_name="Citizen"):
         "evidence": evidence,
         "recommendations": recommendations,
         "cpp_graph_analysis": graph_fraud_res,
+        "anomalies": graph_fraud_res.get("anomalies", []),
         "created_at": now_iso,
         "disclaimer_bn": "গুরুত্বপূর্ণ ঘোষণা: এই মূল্যায়নটি কৃত্রিম ডেমো ডেটাবেজ বিশ্লেষণ করে প্রস্তুত করা হয়েছে। এটি সরকারি ভূমি অফিসের প্রত্যয়ন নয় এবং কোনো চূড়ান্ত আইনি পরামর্শ গঠন করে না।",
         "disclaimer_en": "Important Notice: This assessment is generated against synthetic records for preliminary screening. It does not constitute official legal advice or government title certification."
@@ -1661,10 +2440,13 @@ def get_due_diligence_report(ref: str):
         if not row_data:
             return None
         d = dict(row_data)
+        d["seller_nid"] = _mask_nid_value(d.get("seller_nid"))
         d["documents_provided"] = json.loads(d["documents_provided"]) if d["documents_provided"] else []
         d["indicators"] = json.loads(d["indicators"]) if d["indicators"] else []
         d["evidence"] = json.loads(d["evidence"]) if d["evidence"] else []
         d["recommendations"] = json.loads(d["recommendations"]) if d["recommendations"] else []
+        d["cpp_graph_analysis"] = json.loads(d["cpp_graph_analysis"]) if d.get("cpp_graph_analysis") else {}
+        d["anomalies"] = d["cpp_graph_analysis"].get("anomalies", [])
         return d
 
 
@@ -1678,6 +2460,7 @@ def list_due_diligence_reports(limit=20, user_id=None):
         result = []
         for r in rows:
             d = dict(r)
+            d["seller_nid"] = _mask_nid_value(d.get("seller_nid"))
             d["indicators"] = json.loads(d["indicators"]) if d["indicators"] else []
             result.append(d)
         return result
@@ -1892,15 +2675,9 @@ DEMO = [  # (deed, plot, seller, buyer, date, price, area in shotok) - all dummy
     ("D-1010", "SYL-ZIN-003", "রুবেল মিয়া", "সুমন দাস", "2025-05-30", 1350000, 4),
 ]
 
-DEMO_PROPERTIES = [
-    ("DHK-MIR-001", "ঢাকা", "মিরপুর", "পাইকপাড়া", "১০২", "BS-1045", "BS", 5.0, "জাহিদ হাসান", "clear", "স্বত্ব সম্পূর্ণ নিষ্কণ্টক ও বালামভুক্ত"),
-    ("DHK-LIT-099", "ঢাকা", "মিরপুর", "পাইকপাড়া", "১০৯", "BS-9999", "BS", 4.0, "রফিকুল ইসলাম", "disputed", "উত্তরাধিকার সূত্রে দেওয়ানি আদালতে মামলা বিচারাধীন"),
-    ("DHK-MIR-002", "ঢাকা", "মিরপুর", "পাইকপাড়া", "১০২", "BS-1046", "BS", 6.5, "মোহাম্মদ রফিক", "clear", "স্বত্ব সম্পূর্ণ নিষ্কণ্টক"),
-    ("CTG-PAH-007", "চট্টগ্রাম", "পাহাড়তলী", "পাহাড়তলী", "৪৫", "RS-822", "RS", 3.0, "শাহিন আলম", "clear", "নামজারি মঞ্জুরিকৃত"),
-    ("RAJ-BOA-014", "রাজশাহী", "বোয়ালিয়া", "রামচন্দ্রপুর", "৭৮", "CS-409", "CS", 2.0, "নাজমা আক্তার", "clear", "হালনাগাদ খাজনা পরিশোধিত"),
-    ("SYL-ZIN-003", "সিলেট", "জিন্দাবাজার", "লামাবাজার", "১২", "BS-2104", "BS", 4.0, "সুমন দাস", "clear", "স্বত্ব যাচাইকৃত"),
-    ("DHK-DHN-005", "ঢাকা", "ধানমন্ডি", "ধানমন্ডি", "০৮", "BS-3301", "BS", 10.0, "গণপূর্ত অধিদপ্তর", "acquired", "মেট্রোরেল এক্সটেনশন প্রকল্পের জন্য অধিগ্রহণ প্রস্তাবিত"),
-]
+# The former parcel rows were synthetic and have been removed to avoid
+# presenting fabricated ownership data as real land records.
+DEMO_PROPERTIES = []
 
 DEMO_DEEDS = [
     ("D-1001", 2025, "ঢাকা", "মিরপুর", "পাইকপাড়া", "DHK-MIR-001", "BS-1045", "রহিম উদ্দিন", "করিম হোসেন", 5.0, 2400000, "মিরপুর সাব-রেজিস্ট্রি অফিস", "2025-01-10"),

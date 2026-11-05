@@ -1,146 +1,615 @@
 import Input from '../components/Input';
+import LocationCombobox, { displayLocationName } from '../components/LocationCombobox';
 import Button from '../components/Button';
-import React, { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
 import {
-  FileCheck2, UploadCloud, Search, AlertTriangle, CheckCircle,
-  FileText, Sparkles, RefreshCw, ArrowRight, Info, Cpu, CheckCircle2
+  FileCheck2, UploadCloud, Search, AlertTriangle,
+  RefreshCw, Info, Cpu, CheckCircle2
 } from 'lucide-react';
 
-export default function DeedVerification({ setActiveTab, setVerificationResult, navigateBack }) {
+const OCR_LOCATION_ALIASES = new Map([
+  ['পুবাইল', 'pubail'],
+  ['পূবাইল', 'pubail'],
+]);
+
+const normalizedLocationName = (value) => {
+  const normalized = String(value || '').trim().normalize('NFKC').toLocaleLowerCase();
+  return OCR_LOCATION_ALIASES.get(normalized) || normalized;
+};
+
+const locationNameMatches = (item, value) => {
+  const normalized = normalizedLocationName(value);
+  return [item.name_bn, item.name_en, item.code]
+    .filter(Boolean)
+    .some((name) => normalizedLocationName(name) === normalized);
+};
+
+const OCR_FIELD_LABELS = {
+  deed_no: ['দলিল নম্বর', 'Deed number'],
+  deed_type: ['দলিলের ধরন', 'Deed type'],
+  reg_year: ['নিবন্ধন সাল', 'Registration year'],
+  district: ['জেলা', 'District'],
+  upazila: ['উপজেলা / থানা', 'Upazila / Thana'],
+  mouza: ['মৌজা', 'Mouza'],
+  plot_id: ['দাগ / প্লট', 'Plot number'],
+  khatian_no: ['খতিয়ান নম্বর', 'Khatian number'],
+  union_ward: ['ইউনিয়ন / ওয়ার্ড', 'Union / Ward'],
+  owner_name: ['মালিক / গ্রহীতা', 'Owner / transferee'],
+  buyer_name: ['ক্রেতা / গ্রহীতা', 'Buyer / transferee'],
+  seller_name: ['বিক্রেতা', 'Seller'],
+  area: ['জমির পরিমাণ', 'Land area'],
+};
+
+const getLocationSuggestions = (items, lang) => {
+  const uniqueItems = [];
+  const seenIds = new Set();
+  (items || []).forEach((item) => {
+    const id = String(item.id ?? item.code ?? '');
+    if (!id || seenIds.has(id)) return;
+    seenIds.add(id);
+    uniqueItems.push(item);
+  });
+
+  const labelCounts = new Map();
+  uniqueItems.forEach((item) => {
+    const label = displayLocationName(item, lang);
+    if (!label) return;
+    const key = normalizedLocationName(label);
+    labelCounts.set(key, (labelCounts.get(key) || 0) + 1);
+  });
+
+  return uniqueItems.flatMap((item) => {
+    const label = displayLocationName(item, lang);
+    if (!label) return [];
+    const key = normalizedLocationName(label);
+    const disambiguator = item.code || item.id;
+    const value = labelCounts.get(key) > 1 ? `${label} (${disambiguator})` : label;
+    return [{ item, label, value }];
+  });
+};
+
+const findLocationSuggestion = (items, value, lang) => {
+  const normalizedValue = normalizedLocationName(value);
+  const suggestion = getLocationSuggestions(items, lang)
+    .find((entry) => normalizedLocationName(entry.value) === normalizedValue);
+  if (suggestion) return suggestion.item;
+  const matches = (items || []).filter((item) => locationNameMatches(item, value));
+  return matches.length === 1 ? matches[0] : null;
+};
+
+const EMPTY_VERIFICATION_FORM = {
+  deed_no: '', reg_year: '', deed_type: '', district: '', upazila: '', mouza: '',
+  union_ward: '', plot_id: '', khatian_no: '', buyer_name: '', seller_name: '', notes: ''
+};
+
+const isDeedNumberShaped = (value) => /^[0-9\u09E6-\u09EFA-Za-z\s\-/]+$/.test(String(value || ''));
+
+export default function DeedVerification({
+  setActiveTab,
+  setVerificationResult,
+  navigateBack,
+  verificationDraft,
+  setVerificationDraft,
+  onFindDeed,
+}) {
   const { lang, t, user } = useApp();
 
-  const [formData, setFormData] = useState({
-    deed_no: '',
-    reg_year: 2025,
-    district: 'ঢাকা',
-    upazila: 'মিরপুর',
-    mouza: 'পাইকপাড়া',
-    plot_id: '',
-    khatian_no: '',
-    owner_name: '',
-    notes: ''
-  });
+  const [formData, setFormData] = useState(() => ({
+    ...EMPTY_VERIFICATION_FORM,
+    ...(verificationDraft?.formData || {}),
+  }));
 
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [operation, setOperation] = useState('');
   const [verifyStage, setVerifyStage] = useState(0);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [dragActive, setDragActive] = useState(false);
+  const [divisions, setDivisions] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [locations, setLocations] = useState([]);
+  const [mouzas, setMouzas] = useState([]);
+  const [unions, setUnions] = useState([]);
+  const [locationType, setLocationType] = useState(verificationDraft?.locationType || 'upazila');
+  const [divisionId, setDivisionId] = useState(verificationDraft?.divisionId || '');
+  const [districtId, setDistrictId] = useState(verificationDraft?.districtId || '');
+  const [locationId, setLocationId] = useState(verificationDraft?.locationId || '');
+  const [mouzaId, setMouzaId] = useState(verificationDraft?.mouzaId || '');
+  const [unionId, setUnionId] = useState(verificationDraft?.unionId || '');
+  const [locationCoverage, setLocationCoverage] = useState(null);
+  const [deedTypes, setDeedTypes] = useState([]);
+  const [ocrReview, setOcrReview] = useState(null);
+  const [lookupState, setLookupState] = useState(verificationDraft?.lookupState || 'IDLE');
+  const [lookupCandidates, setLookupCandidates] = useState(verificationDraft?.lookupCandidates || []);
+  const [selectedDeed, setSelectedDeed] = useState(verificationDraft?.selectedDeed || null);
+  useEffect(() => {
+    setVerificationDraft?.({
+      formData,
+      locationType,
+      divisionId,
+      districtId,
+      locationId,
+      mouzaId,
+      unionId,
+      lookupState,
+      lookupCandidates,
+      selectedDeed,
+    });
+  }, [formData, locationType, divisionId, districtId, locationId, mouzaId, unionId, lookupState, lookupCandidates, selectedDeed, setVerificationDraft]);
 
-  // Preset demo fillers for quick hackathon presentation!
-  const loadScenario = (type) => {
-    if (type === 'match') {
-      // Clean Deed D-8492 on DHK-MIR-002
-      setFormData({
-        deed_no: 'D-8492',
-        reg_year: 2023,
-        district: 'ঢাকা',
-        upazila: 'মিরপুর',
-        mouza: 'পাইকপাড়া',
-        plot_id: 'DHK-MIR-002',
-        khatian_no: 'BS-1046',
-        owner_name: 'মোহাম্মদ রফিক',
-        notes: 'নমুনা যাচাই ১: সঠিক দলিল ও শতভাগ তথ্যের মিল'
-      });
-    } else if (type === 'mismatch_owner') {
-      // Inconsistent owner name vs D-1001
-      setFormData({
-        deed_no: 'D-1001',
-        reg_year: 2025,
-        district: 'ঢাকা',
-        upazila: 'মিরপুর',
-        mouza: 'পাইকপাড়া',
-        plot_id: 'DHK-MIR-001',
-        khatian_no: 'BS-1045',
-        owner_name: 'হারুনুর রশীদ (ভুল দাবিদার)',
-        notes: 'নমুনা যাচাই ২: মালিকানা গরমিল ও নাম অমিল শনাক্তকরণ'
-      });
-    } else if (type === 'dispute') {
-      // Parcel under active civil court dispute / multiple sales
-      setFormData({
-        deed_no: 'D-1003',
-        reg_year: 2025,
-        district: 'ঢাকা',
-        upazila: 'মিরপুর',
-        mouza: 'পাইকপাড়া',
-        plot_id: 'DHK-MIR-001',
-        khatian_no: 'BS-1045',
-        owner_name: 'জাহিদ হাসান',
-        notes: 'নমুনা যাচাই ৩: দেওয়ানি আদালতের স্বত্ব বিরোধ ও দ্বৈত বিক্রি'
-      });
-    }
-  };
+  useEffect(() => {
+    let active = true;
+    api.getLocationDivisions().then((response) => {
+      if (!active) return;
+      setDivisions(response.items || []);
+      setLocationCoverage(response.coverage || null);
+    }).catch((err) => {
+      if (active) setError(err.message);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    api.getVerificationDeedTypes().then((response) => {
+      if (active) setDeedTypes(response.items || []);
+    }).catch((err) => {
+      if (active) setError(err.message);
+    });
+    return () => { active = false; };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    setDistricts([]);
+    setLocations([]);
+    if (!divisionId) return () => { active = false; };
+    api.getLocationDistricts({ divisionId }).then((response) => {
+      if (!active) return;
+      setDistricts(response.items || []);
+      setLocationCoverage(response.coverage || null);
+    }).catch((err) => {
+      if (active) setError(err.message);
+    });
+    return () => { active = false; };
+  }, [divisionId]);
+
+  useEffect(() => {
+    let active = true;
+    setLocations([]);
+    if (!districtId) return () => { active = false; };
+    const request = locationType === 'upazila'
+      ? api.getLocationUpazilas(districtId)
+      : api.getLocationThanas(districtId);
+    request.then((response) => {
+      if (active) setLocations(response.items || []);
+    }).catch((err) => {
+      if (active) setError(err.message);
+    });
+    return () => { active = false; };
+  }, [districtId, locationType]);
+
+  useEffect(() => {
+    let active = true;
+    setMouzas([]);
+    if (!locationId) return () => { active = false; };
+    const request = locationType === 'upazila'
+      ? api.getLocationMouzas({ upazilaId: locationId })
+      : api.getLocationMouzas({ thanaId: locationId });
+    request.then((response) => {
+      if (!active) return;
+      setMouzas(response.items || []);
+    }).catch(() => {
+      if (active) setMouzas([]);
+    });
+    return () => { active = false; };
+  }, [locationId, locationType]);
+
+  useEffect(() => {
+    let active = true;
+    setUnions([]);
+    setUnionId('');
+    if (locationType !== 'upazila' || !locationId) return () => { active = false; };
+    api.getLocationUnions(locationId).then((response) => {
+      if (active) setUnions(response.items || []);
+    }).catch(() => {
+      if (active) setUnions([]);
+    });
+    return () => { active = false; };
+  }, [locationId, locationType]);
+
+  useEffect(() => {
+    const selectedDistrict = districts.find((item) => String(item.id) === String(districtId));
+    const selectedLocation = locations.find((item) => String(item.id) === String(locationId));
+    const selectedMouza = mouzas.find((item) => String(item.id) === String(mouzaId));
+    const selectedUnion = unions.find((item) => String(item.id) === String(unionId));
+    setFormData((previous) => ({
+      ...previous,
+      district: selectedDistrict ? displayLocationName(selectedDistrict, lang) : previous.district,
+      upazila: selectedLocation ? displayLocationName(selectedLocation, lang) : previous.upazila,
+      mouza: selectedMouza ? displayLocationName(selectedMouza, lang) : previous.mouza,
+      union_ward: selectedUnion ? displayLocationName(selectedUnion, lang) : previous.union_ward,
+    }));
+  }, [lang, districts, locations, mouzas, unions, districtId, locationId, mouzaId, unionId]);
+
+  useEffect(() => {
+    if (!formData.mouza || !mouzas.length) return;
+    const matched = findLocationSuggestion(mouzas, formData.mouza, lang);
+    if (!matched || String(matched.id) === String(mouzaId)) return;
+    setMouzaId(String(matched.id));
+    setFormData((previous) => ({ ...previous, mouza: displayLocationName(matched, lang) }));
+  }, [formData.mouza, lang, mouzas, mouzaId]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    setFieldErrors((previous) => ({ ...previous, [name]: undefined }));
+    if (name === 'deed_no' && value !== formData.deed_no) {
+      setLookupState('IDLE');
+      setLookupCandidates([]);
+      setSelectedDeed(null);
+    }
+  };
+
+  const fieldClass = (field) => fieldErrors[field] ? 'border-rose-500 focus:border-rose-500 focus:ring-rose-500' : '';
+
+  const applyExtractedLocationFields = async (extracted) => {
+    const districtText = String(extracted.district || '').trim();
+    const upazilaText = String(extracted.upazila || '').trim();
+    const upazilaLookupText = OCR_LOCATION_ALIASES.has(upazilaText.normalize('NFKC').toLocaleLowerCase())
+      ? 'Pubail'
+      : upazilaText;
+    if (!districtText && !upazilaText) return;
+
+    let nextDivisionId = districtText ? '' : divisionId;
+    let nextDistrictId = districtText ? '' : districtId;
+    let nextLocationId = '';
+    let nextLocationType = locationType;
+    let nextDistricts = districts;
+    let nextLocations = locations;
+    let districtLabel = districtText || undefined;
+    let upazilaLabel = upazilaText || (districtText ? '' : undefined);
+
+    try {
+      if (districtText) {
+        const [divisionResponse, districtResponse] = await Promise.all([
+          api.getLocationDivisions(),
+          api.getLocationDistricts({ q: districtText, limit: 500 }),
+        ]);
+        const matchedDistrict = (districtResponse.items || []).find((item) => locationNameMatches(item, districtText));
+        const matchedDivision = matchedDistrict && (divisionResponse.items || []).find(
+          (item) => String(item.id) === String(matchedDistrict.division?.id)
+        );
+
+        if (matchedDistrict && matchedDivision) {
+          nextDivisionId = String(matchedDivision.id);
+          nextDistrictId = String(matchedDistrict.id);
+          districtLabel = displayLocationName(matchedDistrict, lang);
+          const [divisionDistricts, upazilaResponse, thanaResponse] = await Promise.all([
+            api.getLocationDistricts({ divisionId: matchedDivision.id, limit: 500 }),
+            api.getLocationUpazilas(matchedDistrict.id, { q: upazilaLookupText, limit: 500 }),
+            api.getLocationThanas(matchedDistrict.id, { q: upazilaLookupText, limit: 500 }),
+          ]);
+          nextDistricts = divisionDistricts.items || districtResponse.items || [];
+          const matchedUpazila = upazilaText && (upazilaResponse.items || []).find((item) => locationNameMatches(item, upazilaText));
+          const matchedThana = upazilaText && (thanaResponse.items || []).find((item) => locationNameMatches(item, upazilaText));
+          const matchedLocation = extracted.upazila_type === 'police_thana'
+            ? (matchedThana || matchedUpazila)
+            : (matchedUpazila || matchedThana);
+          nextLocationType = matchedUpazila ? 'upazila' : matchedThana ? 'police_thana' : 'upazila';
+          if (!matchedLocation && extracted.upazila_type === 'police_thana') nextLocationType = 'police_thana';
+          nextLocations = matchedUpazila ? (upazilaResponse.items || []) : matchedThana ? (thanaResponse.items || []) : (upazilaResponse.items || []);
+          nextLocationId = matchedLocation ? String(matchedLocation.id) : '';
+          if (matchedLocation) upazilaLabel = lang === 'bn' && !matchedLocation.name_bn
+            ? upazilaText
+            : displayLocationName(matchedLocation, lang);
+        } else {
+          nextDistricts = [];
+          nextLocations = [];
+          districtLabel = districtText;
+        }
+      } else if (upazilaText && districtId) {
+        const [upazilaResponse, thanaResponse] = await Promise.all([
+          api.getLocationUpazilas(districtId, { q: upazilaLookupText, limit: 500 }),
+          api.getLocationThanas(districtId, { q: upazilaLookupText, limit: 500 }),
+        ]);
+        const matchedUpazila = (upazilaResponse.items || []).find((item) => locationNameMatches(item, upazilaText));
+        const matchedThana = (thanaResponse.items || []).find((item) => locationNameMatches(item, upazilaText));
+        const matchedLocation = extracted.upazila_type === 'police_thana'
+          ? (matchedThana || matchedUpazila)
+          : (matchedUpazila || matchedThana);
+        nextLocationType = matchedUpazila ? 'upazila' : matchedThana ? 'police_thana' : 'upazila';
+        if (!matchedLocation && extracted.upazila_type === 'police_thana') nextLocationType = 'police_thana';
+        nextLocations = matchedUpazila ? (upazilaResponse.items || []) : matchedThana ? (thanaResponse.items || []) : (upazilaResponse.items || []);
+        nextLocationId = matchedLocation ? String(matchedLocation.id) : '';
+        if (matchedLocation) upazilaLabel = lang === 'bn' && !matchedLocation.name_bn
+          ? upazilaText
+          : displayLocationName(matchedLocation, lang);
+      }
+    } catch {
+      if (districtText) {
+        nextDivisionId = '';
+        nextDistrictId = '';
+        nextLocationId = '';
+      }
+    }
+
+    setDivisionId(nextDivisionId);
+    setDistrictId(nextDistrictId);
+    setLocationType(nextLocationType);
+    setLocationId(nextLocationId);
+    setMouzaId('');
+    setDistricts(nextDistricts);
+    setLocations(nextLocations);
+    setFormData((previous) => ({
+      ...previous,
+      district: districtLabel ?? previous.district,
+      upazila: upazilaLabel ?? previous.upazila,
+      mouza: extracted.mouza || previous.mouza,
+      union_ward: extracted.union_ward || previous.union_ward,
+    }));
+    setUnionId('');
+    setFieldErrors((previous) => ({
+      ...previous,
+      division_id: undefined,
+      district_id: undefined,
+      location_id: undefined,
+      mouza: undefined,
+    }));
+  };
+
+  const focusFirstFieldError = (errors) => {
+    const fieldToId = {
+      deed_no: 'verify-deed-no', reg_year: 'verify-reg-year', deed_type: 'verify-deed-type',
+      division_id: 'verify-division', district_id: 'verify-district', district: 'verify-district',
+      location_id: 'verify-upazila', location_type: 'verify-upazila', upazila: 'verify-upazila',
+      mouza: 'verify-mouza-manual', plot_id: 'verify-plot-id', khatian_no: 'verify-khatian-no',
+      owner_name: 'verify-owner-name', buyer_name: 'verify-owner-name', seller_name: 'verify-seller-name',
+    };
+    const firstField = Object.keys(errors)[0];
+    const input = document.getElementById(fieldToId[firstField] || firstField);
+    input?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    input?.focus({ preventScroll: true });
+  };
+
+  const validateForm = () => {
+    const errors = {};
+    const required = (key, value, label) => {
+      if (!String(value ?? '').trim()) {
+        errors[key] = lang === 'bn' ? `${label} পূরণ করুন।` : `${label} is required.`;
+      }
+    };
+    required('deed_no', formData.deed_no, lang === 'bn' ? 'দলিল নম্বর' : 'Deed number');
+    required('reg_year', formData.reg_year, lang === 'bn' ? 'নিবন্ধন সাল' : 'Registration year');
+    required('deed_type', formData.deed_type, lang === 'bn' ? 'দলিলের ধরন' : 'Deed type');
+    if (formData.reg_year && (!Number.isInteger(Number(formData.reg_year)) || Number(formData.reg_year) < 1950 || Number(formData.reg_year) > new Date().getFullYear())) {
+      errors.reg_year = lang === 'bn' ? '১৯৫০ থেকে বর্তমান সাল পর্যন্ত একটি সঠিক সাল লিখুন।' : 'Enter a valid year from 1950 through the current year.';
+    }
+    if (!divisionId) errors.division_id = lang === 'bn' ? 'বিভাগ নির্বাচন করুন।' : 'Select a division.';
+    if (!districtId) errors.district_id = lang === 'bn' ? 'তালিকা থেকে জেলা নির্বাচন করুন।' : 'Choose a district from the suggestions.';
+    if (!locationId) errors.location_id = lang === 'bn' ? 'তালিকা থেকে উপজেলা / থানা নির্বাচন করুন।' : 'Choose an Upazila / Thana from the suggestions.';
+    if (mouzaId && !mouzas.some((item) => String(item.id) === String(mouzaId))) {
+      errors.mouza = lang === 'bn' ? 'তালিকার মৌজাটি আবার নির্বাচন করুন বা নাম হাতে লিখুন।' : 'Re-select the listed Mouza or enter its name manually.';
+    }
+    required('plot_id', formData.plot_id, lang === 'bn' ? 'দাগ / প্লট নম্বর' : 'Dag / Plot number');
+    required('khatian_no', formData.khatian_no, lang === 'bn' ? 'খতিয়ান নম্বর' : 'Khatian number');
+    required('buyer_name', formData.buyer_name, lang === 'bn' ? 'ক্রেতা / গ্রহীতার নাম' : 'Buyer / transferee name');
+    required('seller_name', formData.seller_name, lang === 'bn' ? 'বিক্রেতার নাম' : 'Seller name');
+    setFieldErrors(errors);
+    if (Object.keys(errors).length) {
+      focusFirstFieldError(errors);
+      return false;
+    }
+    return true;
   };
 
   const handleVerify = async (e) => {
     e.preventDefault();
-    if (!formData.deed_no && !formData.plot_id) {
-      setError(lang === 'bn' ? 'অনুগ্রহ করে দলিল নম্বর অথবা দাগ/প্লট নম্বর লিখুন।' : 'Please provide either Deed Number or Plot ID.');
+    setError('');
+    const deedNo = String(formData.deed_no || '').trim();
+    if (!deedNo) {
+      setFieldErrors((previous) => ({ ...previous, deed_no: lang === 'bn' ? 'দলিল নম্বর লিখুন।' : 'Enter a deed number.' }));
+      document.getElementById('verify-deed-no')?.focus();
+      return;
+    }
+    if (deedNo.length > 120 || !isDeedNumberShaped(deedNo)) {
+      setFieldErrors((previous) => ({ ...previous, deed_no: lang === 'bn' ? 'দলিল নম্বরে অক্ষর, সংখ্যা, স্পেস, হাইফেন বা স্ল্যাশ ব্যবহার করুন।' : 'Use letters, digits, spaces, hyphens, or slashes in the deed number.' }));
+      document.getElementById('verify-deed-no')?.focus();
       return;
     }
 
     setLoading(true);
+    setOperation('verify');
     setError('');
     setVerifyStage(1);
 
     try {
-      await new Promise(r => setTimeout(r, 280));
-      setVerifyStage(2);
+      let deedCandidate = selectedDeed;
+      const normalizedQuery = deedNo.replace(/\s+/g, '').toLocaleUpperCase();
+      const selectedNumber = String(deedCandidate?.deed_no || '').replace(/\s+/g, '').toLocaleUpperCase();
+      if (!deedCandidate?.id || normalizedQuery !== selectedNumber) {
+        const lookup = await api.searchDeedByNumber(deedNo);
+        if (lookup?.locked) {
+          setError(lookup.message_bn || lookup.message_en || (lang === 'bn' ? 'নিরাপত্তার জন্য অনুসন্ধান সাময়িকভাবে বন্ধ।' : 'Search is temporarily paused for security.'));
+          return;
+        }
+        if (!lookup?.found || !Array.isArray(lookup.results) || lookup.results.length === 0) {
+          setLookupState('DEED_NOT_FOUND');
+          setLookupCandidates([]);
+          setSelectedDeed(null);
+          return;
+        }
+        if (lookup.results.length > 1) {
+          setLookupState('AMBIGUOUS');
+          setLookupCandidates(lookup.results);
+          setSelectedDeed(null);
+          return;
+        }
+        [deedCandidate] = lookup.results;
+        setSelectedDeed(deedCandidate);
+        setLookupCandidates([]);
+        setLookupState('DEED_FOUND');
+      }
 
-      const resultPromise = api.verifyDeed(formData, user?.id);
-      await new Promise(r => setTimeout(r, 320));
+      if (!validateForm()) return;
+
+      const payload = {
+        ...formData,
+        selected_deed_id: Number(deedCandidate.id),
+        reg_year: formData.reg_year ? Number(formData.reg_year) : null,
+        division_id: divisionId ? Number(divisionId) : undefined,
+        district_id: districtId ? Number(districtId) : undefined,
+        location_id: locationId ? Number(locationId) : undefined,
+        location_type: locationId ? locationType : undefined,
+        mouza_id: mouzaId ? Number(mouzaId) : undefined,
+        union_id: unionId ? Number(unionId) : undefined,
+      };
+      const result = await api.verifyDeed(payload, user?.id);
+      if (result?.lookup_status === 'DEED_NOT_FOUND') {
+        setLookupState('DEED_NOT_FOUND');
+        setSelectedDeed(null);
+        setLookupCandidates([]);
+        return;
+      }
+      if (result?.lookup_status === 'AMBIGUOUS') {
+        let candidates = result.candidates || [];
+        if (!candidates.length) {
+          const lookup = await api.searchDeedByNumber(deedNo);
+          candidates = lookup?.results || [];
+        }
+        setLookupState('AMBIGUOUS');
+        setLookupCandidates(candidates);
+        setSelectedDeed(null);
+        return;
+      }
+      if (result?.lookup_status === 'INVALID_INPUT') {
+        setLookupState('IDLE');
+        setSelectedDeed(null);
+        setError(result.message_bn || result.message_en || (lang === 'bn' ? 'নির্বাচিত দলিলটি আবার খুঁজুন।' : 'Search for the selected deed again.'));
+        return;
+      }
       setVerifyStage(3);
 
-      const result = await resultPromise;
-      await new Promise(r => setTimeout(r, 260));
-      setVerifyStage(4);
-
+      if (result?.verification_ref) {
+        try { sessionStorage.setItem('bhumisetu:lastVerificationRef', result.verification_ref); } catch { /* storage may be disabled */ }
+      }
       setVerificationResult(result);
       setActiveTab('verification-result');
     } catch (err) {
+      const backendFieldErrors = err.payload?.detail?.field_errors;
+      if (backendFieldErrors) {
+        setFieldErrors(backendFieldErrors);
+        focusFirstFieldError(backendFieldErrors);
+      }
       setError(err.message);
     } finally {
       setLoading(false);
+      setOperation('');
       setVerifyStage(0);
     }
   };
 
+  const buildVerificationDraft = () => ({
+    formData,
+    locationType,
+    divisionId,
+    districtId,
+    locationId,
+    unionId,
+    lookupState,
+    lookupCandidates,
+    selectedDeed,
+  });
+
+  const findDeed = () => {
+    if (onFindDeed) onFindDeed(formData.deed_no, buildVerificationDraft());
+    else setActiveTab('deed-search');
+  };
+
+  const chooseDeedCandidate = (candidate) => {
+    if (!candidate?.id) return;
+    setSelectedDeed(candidate);
+    setLookupCandidates([]);
+    setLookupState('DEED_FOUND');
+    setError('');
+    setTimeout(() => document.getElementById('verify-deed-no')?.focus(), 0);
+  };
+
+  const retryDeedLookup = () => {
+    setLookupState('IDLE');
+    setLookupCandidates([]);
+    setSelectedDeed(null);
+    setError('');
+    document.getElementById('verify-deed-no')?.focus();
+  };
+
   const handleFileUpload = async (selectedFile) => {
     if (!selectedFile) return;
+    const allowedTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+    const allowedExtensions = /\.(pdf|jpe?g|png)$/i;
+    if (!allowedTypes.includes(selectedFile.type) && !allowedExtensions.test(selectedFile.name)) {
+      setError(lang === 'bn' ? 'শুধু PDF, JPG বা PNG ফাইল দিন।' : 'Choose a PDF, JPG, or PNG file.');
+      return;
+    }
+    if (selectedFile.size > 10 * 1024 * 1024) {
+      setError(lang === 'bn' ? 'ফাইলের সর্বোচ্চ আকার ১০ MB।' : 'File size must be 10 MB or less.');
+      return;
+    }
     setFile(selectedFile);
+    setOcrReview(null);
     setLoading(true);
+    setOperation('ocr');
     setError('');
-    setVerifyStage(1);
+    setVerifyStage(0);
 
     try {
       const fd = new FormData();
       fd.append('file', selectedFile);
       if (user?.id) fd.append('user_id', user.id);
+      if (formData.mouza) fd.append('selected_mouza', formData.mouza);
 
-      await new Promise(r => setTimeout(r, 280));
-      setVerifyStage(2);
-
-      const resultPromise = api.uploadDeed(fd);
-      await new Promise(r => setTimeout(r, 320));
-      setVerifyStage(3);
-
-      const result = await resultPromise;
-      await new Promise(r => setTimeout(r, 260));
-      setVerifyStage(4);
-
-      setVerificationResult(result);
-      setActiveTab('verification-result');
+      if (divisionId && districtId && locationId) {
+        fd.append('division_id', divisionId);
+        fd.append('district_id', districtId);
+        fd.append('location_id', locationId);
+        fd.append('location_type', locationType);
+        if (mouzaId) fd.append('mouza_id', mouzaId);
+      }
+      const result = await api.uploadDeed(fd);
+      const extracted = result.extracted_fields || {};
+      setFormData((previous) => ({
+        ...previous,
+        deed_no: extracted.deed_no || previous.deed_no,
+        deed_type: extracted.deed_type || previous.deed_type,
+        reg_year: extracted.reg_year || previous.reg_year,
+        mouza: extracted.mouza || previous.mouza,
+        union_ward: extracted.union_ward || previous.union_ward,
+        plot_id: extracted.plot_id || previous.plot_id,
+        khatian_no: extracted.khatian_no || previous.khatian_no,
+        buyer_name: extracted.buyer_name || extracted.owner_name || previous.buyer_name,
+        seller_name: extracted.seller_name || previous.seller_name,
+      }));
+      await applyExtractedLocationFields(extracted);
+      setFieldErrors((previous) => ({
+        ...previous,
+        deed_no: undefined,
+        deed_type: undefined,
+        reg_year: undefined,
+        plot_id: undefined,
+        khatian_no: undefined,
+        buyer_name: undefined,
+        seller_name: undefined,
+      }));
+      setOcrReview(result);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setOperation('');
       setVerifyStage(0);
     }
   };
@@ -152,11 +621,11 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
         title={lang === 'bn' ? 'ডিজিটাল দলিল ও মালিকানা যাচাই' : 'Digital Deed & Land Ownership Verification'}
         subtitle={
           lang === 'bn'
-            ? 'দলিলের তথ্য বা স্ক্যান কপি আপলোড করে সাব-রেজিস্ট্রি বালাম রেকর্ডের সাথে স্বত্ব ও তথ্যের অমিল শনাক্ত করুন।'
-            : 'Cross-reference submitted deed parameters or uploaded scans against registry demo records for title consistency.'
+            ? 'দলিলের তথ্য দিন বা স্ক্যান থেকে টেক্সট বের করে যাচাই করে নিন।'
+            : 'Enter deed details or extract document text for manual review.'
         }
         icon={FileCheck2}
-        badge={lang === 'bn' ? 'C++ নেটিভ ভেরিফাইড' : 'C++ Accelerated'}
+        badge={lang === 'bn' ? 'তথ্য যাচাই সহায়ক' : 'Review assistance'}
         badgeColor="emerald"
         breadcrumbs={[
           { label: lang === 'bn' ? 'ড্যাশবোর্ড' : 'Dashboard', tab: 'dashboard' }
@@ -167,13 +636,13 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
       />
 
       {/* Staged Multi-Phase Verification Overlay */}
-      {loading && (
+      {loading && operation === 'verify' && (
         <div className="p-5 rounded-xl bg-slate-900 text-white border border-emerald-500/30 shadow-xl space-y-4 animate-page-enter">
           <div className="flex items-center justify-between border-b border-slate-800 pb-3">
             <div className="flex items-center gap-2">
               <Cpu className="w-5 h-5 text-emerald-400 animate-pulse" />
               <span className="font-bold text-sm">
-                {lang === 'bn' ? 'দলিল বিশ্লেষণ ও বালাম ক্রস-চেক চলছে...' : 'Cross-Checking Deed with Sub-Registry Balam...'}
+                {lang === 'bn' ? 'দলিলের তথ্য প্রক্রিয়াকরণ চলছে...' : 'Processing submitted deed details...'}
               </span>
             </div>
             <span className="text-xs font-mono text-emerald-400 font-bold">
@@ -227,50 +696,92 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
         </div>
       )}
 
-      {/* Quick Test Scenario Loaders */}
-      <div className="p-4 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/60 space-y-2">
-        <div className="flex items-center justify-between">
-          <span className="text-xs font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#c59b27]" />
-            {lang === 'bn' ? 'দ্রুত টেস্ট নমুনা লোড করুন' : 'Quick Test Scenarios'}
-          </span>
-          <span className="text-[11px] text-gray-500">{lang === 'bn' ? '১-ক্লিকে পূরণ' : '1-Click Preset'}</span>
+      {locationCoverage?.status !== 'complete' && (
+        <div className="p-3.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 text-xs">
+          {lang === 'bn'
+            ? (locationCoverage?.dataset?.record_counts
+              ? `সরকারি GeoCodes থেকে ${locationCoverage.dataset.record_counts.divisions || 0} বিভাগ, ${locationCoverage.dataset.record_counts.districts || 0} জেলা, ${locationCoverage.dataset.record_counts.upazilas || 0} উপজেলা ও ${locationCoverage.dataset.record_counts.police_thanas || 0} মহানগর থানা যুক্ত আছে। সরকারি তালিকা থেকে ${locationCoverage.dataset.record_counts.unions || 0}টি ইউনিয়নের নাম যুক্ত আছে; মেলানো উপজেলায় suggestion দেখাবে, Ward হাতে লিখতে হবে। ${locationCoverage.dataset.record_counts.mouzas || 0}টি মৌজার যাচাইকৃত সরকারি তালিকা পাওয়া যায়নি। এটি সরকারি মালিকানা সনদ নয়।`
+              : 'Location data database-এ load হয়নি। এই অবস্থায় কোনো location option দেখা যাবে না; এটি সরকারি মালিকানা সনদও নয়।')
+            : (locationCoverage?.dataset?.record_counts
+              ? `${locationCoverage.dataset.record_counts.divisions || 0} divisions, ${locationCoverage.dataset.record_counts.districts || 0} districts, ${locationCoverage.dataset.record_counts.upazilas || 0} upazilas and ${locationCoverage.dataset.record_counts.police_thanas || 0} metro thanas are loaded from official GeoCodes. ${locationCoverage.dataset.record_counts.unions || 0} Union names from the official list are imported; suggestions appear for linked Upazilas, and Ward names must be typed. No verified national Mouza list has been imported. This is not an official ownership certificate.`
+              : 'Location data has not been loaded in the database, so the selectors will be empty. This is not an official ownership certificate.')}
         </div>
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Button
-            type="button"
-            onClick={() => loadScenario('match')}
-            className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-emerald-300 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-300 hover:bg-emerald-100 transition shadow-sm flex items-center gap-1.5"
-          >
-            <CheckCircle className="w-3 h-3 text-emerald-600" />
-            <span>{lang === 'bn' ? 'নমুনা ১: শতভাগ মিল (Clear Title)' : 'Scenario 1: Full Match'}</span>
-          </Button>
-
-          <Button
-            type="button"
-            onClick={() => loadScenario('mismatch_owner')}
-            className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-amber-300 dark:border-amber-800 text-xs font-semibold text-amber-800 dark:text-amber-300 hover:bg-amber-100 transition shadow-sm flex items-center gap-1.5"
-          >
-            <AlertTriangle className="w-3 h-3 text-amber-600" />
-            <span>{lang === 'bn' ? 'নমুনা ২: বিক্রেতার নাম গরমিল' : 'Scenario 2: Owner Mismatch'}</span>
-          </Button>
-
-          <Button
-            type="button"
-            onClick={() => loadScenario('dispute')}
-            className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-rose-300 dark:border-rose-800 text-xs font-semibold text-rose-800 dark:text-rose-300 hover:bg-rose-100 transition shadow-sm flex items-center gap-1.5"
-          >
-            <AlertTriangle className="w-3 h-3 text-rose-600" />
-            <span>{lang === 'bn' ? 'নমুনা ৩: দেওয়ানি আদালতের বিরোধ' : 'Scenario 3: Title Litigation'}</span>
-          </Button>
-        </div>
-      </div>
+      )}
 
       {error && (
         <div className="p-3.5 rounded-lg bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-200 text-xs flex items-center gap-2">
           <AlertTriangle className="w-4 h-4 text-rose-600 flex-shrink-0" />
           <span>{error}</span>
         </div>
+      )}
+
+      {lookupState === 'DEED_NOT_FOUND' && (
+        <section className="rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/30 p-5 sm:p-6 space-y-4" role="status" aria-live="polite">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-6 h-6 mt-0.5 shrink-0 text-rose-600 dark:text-rose-400" />
+            <div className="space-y-1">
+              <h2 className="text-base font-extrabold text-rose-900 dark:text-rose-200">{lang === 'bn' ? 'দলিল নম্বরটি ডেটাবেজে পাওয়া যায়নি' : 'Deed number not found in the database'}</h2>
+              <p className="text-sm leading-relaxed text-rose-800 dark:text-rose-300">
+                {lang === 'bn'
+                  ? 'আপনার দেওয়া দলিল নম্বরটি আমাদের ডেটাবেজে পাওয়া যায়নি। সঠিক নম্বর দিয়ে আবার চেষ্টা করুন অথবা দলিল খুঁজে দেখুন। এটি দলিলটি জাল বা আইনগতভাবে অবৈধ—এমন প্রমাণ নয়।'
+                  : 'Your submitted deed number was not found in our database. Check the number or find your deed. This does not establish that the deed is fake or legally invalid.'}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button type="button" onClick={retryDeedLookup} className="gov-btn-primary justify-center text-xs">
+              <RefreshCw className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Try Again'}</span>
+            </Button>
+            <Button type="button" onClick={findDeed} className="gov-btn-secondary justify-center text-xs">
+              <Search className="w-3.5 h-3.5" />
+              <span>{lang === 'bn' ? 'দলিল খুঁজুন' : 'Find Deed'}</span>
+            </Button>
+          </div>
+        </section>
+      )}
+
+      {lookupState === 'AMBIGUOUS' && (
+        <section className="rounded-2xl border border-amber-200 dark:border-amber-900/60 bg-amber-50/80 dark:bg-amber-950/30 p-5 sm:p-6 space-y-4" aria-labelledby="ambiguous-deeds-title">
+          <div>
+            <h2 id="ambiguous-deeds-title" className="text-base font-extrabold text-amber-900 dark:text-amber-200">{lang === 'bn' ? 'একই নম্বরে একাধিক দলিল পাওয়া গেছে' : 'Multiple deeds share this number'}</h2>
+            <p className="mt-1 text-xs text-amber-800 dark:text-amber-300">{lang === 'bn' ? 'যাচাইয়ের আগে সঠিক রেকর্ডটি বেছে নিন।' : 'Select the correct record before verification.'}</p>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {lookupCandidates.map((candidate) => (
+              <article key={candidate.id} className="rounded-xl border border-amber-200 dark:border-amber-900/50 bg-white dark:bg-gray-900 p-4 space-y-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <h3 className="font-bold text-sm text-gray-900 dark:text-white">{candidate.deed_no}</h3>
+                    <p className="text-xs text-gray-500">{candidate.reg_year ? `${candidate.reg_year} · ` : ''}{candidate.deed_type || ''}</p>
+                  </div>
+                  <span className="text-[10px] rounded-full bg-amber-100 dark:bg-amber-900/50 px-2 py-1 text-amber-800 dark:text-amber-200">ID #{candidate.id}</span>
+                </div>
+                <dl className="grid grid-cols-2 gap-2 text-xs">
+                  {[
+                    [lang === 'bn' ? 'অবস্থান' : 'Location', [candidate.district, candidate.upazila, candidate.mouza].filter(Boolean).join(' · ')],
+                    [lang === 'bn' ? 'দাগ / খতিয়ান' : 'Dag / Khatian', [candidate.plot_id, candidate.khatian_no].filter(Boolean).join(' / ')],
+                    [lang === 'bn' ? 'বিক্রেতা' : 'Seller', candidate.seller_name],
+                    [lang === 'bn' ? 'ক্রেতা' : 'Buyer', candidate.buyer_name],
+                  ].filter(([, value]) => value).map(([label, value]) => (
+                    <div key={label} className="min-w-0">
+                      <dt className="text-[10px] text-gray-500">{label}</dt>
+                      <dd className="break-words font-semibold text-gray-800 dark:text-gray-200">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <Button type="button" onClick={() => chooseDeedCandidate(candidate)} className="gov-btn-primary w-full justify-center text-xs">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>{lang === 'bn' ? 'এই দলিলটি বেছে নিন' : 'Select this deed'}</span>
+                </Button>
+              </article>
+            ))}
+          </div>
+          <Button type="button" onClick={findDeed} className="gov-btn-secondary text-xs">
+            <Search className="w-3.5 h-3.5" />
+            <span>{lang === 'bn' ? 'Find Deed পেজে বিস্তারিত খুঁজুন' : 'Find using detailed search'}</span>
+          </Button>
+        </section>
       )}
 
       {/* Main Dual Grid: Form & File Upload */}
@@ -282,7 +793,28 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
             <span>{lang === 'bn' ? '১. দলিলের পরিচিতি ও বিবরণ দিন' : '1. Enter Deed Identification Details'}</span>
           </h2>
 
-          <form onSubmit={handleVerify} className="space-y-4">
+          {lookupState === 'DEED_FOUND' && selectedDeed && (
+            <div className="rounded-xl border border-emerald-200 dark:border-emerald-900/60 bg-emerald-50/70 dark:bg-emerald-950/25 p-4 space-y-2" role="status">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm font-bold text-emerald-900 dark:text-emerald-200">
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{lang === 'bn' ? 'দলিল রেকর্ড পাওয়া গেছে' : 'Deed record found'}</span>
+                </div>
+                <span className="text-[10px] text-emerald-800 dark:text-emerald-300">{lang === 'bn' ? 'অ্যাপের ডেটাবেজ' : 'Application database'}</span>
+              </div>
+              <p className="text-xs text-emerald-900 dark:text-emerald-200">
+                <strong>{selectedDeed.deed_no}</strong>{selectedDeed.reg_year ? ` · ${selectedDeed.reg_year}` : ''}
+                {[selectedDeed.district, selectedDeed.upazila, selectedDeed.mouza, selectedDeed.plot_id].filter(Boolean).length
+                  ? ` · ${[selectedDeed.district, selectedDeed.upazila, selectedDeed.mouza, selectedDeed.plot_id].filter(Boolean).join(' · ')}`
+                  : ''}
+              </p>
+              <p className="text-[11px] leading-relaxed text-emerald-800 dark:text-emerald-300">
+                {lang === 'bn' ? 'তুলনার জন্য মূল দলিল অনুযায়ী তথ্য হাতে দিন বা OCR থেকে পড়ে যাচাই করুন। ডেটাবেজের রেকর্ডকে জমাদেয়া তথ্য হিসেবে স্বয়ংক্রিয়ভাবে বসানো হয়নি।' : 'Enter the values from the original deed or review OCR text for comparison. Database values are not copied into the submitted fields.'}
+              </p>
+            </div>
+          )}
+
+          <form onSubmit={handleVerify} noValidate className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div>
                 <label htmlFor="verify-deed-no" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
@@ -294,10 +826,14 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                   name="deed_no"
                   value={formData.deed_no}
                   onChange={handleChange}
-                  placeholder={lang === 'bn' ? 'যেমন: D-8492 অথবা D-1001' : 'e.g., D-8492 or D-1001'}
-                  className="gov-input"
+                  maxLength={120}
+                  placeholder={lang === 'bn' ? 'দলিল নম্বর লিখুন' : 'Enter the deed number'}
+                  className={`gov-input ${fieldClass('deed_no')}`}
+                  aria-invalid={Boolean(fieldErrors.deed_no)}
+                  aria-describedby={fieldErrors.deed_no ? 'verify-deed-no-error' : undefined}
                   required
                 />
+                {fieldErrors.deed_no && <p id="verify-deed-no-error" className="mt-1 text-xs text-rose-600">{fieldErrors.deed_no}</p>}
               </div>
 
               <div>
@@ -311,61 +847,196 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                   value={formData.reg_year}
                   onChange={handleChange}
                   min="1950"
-                  max="2026"
-                  className="gov-input"
+                  max={new Date().getFullYear()}
+                  className={`gov-input ${fieldClass('reg_year')}`}
+                  aria-invalid={Boolean(fieldErrors.reg_year)}
+                  aria-describedby={fieldErrors.reg_year ? 'verify-reg-year-error' : undefined}
                   required
                 />
+                {fieldErrors.reg_year && <p id="verify-reg-year-error" className="mt-1 text-xs text-rose-600">{fieldErrors.reg_year}</p>}
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label htmlFor="verify-deed-type" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                {lang === 'bn' ? 'দলিলের ধরন' : 'Deed type'} <span className="text-rose-500">*</span>
+              </label>
+              <Input id="verify-deed-type" as="select" name="deed_type" value={formData.deed_type} onChange={handleChange} className={`gov-select ${fieldClass('deed_type')}`} aria-invalid={Boolean(fieldErrors.deed_type)} aria-describedby={fieldErrors.deed_type ? 'verify-deed-type-error' : undefined} required>
+                <option value="">{lang === 'bn' ? 'দলিলের ধরন নির্বাচন করুন' : 'Select deed type'}</option>
+                {deedTypes.map((item) => <option key={item.code} value={item.code}>{lang === 'bn' ? item.name_bn : item.name_en}</option>)}
+              </Input>
+              {fieldErrors.deed_type && <p id="verify-deed-type-error" className="mt-1 text-xs text-rose-600">{fieldErrors.deed_type}</p>}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label htmlFor="verify-district" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {t('district')}
-                </label>
-                <Input id="verify-district" as="select" name="district" value={formData.district} onChange={handleChange} className="gov-select">
-                  <option value="ঢাকা">ঢাকা (Dhaka)</option>
-                  <option value="চট্টগ্রাম">চট্টগ্রাম (Chattogram)</option>
-                  <option value="রাজশাহী">রাজশাহী (Rajshahi)</option>
-                  <option value="সিলেট">সিলেট (Sylhet)</option>
+                <label htmlFor="verify-division" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{lang === 'bn' ? 'বিভাগ' : 'Division'} <span className="text-rose-500">*</span></label>
+                <Input id="verify-division" as="select" value={divisionId} onChange={(event) => {
+                  const id = event.target.value;
+                  setDivisionId(id);
+                  setDistrictId('');
+                  setLocationId('');
+                  setMouzaId('');
+                  setFormData((previous) => ({ ...previous, district: districtId ? '' : previous.district, upazila: '', mouza: '', union_ward: '' }));
+                  setUnionId('');
+                  setFieldErrors((previous) => ({ ...previous, division_id: undefined, district_id: undefined, location_id: undefined }));
+                }} className={`gov-select ${fieldClass('division_id')}`} aria-invalid={Boolean(fieldErrors.division_id)} required>
+                  <option value="">{divisions.length ? (lang === 'bn' ? 'বিভাগ নির্বাচন করুন' : 'Select division') : (lang === 'bn' ? 'বিভাগের তথ্য পাওয়া যায়নি' : 'No divisions available')}</option>
+                  {divisions.map((item) => <option key={item.id} value={item.id}>{displayLocationName(item, lang)}</option>)}
+                </Input>
+                {fieldErrors.division_id && <p className="mt-1 text-xs text-rose-600">{fieldErrors.division_id}</p>}
+              </div>
+              <div>
+                <label htmlFor="verify-district" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{t('district')} <span className="text-rose-500">*</span></label>
+                <LocationCombobox
+                  id="verify-district"
+                  value={formData.district}
+                  items={districts}
+                  lang={lang}
+                  disabled={!divisionId}
+                  placeholder={!divisionId ? (lang === 'bn' ? 'আগে বিভাগ নির্বাচন করুন' : 'Select a division first') : (lang === 'bn' ? 'জেলা লিখুন বা বাংলা / ইংরেজিতে খুঁজুন' : 'Search in English or Bengali')}
+                  emptyText={lang === 'bn' ? 'এই বিভাগে কোনো জেলা মেলেনি।' : 'No districts match this search.'}
+                  className={`gov-input ${fieldClass('district_id')}`}
+                  aria-invalid={Boolean(fieldErrors.district_id)}
+                  aria-describedby={fieldErrors.district_id ? 'verify-district-error' : undefined}
+                  required
+                  onTextChange={(value) => {
+                    const selected = findLocationSuggestion(districts, value, lang);
+                    setDistrictId(selected ? String(selected.id) : '');
+                    setLocationId('');
+                    setMouzaId('');
+                    setUnionId('');
+                    setFormData((previous) => ({ ...previous, district: selected ? displayLocationName(selected, lang) : value, upazila: '', mouza: '', union_ward: '' }));
+                    setFieldErrors((previous) => ({ ...previous, district_id: undefined, location_id: undefined, mouza: undefined }));
+                  }}
+                  onSelect={(selected) => {
+                    setDistrictId(String(selected.id));
+                    setLocationId('');
+                    setMouzaId('');
+                    setUnionId('');
+                    setFormData((previous) => ({ ...previous, district: displayLocationName(selected, lang), upazila: '', mouza: '', union_ward: '' }));
+                    setFieldErrors((previous) => ({ ...previous, district_id: undefined, location_id: undefined, mouza: undefined }));
+                  }}
+                />
+                {fieldErrors.district_id && <p id="verify-district-error" className="mt-1 text-xs text-rose-600">{fieldErrors.district_id}</p>}
+              </div>
+              <div>
+                <label htmlFor="verify-location-type" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{lang === 'bn' ? 'এলাকার ধরন' : 'Location type'}</label>
+                <Input id="verify-location-type" as="select" value={locationType} onChange={(event) => {
+                  setLocationType(event.target.value);
+                  setLocationId('');
+                  setMouzaId('');
+                  setFormData((previous) => ({ ...previous, upazila: '', mouza: '', union_ward: '' }));
+                  setUnionId('');
+                  setFieldErrors((previous) => ({ ...previous, location_id: undefined, mouza: undefined }));
+                }} className="gov-select">
+                  <option value="upazila">{lang === 'bn' ? 'উপজেলা' : 'Upazila'}</option>
+                  <option value="police_thana">{lang === 'bn' ? 'মেট্রোপলিটন থানা' : 'Police Thana'}</option>
                 </Input>
               </div>
-
               <div>
-                <label htmlFor="verify-upazila" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {t('upazila')}
-                </label>
-                <Input
+                <label htmlFor="verify-upazila" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{locationType === 'upazila' ? t('upazila') : (lang === 'bn' ? 'থানা' : 'Police Thana')} <span className="text-rose-500">*</span></label>
+                <LocationCombobox
                   id="verify-upazila"
-                  type="text"
-                  name="upazila"
                   value={formData.upazila}
-                  onChange={handleChange}
-                  placeholder="মিরপুর / সদর"
-                  className="gov-input"
+                  items={locations}
+                  lang={lang}
+                  disabled={!districtId}
+                  placeholder={lang === 'bn' ? 'বাংলা / ইংরেজিতে লিখুন বা খুঁজুন' : 'Search in English or Bengali'}
+                  emptyText={lang === 'bn' ? 'এই জেলায় কোনো নাম মেলেনি।' : 'No locations match this search.'}
+                  className={`gov-input ${fieldClass('location_id')}`}
+                  aria-invalid={Boolean(fieldErrors.location_id)}
+                  aria-describedby={fieldErrors.location_id ? 'verify-upazila-error' : undefined}
+                  required
+                  onTextChange={(value) => {
+                    const selected = findLocationSuggestion(locations, value, lang);
+                    setLocationId(selected ? String(selected.id) : '');
+                    setMouzaId('');
+                    setUnionId('');
+                    setFormData((previous) => ({ ...previous, upazila: selected ? displayLocationName(selected, lang) : value, mouza: '', union_ward: '' }));
+                    setFieldErrors((previous) => ({ ...previous, location_id: undefined, mouza: undefined }));
+                  }}
+                  onSelect={(selected) => {
+                    setLocationId(String(selected.id));
+                    setMouzaId('');
+                    setUnionId('');
+                    setFormData((previous) => ({ ...previous, upazila: displayLocationName(selected, lang), mouza: '', union_ward: '' }));
+                    setFieldErrors((previous) => ({ ...previous, location_id: undefined, mouza: undefined }));
+                  }}
                 />
+                {fieldErrors.location_id && <p id="verify-upazila-error" className="mt-1 text-xs text-rose-600">{fieldErrors.location_id}</p>}
               </div>
-
               <div>
-                <label htmlFor="verify-mouza" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {t('mouza')}
+                <label htmlFor="verify-mouza-manual" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mt-3 mb-1">
+                  {lang === 'bn' ? 'মৌজার নাম / জে.এল. নম্বর (ঐচ্ছিক)' : 'Mouza name / J.L. number (Optional)'}
                 </label>
-                <Input
-                  id="verify-mouza"
-                  type="text"
-                  name="mouza"
+                <LocationCombobox
+                  id="verify-mouza-manual"
+                  items={mouzas}
+                  lang={lang}
                   value={formData.mouza}
-                  onChange={handleChange}
-                  placeholder="পাইকপাড়া"
-                  className="gov-input"
+                  disabled={!locationId}
+                  placeholder={lang === 'bn' ? 'তালিকা থেকে বাছুন বা নাম / জে.এল. নম্বর লিখুন' : 'Choose from the list or enter a name / J.L. number'}
+                  emptyText={lang === 'bn' ? 'তালিকায় নেই—দলিল অনুযায়ী মৌজার নাম বা জে.এল. নম্বর লিখুন।' : 'Not listed—enter the Mouza name or J.L. number from the deed.'}
+                  className={`gov-input ${fieldClass('mouza')}`}
+                  aria-invalid={Boolean(fieldErrors.mouza)}
+                  aria-describedby={fieldErrors.mouza ? 'verify-mouza-error' : undefined}
+                  onTextChange={(value) => {
+                    const selected = findLocationSuggestion(mouzas, value, lang);
+                    setMouzaId(selected ? String(selected.id) : '');
+                    setFormData((previous) => ({ ...previous, mouza: value }));
+                    setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
+                  }}
+                  onSelect={(selected) => {
+                    setMouzaId(String(selected.id));
+                    setFormData((previous) => ({ ...previous, mouza: displayLocationName(selected, lang) }));
+                    setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
+                  }}
                 />
+                {fieldErrors.mouza && <p id="verify-mouza-error" className="mt-1 text-xs text-rose-600">{fieldErrors.mouza}</p>}
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  {mouzaId
+                    ? (lang === 'bn' ? 'তালিকার মৌজা নির্বাচন করা হয়েছে; এটি মালিকানার সরকারি যাচাই নয়।' : 'A listed Mouza is selected; this does not verify legal ownership.')
+                    : (lang === 'bn'
+                      ? <>তালিকায় না থাকলে দলিল থেকে হাতে লিখুন; সরকারি DLRS অনুসন্ধানও দেখুন। <a className="text-emerald-700 underline" href="https://settlement.gov.bd/Map/MapSearch" target="_blank" rel="noreferrer">DLRS মৌজা অনুসন্ধান</a></>
+                      : <>If it is not listed, enter it from the deed; you can also check the <a className="text-emerald-700 underline" href="https://settlement.gov.bd/Map/MapSearch" target="_blank" rel="noreferrer">official DLRS Mouza search</a>.</>)}
+                </p>
+              </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="verify-union-ward" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mt-3 mb-1">
+                  {lang === 'bn' ? 'ইউনিয়ন / ওয়ার্ড (ঐচ্ছিক)' : 'Union / Ward (Optional)'}
+                </label>
+                <LocationCombobox
+                  id="verify-union-ward"
+                  value={formData.union_ward}
+                  items={unions}
+                  lang={lang}
+                  disabled={locationType !== 'upazila' || !locationId}
+                  placeholder={lang === 'bn' ? 'ইউনিয়ন বাংলা / ইংরেজিতে খুঁজুন, অথবা ওয়ার্ড লিখুন' : 'Search Union in English or Bengali, or enter Ward'}
+                  emptyText={lang === 'bn' ? 'ইউনিয়ন মেলেনি—ওয়ার্ড বা নাম হাতে লিখতে পারেন।' : 'No Union matches—enter a Ward or name manually.'}
+                  className="gov-input"
+                  onTextChange={(value) => {
+                    const selected = findLocationSuggestion(unions, value, lang);
+                    setUnionId(selected ? String(selected.id) : '');
+                    setFormData((previous) => ({ ...previous, union_ward: value }));
+                  }}
+                  onSelect={(selected) => {
+                    setUnionId(String(selected.id));
+                    setFormData((previous) => ({ ...previous, union_ward: displayLocationName(selected, lang) }));
+                  }}
+                />
+                <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+                  {locationType === 'upazila' && unions.length
+                    ? (lang === 'bn' ? 'সরকারি তালিকার ইউনিয়ন নাম suggestion-এ আছে। ওয়ার্ড বা তালিকায় না থাকা নাম হাতে লিখুন।' : 'Official Union names appear in suggestions. Type a Ward or any name missing from the list.')
+                    : (lang === 'bn' ? 'সরকারি ওয়ার্ড তালিকা যুক্ত নেই; ইউনিয়ন / ওয়ার্ডের নাম বা নম্বর হাতে লিখুন।' : 'An official Ward list is not available here; type the Union / Ward name or number.')}
+                </p>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="verify-plot-id" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {t('plotNo')}
+                  {t('plotNo')} <span className="text-rose-500">*</span>
                 </label>
                 <Input
                   id="verify-plot-id"
@@ -373,14 +1044,18 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                   name="plot_id"
                   value={formData.plot_id}
                   onChange={handleChange}
-                  placeholder="DHK-MIR-002"
-                  className="gov-input"
+                  placeholder={lang === 'bn' ? 'দাগ নম্বর লিখুন' : 'Enter the plot number'}
+                  className={`gov-input ${fieldClass('plot_id')}`}
+                  aria-invalid={Boolean(fieldErrors.plot_id)}
+                  aria-describedby={fieldErrors.plot_id ? 'verify-plot-error' : undefined}
+                  required
                 />
+                {fieldErrors.plot_id && <p id="verify-plot-error" className="mt-1 text-xs text-rose-600">{fieldErrors.plot_id}</p>}
               </div>
 
               <div>
                 <label htmlFor="verify-khatian-no" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {t('khatianNo')}
+                  {t('khatianNo')} <span className="text-rose-500">*</span>
                 </label>
                 <Input
                   id="verify-khatian-no"
@@ -388,24 +1063,51 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
                   name="khatian_no"
                   value={formData.khatian_no}
                   onChange={handleChange}
-                  placeholder="BS-1046"
-                  className="gov-input"
+                  placeholder={lang === 'bn' ? 'খতিয়ান নম্বর লিখুন' : 'Enter the khatian number'}
+                  className={`gov-input ${fieldClass('khatian_no')}`}
+                  aria-invalid={Boolean(fieldErrors.khatian_no)}
+                  aria-describedby={fieldErrors.khatian_no ? 'verify-khatian-error' : undefined}
+                  required
                 />
+                {fieldErrors.khatian_no && <p id="verify-khatian-error" className="mt-1 text-xs text-rose-600">{fieldErrors.khatian_no}</p>}
               </div>
 
               <div>
                 <label htmlFor="verify-owner-name" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
-                  {lang === 'bn' ? 'মালিক / গ্রহীতার নাম' : 'Owner / Transferee Name'}
+                  {lang === 'bn' ? 'ক্রেতা / গ্রহীতার নাম' : 'Buyer / Transferee Name'} <span className="text-rose-500">*</span>
                 </label>
                 <Input
                   id="verify-owner-name"
                   type="text"
-                  name="owner_name"
-                  value={formData.owner_name}
+                  name="buyer_name"
+                  value={formData.buyer_name}
                   onChange={handleChange}
-                  placeholder="মোহাম্মদ রফিক"
-                  className="gov-input"
+                  placeholder={lang === 'bn' ? 'দলিলের ক্রেতা / গ্রহীতার নাম লিখুন' : 'Enter the deed buyer / transferee name'}
+                  className={`gov-input ${fieldClass('buyer_name')}`}
+                  aria-invalid={Boolean(fieldErrors.buyer_name)}
+                  aria-describedby={fieldErrors.buyer_name ? 'verify-owner-error' : undefined}
+                  required
                 />
+                {fieldErrors.buyer_name && <p id="verify-owner-error" className="mt-1 text-xs text-rose-600">{fieldErrors.buyer_name}</p>}
+              </div>
+
+              <div>
+                <label htmlFor="verify-seller-name" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
+                  {lang === 'bn' ? 'বিক্রেতার নাম' : 'Seller name'} <span className="text-rose-500">*</span>
+                </label>
+                <Input
+                  id="verify-seller-name"
+                  type="text"
+                  name="seller_name"
+                  value={formData.seller_name}
+                  onChange={handleChange}
+                  placeholder={lang === 'bn' ? 'দলিলের বিক্রেতার নাম লিখুন' : 'Enter the seller name on the deed'}
+                  className={`gov-input ${fieldClass('seller_name')}`}
+                  aria-invalid={Boolean(fieldErrors.seller_name)}
+                  aria-describedby={fieldErrors.seller_name ? 'verify-seller-error' : undefined}
+                  required
+                />
+                {fieldErrors.seller_name && <p id="verify-seller-error" className="mt-1 text-xs text-rose-600">{fieldErrors.seller_name}</p>}
               </div>
             </div>
 
@@ -432,12 +1134,14 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               {loading ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  <span>{lang === 'bn' ? 'বালাম রেকর্ডের সাথে তুলনা হচ্ছে...' : 'Comparing against demo records...'}</span>
+                  <span>{lang === 'bn' ? 'রেকর্ড খোঁজা হচ্ছে...' : 'Searching available records...'}</span>
                 </>
               ) : (
                 <>
                   <FileCheck2 className="w-4 h-4" />
-                  <span>{lang === 'bn' ? 'দলিল ও বালাম ক্রস-চেক করুন' : 'Verify Deed & Cross-Check Balam'}</span>
+                  <span>{lookupState === 'DEED_FOUND'
+                    ? (lang === 'bn' ? 'দলিলের তথ্য যাচাই করুন' : 'Verify Deed Details')
+                    : (lang === 'bn' ? 'দলিল নম্বর খুঁজে যাচাই শুরু করুন' : 'Find Deed and Start Verification')}</span>
                 </>
               )}
             </Button>
@@ -453,8 +1157,8 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
             </h2>
             <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-2 leading-relaxed">
               {lang === 'bn'
-                ? 'পিডিএফ বা দলিলের ছবি আপলোড করলে সিস্টেম স্বয়ংক্রিয়ভাবে টেক্সট এক্সট্রাক্ট করে বালাম রেকর্ডের সাথে মিলিয়ে নেবে।'
-                : 'Upload scanned deed PDF. Our parser automatically extracts parties and parcel identifiers.'}
+                ? 'দলিলের PDF বা ছবি থেকে লেখা বের হবে। পাওয়া তথ্য ফর্মে দেখে নিয়ে প্রয়োজন হলে নিজে ঠিক করুন।'
+                : 'Extract text from a deed PDF or image, then review and correct the form fields.'}
             </p>
           </div>
 
@@ -500,11 +1204,45 @@ export default function DeedVerification({ setActiveTab, setVerificationResult, 
               <Info className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               <span>
                 {lang === 'bn'
-                  ? 'স্বচ্ছতা নোট: অপটিক্যাল টেক্সট এক্সট্রাকশন pypdf ও রেগুলার এক্সপ্রেশন অ্যালগরিদম ভিত্তিক। স্ক্যান কোয়ালিটি খারাপ হলে ম্যানুয়াল রিভিউ আবশ্যক।'
-                  : 'Transparency notice: Text extraction operates via pypdf and rule-based regex parsing. Low resolution scans require manual clerk review.'}
+                  ? 'স্বচ্ছতা নোট: searchable PDF থেকে সরাসরি টেক্সট পড়া হয়। স্ক্যান PDF ও ছবির OCR-এর জন্য backend-এ Tesseract এবং বাংলা/ইংরেজি language data লাগবে। OCR ফল নিজে মালিকানা যাচাই করে না।'
+                  : 'Transparency notice: Searchable PDFs are read directly. Scanned PDFs and images require Tesseract with Bengali and English language data on the backend. OCR does not verify ownership.'}
               </span>
             </div>
           </div>
+          {loading && operation === 'ocr' && (
+            <div className="text-xs text-emerald-800 dark:text-emerald-300 flex items-center gap-2" role="status">
+              <RefreshCw className="w-4 h-4 animate-spin" />
+              {lang === 'bn' ? 'ডকুমেন্ট থেকে লেখা পড়া হচ্ছে...' : 'Reading document text...'}
+            </div>
+          )}
+          {ocrReview && (
+            <div className="p-3 rounded-lg bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-700 space-y-2 text-xs">
+              <div className="font-semibold text-slate-800 dark:text-slate-200">
+                {lang === 'bn' ? 'OCR থেকে পাওয়া তথ্য—ফর্মে মিলিয়ে নিন' : 'OCR extraction — review before using'}
+              </div>
+              <p className="text-slate-600 dark:text-slate-300">{lang === 'bn' ? ocrReview.message_bn : ocrReview.message_en}</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {Object.entries(ocrReview.extracted_fields || {}).filter(([key, value]) => key !== 'upazila_type' && value !== '' && value !== null && value !== undefined && !(key === 'owner_name' && value === ocrReview.extracted_fields?.buyer_name)).map(([key, value]) => (
+                  <div key={key} className="rounded-md bg-white dark:bg-slate-800 p-2">
+                    <div className="text-[10px] text-slate-500">{OCR_FIELD_LABELS[key]?.[lang === 'bn' ? 0 : 1] || key}</div>
+                    <div className="font-medium text-slate-800 dark:text-slate-100 break-words">{String(value)}</div>
+                  </div>
+                ))}
+              </div>
+              {(ocrReview.location_mismatches || []).map((mismatch) => (
+                <p key={mismatch.field} className="text-amber-800 dark:text-amber-300">
+                  {lang === 'bn' ? mismatch.message_bn : mismatch.message_en}
+                </p>
+              ))}
+              {(ocrReview.ocr_warnings || []).map((warning) => <p key={warning} className="text-amber-800 dark:text-amber-300">{warning}</p>)}
+              {ocrReview.raw_text_preview && (
+                <details open={ocrReview.recognized_field_count === 0}>
+                  <summary className="cursor-pointer font-medium text-slate-700 dark:text-slate-200">{lang === 'bn' ? 'OCR-এ পড়া টেক্সট দেখুন' : 'View text read by OCR'}</summary>
+                  <pre className="mt-2 whitespace-pre-wrap break-words text-[11px] text-slate-600 dark:text-slate-300">{ocrReview.raw_text_preview}</pre>
+                </details>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>

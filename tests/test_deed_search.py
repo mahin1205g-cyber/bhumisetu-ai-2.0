@@ -158,9 +158,40 @@ def test_deed_number_lookup_is_parameterized(monkeypatch):
 
     rows = ds.lookup_by_deed_number("d-১০০১")
     assert len(rows) == 1
-    sql, params = calls[-1]
-    assert "D-1001" not in sql
-    assert params == ("D-1001",)
+    exact_sql, exact_params = calls[0]
+    normalized_sql, normalized_params = calls[1]
+    assert "WHERE deed_no = %s" in exact_sql
+    assert exact_params == ("d-১০০১",)
+    assert "IS DISTINCT FROM %s" in normalized_sql
+    assert normalized_params == ("D-1001", "d-১০০১")
+
+
+def test_deed_number_lookup_merges_normalized_duplicates(monkeypatch):
+    exact = demo_row(id=1, deed_no="D-1001")
+    alternate = demo_row(id=2, deed_no="d - ১০০১")
+
+    class Cursor:
+        current_sql = ""
+
+        def execute(self, sql, params=()):
+            self.current_sql = sql
+            return self
+
+        def fetchall(self):
+            return [alternate] if "IS DISTINCT FROM %s" in self.current_sql else [exact]
+
+    class Context:
+        def __enter__(self):
+            return Cursor()
+
+        def __exit__(self, *exc):
+            return False
+
+    monkeypatch.setattr(ds, "ensure_protection_schema", lambda: None)
+    monkeypatch.setattr(ds.engine, "conn", lambda: Context())
+
+    rows = ds.lookup_by_deed_number("D-1001")
+    assert [row["id"] for row in rows] == [2, 1]
 
 
 def test_empty_deed_number_never_queries_database(monkeypatch):

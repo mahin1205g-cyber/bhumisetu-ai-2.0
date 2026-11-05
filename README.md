@@ -207,7 +207,9 @@ python backend/bootstrap_user.py --role admin
 
 ## Password recovery
 
-Forgot-password recovery checks the registered mobile number and NID against PostgreSQL, then allows a password reset without an OTP. Twilio credentials are not required. A stable `JWT_SECRET` (at least 32 characters) is required to protect recovery tokens. **Security note:** anyone who knows a user's registered phone number and NID may reset that account's password; use this only if that risk is acceptable for your deployment.
+Development recovery checks the registered mobile number and NID, then returns a reset token directly to the caller. This is not an out-of-band identity check. Recovery endpoints are disabled when `APP_ENV=production` until a verified delivery provider is configured. Do not enable them for production by changing this guard alone.
+
+See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for secret configuration, upload limits, backup/restore steps, and the approval-gated migration procedure.
 
 ## Usernames and registration migration
 
