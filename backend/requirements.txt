@@ -6,7 +6,9 @@ httpx
 pytest
 python-multipart
 pypdf
-PyMuPDF>=1.24.0
+# OCR only needs the stable PDF rasterization API used by ocr_service.
+# Keep the new 2.x layout/LLM dependency stack out of the default backend install.
+PyMuPDF>=1.24.0,<2.0.0
 PyTesseract>=0.3.10
 python-dotenv
 Pillow>=10.0.0

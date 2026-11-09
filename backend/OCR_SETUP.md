@@ -14,8 +14,23 @@ Tesseract in `C:\Program Files\Tesseract-OCR` and in the project's local
 On Windows, install the native Tesseract engine and check `tesseract --list-langs`.
 The Bengali (`ben`) and English (`eng`) trained data can be kept in the project's
 local Tesseract `tessdata` directory, avoiding writes to `Program Files`. Install
-the Python packages from the active backend virtual environment with
-`python -m pip install -r requirements.txt`, then restart Uvicorn.
+and run from the repository's canonical `backend/.venv` so `pip` and Uvicorn use
+the same interpreter. From the `backend` directory:
+
+```powershell
+if (!(Test-Path .venv\Scripts\python.exe)) { py -3.13 -m venv .venv }
+.\.venv\Scripts\python.exe -m pip install --retries 10 --timeout 120 -r requirements.txt
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
+```
+
+If a large OCR wheel still fails to download, install the API/database essentials
+first so Uvicorn can start, then retry the complete requirements file:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install --retries 10 --timeout 120 "psycopg[binary]" psycopg-pool
+.\.venv\Scripts\python.exe -m pip install --retries 10 --timeout 120 -r requirements.txt
+```
 
 The upload endpoint extracts labelled fields for review. It does not submit a
 deed verification, infer missing values, or use OCR text as proof of ownership.
