@@ -37,6 +37,10 @@ from starlette.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 from psycopg import OperationalError
 from psycopg.errors import UniqueViolation, UndefinedTable
+try:
+    from psycopg_pool import PoolTimeout
+except ImportError:  # The pool package is optional; direct connections use OperationalError.
+    PoolTimeout = None
 from PIL import Image, UnidentifiedImageError
 import warnings
 
@@ -122,7 +126,7 @@ except ImportError:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Initialize the database at startup; fail clearly if it is unavailable."""
+    """Initialize the database when reachable without taking down the web app."""
     if os.environ.get("APP_ENV", "development").lower() == "production":
         _auth_secret()
         if not os.environ.get("DATABASE_URL"):
@@ -132,8 +136,16 @@ async def lifespan(app: FastAPI):
         if any(not origin.strip().lower().startswith("https://") for origin in os.environ["CORS_ORIGINS"].split(",") if origin.strip()):
             raise RuntimeError("Production CORS_ORIGINS must use HTTPS")
     try:
-        engine.init()
-        print("Database initialization successful.")
+        try:
+            await run_in_threadpool(engine.init)
+            logging.getLogger(__name__).info("Database initialization successful.")
+        except Exception as exc:
+            if not _is_database_unavailable(exc):
+                raise
+            logging.getLogger(__name__).warning(
+                "Database unavailable during startup (%s); API requests will retry initialization",
+                type(exc).__name__,
+            )
         yield
     finally:
         close_pool = getattr(engine, "close_pool", None)
@@ -150,6 +162,39 @@ app = FastAPI(
     redoc_url=None if os.environ.get("APP_ENV", "development").lower() == "production" else "/redoc",
     openapi_url=None if os.environ.get("APP_ENV", "development").lower() == "production" else "/openapi.json",
 )
+
+
+_DATABASE_UNAVAILABLE_TYPES = (OperationalError, TimeoutError) + ((PoolTimeout,) if PoolTimeout else ())
+
+
+def _is_database_unavailable(exc: Exception) -> bool:
+    if isinstance(exc, _DATABASE_UNAVAILABLE_TYPES):
+        return True
+    return isinstance(exc, RuntimeError) and "DATABASE_URL environment variable is not set" in str(exc)
+
+
+@app.middleware("http")
+async def initialize_database_for_api(request: Request, call_next):
+    """Retry schema initialization on DB-backed API calls after an offline cold start."""
+    path = request.url.path
+    needs_database = path.startswith("/api/") and path not in {"/api/engine/status", "/api/benchmark"}
+    try:
+        if needs_database:
+            await run_in_threadpool(engine.init)
+        return await call_next(request)
+    except Exception as exc:
+        if not _is_database_unavailable(exc):
+            raise
+        logging.getLogger(__name__).warning(
+            "Database unavailable while serving %s (%s)", path, type(exc).__name__
+        )
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "detail": "ডেটাবেজ সংযোগে সাময়িক সমস্যা হয়েছে। আবার চেষ্টা করুন। (Database is temporarily unavailable. Please retry.)"
+            },
+            headers={"Retry-After": "2"},
+        )
 
 
 @app.exception_handler(OperationalError)

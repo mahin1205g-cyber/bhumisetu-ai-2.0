@@ -107,7 +107,10 @@ def _get_pool():
                     max_lifetime=1800,
                     open=False,
                 )
-                _pool.open(wait=True)
+                # Let the API process start even when PostgreSQL is temporarily
+                # unreachable. Callers apply their own bounded wait when they
+                # actually need a database connection.
+                _pool.open(wait=False)
     return _pool
 
 
@@ -124,7 +127,7 @@ def close_pool(timeout: float = 12.0):
 
 
 @contextmanager
-def conn():
+def conn(timeout: float = 30):
     database_url = os.environ.get("DATABASE_URL")
 
     if not database_url:
@@ -137,12 +140,12 @@ def conn():
         with psycopg.connect(
             database_url,
             row_factory=dict_row,
-            connect_timeout=10
+            connect_timeout=max(1, int(timeout))
         ) as c:
             yield c
         return
 
-    with pool.connection(timeout=30) as c:
+    with pool.connection(timeout=timeout) as c:
         yield c
 
 
@@ -173,7 +176,10 @@ def init():
     with _schema_init_lock:
         if _schema_initialized:
             return
-        with conn() as c:
+        # Schema initialization runs during startup and on the first API request
+        # if startup could not reach PostgreSQL. Keep that attempt bounded so a
+        # cold start does not sit behind a long pool wait.
+        with conn(timeout=5) as c:
 
             # 1. Existing records table
             c.execute("""CREATE TABLE IF NOT EXISTS records(
