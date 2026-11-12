@@ -22,10 +22,12 @@ No production database backup, restore, or migration is performed by this reposi
    ```
 
 3. Restore that backup into a separate, empty staging database with `pg_restore` (do not use `--clean` on production). Check table counts and run the migration there first.
-4. Obtain explicit approval before applying `backend/migrations/20261105_cpp_graph_analysis_results.sql` to production. Apply it with `psql --set ON_ERROR_STOP=1`; keep the nullable column on application rollback so existing report data is preserved.
+4. Obtain explicit approval before applying `backend/migrations/20261105_cpp_graph_analysis_results.sql` or `backend/migrations/20261112_deed_digitization_support.sql` to production. Apply only the reviewed migration with `psql --set ON_ERROR_STOP=1` after staging restore and verification.
 5. Verify the column, application readiness, and representative reports after deploy. Record backup location, restore result, migration ID, and deployment version without recording credentials or report contents.
 
 The current migration is additive and leaves old reports `NULL`; it does not backfill or overwrite records. Its rollback is an application rollback while retaining the extra nullable column. Dropping the column is intentionally not part of rollback because it would destroy persisted analysis.
+
+The deed-digitization migration adds application, status-history, private-document, and approved-deed metadata tables. It does not alter or backfill existing deed rows. New applications remain outside `deeds`; a staff approval creates one canonical deed row and metadata link in the same PostgreSQL transaction. Roll back the application by disabling the digitization routes and retaining the tables and files. Do not drop these tables after applications/documents have been saved: they contain status, ownership/access metadata, audit history, and links to private scans. If removal is ever required, first export and restore-verify all workflow tables and the persistent document volume, then obtain separate explicit approval for the destructive drop.
 
 ## Scaling limits and deployment notes
 

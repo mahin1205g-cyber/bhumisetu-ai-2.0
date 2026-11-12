@@ -2,6 +2,7 @@ import csv
 import re
 from pathlib import Path
 
+from backend.engine import _classify_mouza_check
 from backend.import_national_portal_unions import collect_unambiguous_upazila_labels
 from backend.location_service import (
     _with_official_admin_labels,
@@ -85,6 +86,31 @@ def test_legacy_english_record_resolves_to_same_location_ids_as_bengali_selectio
     assert submitted["district_id"] == recorded["district_id"] == 10
     assert submitted["location_id"] == recorded["location_id"] == 100
     assert submitted["mouza_id"] == recorded["mouza_id"] == 1000
+
+
+def test_manual_mouza_text_is_not_promoted_to_an_official_catalog_match():
+    connection = LocationCatalogConnection()
+    manual = resolve_location_reference(connection, {
+        "division_id": 1,
+        "district_id": 10,
+        "location_id": 100,
+        "location_type": "upazila",
+        "mouza": "পাইকপাড়া",
+        "mouza_input_mode": "manual",
+    })
+
+    assert manual["location_id"] == 100
+    assert manual["mouza"] is None
+    assert manual["mouza_id"] is None
+
+
+def test_mouza_verification_keeps_catalog_ids_and_manual_text_distinct():
+    assert _classify_mouza_check("catalog", "পাইকপাড়া", "পাইকপাড়া", True, True) == "MATCHED"
+    assert _classify_mouza_check("catalog", "পাইকপাড়া", "পাইকপাড়া", True, False) == "MISMATCH"
+    assert _classify_mouza_check("catalog", "পাইকপাড়া", "পাইকপাড়া", True, None) == "UNAVAILABLE"
+    assert _classify_mouza_check("manual", "  পাইকপাড়া ", "পাইকপাড়া", True, None) == "MATCHED"
+    assert _classify_mouza_check("manual", "অন্য মৌজা", "পাইকপাড়া", True, None) == "MISMATCH"
+    assert _classify_mouza_check("manual", "পাইকপাড়া", "পাইকপাড়া", False, None) == "MATCHED"
 
 
 def test_official_snapshot_bridges_missing_district_translation_without_db_write():

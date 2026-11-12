@@ -528,13 +528,13 @@ def lookup_by_deed_number(deed_no: str) -> list[dict]:
         # digits, different case, or spacing.
         exact_rows = c.execute(
             """SELECT * FROM deeds
-               WHERE deed_no = %s
+               WHERE COALESCE(is_verified,1)<>0 AND deed_no = %s
                ORDER BY reg_year DESC, id DESC""",
             (raw_number,),
         ).fetchall()
         normalized_rows = c.execute(
             """SELECT * FROM deeds
-               WHERE REGEXP_REPLACE(TRANSLATE(UPPER(deed_no), '০১২৩৪৫৬৭৮৯', '0123456789'), '[[:space:]]+', '', 'g') = %s
+               WHERE COALESCE(is_verified,1)<>0 AND REGEXP_REPLACE(TRANSLATE(UPPER(deed_no), '০১২৩৪৫৬৭৮৯', '0123456789'), '[[:space:]]+', '', 'g') = %s
                  AND deed_no IS DISTINCT FROM %s
                ORDER BY reg_year DESC, id DESC""",
             (needle, raw_number),
@@ -560,7 +560,9 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
     page = max(1, int(page or 1))
     page_size = min(MAX_PAGE_SIZE, max(1, int(page_size or DEFAULT_PAGE_SIZE)))
 
-    clauses = []
+    # User-submitted digitization drafts are stored with is_verified=0 and
+    # must never appear as searchable registration evidence.
+    clauses = ["COALESCE(is_verified,1)<>0"]
     params: list[Any] = []
     diagnostic_conditions: list[tuple[str, str, Any]] = []
 
@@ -654,7 +656,7 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
         filter_conflict = False
         if int(total or 0) == 0 and diagnostic_conditions:
             checks = [
-                f"EXISTS(SELECT 1 FROM deeds WHERE {clause}) AS filter_{key}"
+                f"EXISTS(SELECT 1 FROM deeds WHERE COALESCE(is_verified,1)<>0 AND {clause}) AS filter_{key}"
                 for key, clause, _ in diagnostic_conditions
             ]
             check_params = [value for _, _, value in diagnostic_conditions]
@@ -681,7 +683,7 @@ def search_deeds(filters: dict, page: int = 1, page_size: int = DEFAULT_PAGE_SIZ
 def get_deed_by_id(deed_id: int) -> Optional[dict]:
     ensure_protection_schema()
     with engine.conn() as c:
-        row = c.execute("SELECT * FROM deeds WHERE id = %s", (deed_id,)).fetchone()
+        row = c.execute("SELECT * FROM deeds WHERE id = %s AND COALESCE(is_verified,1)<>0", (deed_id,)).fetchone()
         return dict(row) if row else None
 
 

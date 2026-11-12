@@ -97,6 +97,7 @@ def test_chat_status_endpoint(no_provider):
     data = res.json()
     assert data["status"] == "online"
     assert data["ai_configured"] is False
+    assert data["provider_availability"] == "unknown"
     assert "provider" in data
     assert len(data["supported_languages"]) >= 3
     assert len(data["features"]) >= 3
@@ -312,6 +313,12 @@ def test_http_status_mapping():
         LandAIChatService._check_status(make(429))
     assert rate_err.value.code == "rate_limited"
     assert rate_err.value.retryable is True
+    assert rate_err.value.retry_after is None
+
+    with pytest.raises(LLMError) as timeout_err:
+        LandAIChatService._check_status(make(408))
+    assert timeout_err.value.code == "timeout"
+    assert timeout_err.value.http_status == 408
 
     with pytest.raises(LLMError) as model_err:
         LandAIChatService._check_status(make(404))
@@ -319,8 +326,21 @@ def test_http_status_mapping():
 
     with pytest.raises(LLMError) as server_err:
         LandAIChatService._check_status(make(503))
-    assert server_err.value.code == "provider_error"
+    assert server_err.value.code == "provider_unavailable"
     assert server_err.value.retryable is True
+    assert server_err.value.http_status == 503
+
+
+def test_http_status_maps_invalid_key_and_unavailable_model():
+    invalid_key = httpx.Response(400, json={"error": {"message": "API key not valid. Please pass a valid API key."}})
+    with pytest.raises(LLMError) as key_err:
+        LandAIChatService._check_status(invalid_key)
+    assert key_err.value.code == "auth_error"
+
+    unsupported_model = httpx.Response(400, json={"error": {"message": "This model does not support generateContent."}})
+    with pytest.raises(LLMError) as model_err:
+        LandAIChatService._check_status(unsupported_model)
+    assert model_err.value.code == "model_unavailable"
 
 
 def test_network_timeout_is_normalised(monkeypatch):
@@ -342,6 +362,107 @@ def test_network_timeout_is_normalised(monkeypatch):
     with pytest.raises(LLMError) as err:
         asyncio.run(chat_service._post("https://example.invalid", {"timeout": 1.0}))
     assert err.value.code == "timeout"
+    assert err.value.retryable is True  # User can manually retry; server will not replay it.
+
+
+def test_gemini_default_config_and_thinking_levels(monkeypatch):
+    monkeypatch.setenv("GEMINI_API_KEY", "not-a-real-key")
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("LLM_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("LLM_REQUEST_DEADLINE_SECONDS", raising=False)
+    service = LandAIChatService()
+    cfg = service._config()
+    assert cfg["model"] == "gemini-3.8-flash"
+    assert cfg["timeout"] == 90
+    assert cfg["request_deadline"] == 90
+    assert service._thinking_level([{"role": "user", "content": "হ্যালো"}]) == "low"
+    assert service._thinking_level([{"role": "user", "content": "Hello, how are you?"}]) == "low"
+    assert service._thinking_level([{"role": "user", "content": "Prove this theorem step by step."}]) == "medium"
+    assert service._thinking_level([{"role": "user", "content": "এই জটিল অঙ্কটি ধাপে ধাপে সমাধান কর"}]) == "medium"
+    assert service._thinking_level([{"role": "user", "content": "Debug and optimize this algorithm."}]) == "medium"
+
+
+def test_gemini_38_payload_uses_documented_thinking_config(monkeypatch):
+    service = LandAIChatService()
+    captured = {}
+    response = httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "হ্যালো!"}]}}]})
+
+    async def fake_post(url, cfg, *, deadline=None, **kwargs):
+        captured.update({"url": url, "deadline": deadline, **kwargs})
+        cfg["_last_http_status"] = 200
+        return response
+
+    monkeypatch.setattr(service, "_post", fake_post)
+    cfg = {"model": "gemini-3.8-flash", "gemini_key": "not-a-real-key"}
+    answer = asyncio.run(service._call_gemini(
+        "system", [{"role": "user", "content": "হ্যালো"}], cfg, deadline=123.0
+    ))
+
+    assert answer == "হ্যালো!"
+    assert captured["url"].endswith("/models/gemini-3.8-flash:generateContent")
+    assert captured["headers"]["x-goog-api-key"] == "not-a-real-key"
+    generation = captured["json"]["generationConfig"]
+    assert generation["thinkingConfig"] == {"thinkingLevel": "low"}
+    assert "temperature" not in generation
+
+
+def test_gemini_complex_request_uses_medium_thinking(monkeypatch):
+    service = LandAIChatService()
+    captured = {}
+
+    async def fake_post(url, cfg, *, deadline=None, **kwargs):
+        captured.update(kwargs)
+        return httpx.Response(200, json={"candidates": [{"content": {"parts": [{"text": "Solved."}]}}]})
+
+    monkeypatch.setattr(service, "_post", fake_post)
+    asyncio.run(service._call_gemini(
+        "system", [{"role": "user", "content": "Debug and optimize this algorithm."}],
+        {"model": "gemini-3.8-flash", "gemini_key": "not-a-real-key"},
+    ))
+    assert captured["json"]["generationConfig"]["thinkingConfig"] == {"thinkingLevel": "medium"}
+
+
+def test_request_retries_only_bounded_transient_http_errors(monkeypatch):
+    service = LandAIChatService()
+    monkeypatch.setenv("GEMINI_API_KEY", "not-a-real-key")
+    attempts = []
+
+    async def fail_once_then_succeed(system_prompt, messages, cfg, deadline=None):
+        attempts.append(1)
+        if len(attempts) == 1:
+            raise LLMError("provider_error", "502: unavailable", retryable=True, http_status=502)
+        return "generated response from test transport"
+
+    async def no_wait(_seconds):
+        return None
+
+    monkeypatch.setattr(service, "_call_gemini", fail_once_then_succeed)
+    monkeypatch.setattr(chat_module.asyncio, "sleep", no_wait)
+    answer = asyncio.run(service._request_completion(
+        "system", [{"role": "user", "content": "hello"}],
+        {"provider": "gemini", "model": "gemini-3.8-flash", "timeout": 90, "request_deadline": 90},
+    ))
+    assert answer == "generated response from test transport"
+    assert len(attempts) == 2
+
+
+def test_request_does_not_replay_after_timeout(monkeypatch):
+    service = LandAIChatService()
+    monkeypatch.setenv("GEMINI_API_KEY", "not-a-real-key")
+    attempts = []
+
+    async def timeout_once(system_prompt, messages, cfg, deadline=None):
+        attempts.append(1)
+        raise LLMError("timeout", "read timed out", retryable=True)
+
+    monkeypatch.setattr(service, "_call_gemini", timeout_once)
+    with pytest.raises(LLMError) as err:
+        asyncio.run(service._request_completion(
+            "system", [{"role": "user", "content": "hello"}],
+            {"provider": "gemini", "model": "gemini-3.8-flash", "timeout": 90, "request_deadline": 90},
+        ))
+    assert err.value.code == "timeout"
+    assert len(attempts) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -372,3 +493,96 @@ def test_junk_history_entries_are_ignored(fake_provider):
 def test_non_object_history_is_rejected(no_provider):
     res = client.post("/api/chat/message", json={"message": "hello", "history": [None, "x"]})
     assert res.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# Database-grounded orchestration and access control
+# ---------------------------------------------------------------------------
+
+def test_deed_lookup_uses_postgres_service_and_role_redacted_fields(monkeypatch, fake_provider):
+    row = {
+        "id": 900,
+        "deed_no": "D-1001",
+        "reg_year": 2025,
+        "district": "ঢাকা",
+        "upazila": "মিরপুর",
+        "mouza": "পাইকপাড়া",
+        "plot_id": "DHK-MIR-001",
+        "khatian_no": "BS-1045",
+        "seller_name": "Rahim Uddin",
+        "buyer_name": "Karim Hossain",
+        "price": 900000,
+    }
+    monkeypatch.setattr(chat_module.deed_search, "lookup_by_deed_number", lambda deed_no: [row])
+
+    response = asyncio.run(chat_service.generate_response(
+        "দলিল নম্বর D-1001-এর তথ্য বলুন",
+        user={"id": 7, "role": "citizen"},
+    ))
+
+    assert response["tool"] == "deed_record"
+    assert response["context_used"] is True
+    assert response["grounding"]["kind"] == "database"
+    assert response["grounding"]["official_registry"] is False
+    assert "D-1001" in fake_provider["system"]
+    assert "Rahim Uddin" not in fake_provider["system"]
+    assert "900000" not in fake_provider["system"]
+
+
+def test_guest_cannot_trigger_deed_database_lookup(monkeypatch, no_provider):
+    called = False
+
+    def unexpected_lookup(_):
+        nonlocal called
+        called = True
+        return []
+
+    monkeypatch.setattr(chat_module.deed_search, "lookup_by_deed_number", unexpected_lookup)
+    response = asyncio.run(chat_service.generate_response("Show deed D-1001"))
+
+    assert called is False
+    assert response["tool"] == "auth_required"
+    assert response["grounding"]["kind"] == "unavailable"
+
+
+def test_application_lookup_checks_auth_before_database_access(monkeypatch):
+    def unexpected_lookup(_):
+        raise AssertionError("Database must not be queried for a signed-out user")
+
+    monkeypatch.setattr(engine, "get_mutation_application", unexpected_lookup)
+    status, application = chat_service._lookup_application("MUT-2026-TEST", None)
+
+    assert status == "auth_required"
+    assert application is None
+
+
+def test_private_report_reference_is_not_disclosed_to_another_user(monkeypatch):
+    monkeypatch.setattr(chat_module.engine, "get_deed_verification_by_ref", lambda _: {
+        "verification_ref": "LG-VR-2026-ABC123", "user_id": 99, "deed_no": "D-1001",
+    })
+
+    result = chat_service._lookup_saved_report(
+        "LG-VR-2026-ABC123", {"id": 7, "role": "citizen"}
+    )
+
+    assert result["kind"] == "report_not_found"
+    assert result["context"] == ""
+
+
+def test_database_failure_does_not_fall_back_to_model_guess(monkeypatch, fake_provider):
+    def fail_lookup(_):
+        raise RuntimeError("database offline")
+
+    monkeypatch.setattr(chat_module.deed_search, "lookup_by_deed_number", fail_lookup)
+    response = asyncio.run(chat_service.generate_response(
+        "Show deed D-1001", user={"id": 7, "role": "citizen"}
+    ))
+
+    assert response["tool"] == "database_unavailable"
+    assert response["error"]["code"] == "database_unavailable"
+    assert "messages" not in fake_provider
+
+
+def test_banglish_query_is_detected_as_bengali_and_extracts_deed_number():
+    assert chat_module.detect_language("amar dolil D-1001 er obostha ki") == "bn"
+    assert chat_service.extract_deed_number("amar dolil D-1001 er obostha ki") == "D-1001"

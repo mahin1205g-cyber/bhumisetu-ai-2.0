@@ -4,27 +4,48 @@
 const configuredBaseUrl = import.meta.env.VITE_API_URL || "/api";
 const BASE_URL = configuredBaseUrl.replace(/\/+$/, "");
 
+let accessToken = "";
+let refreshPromise = null;
+let authFailureHandler = null;
+
+// Migrate the old short-lived bearer once, then keep all access tokens in memory.
+try {
+  accessToken = localStorage.getItem("lg_token") || "";
+  localStorage.removeItem("lg_token");
+} catch {
+  accessToken = "";
+}
+
 function getToken() {
-  try {
-    return localStorage.getItem("lg_token") || "";
-  } catch {
-    return "";
-  }
+  return accessToken;
+}
+
+function hasExplicitLogoutMarker() {
+  try { return localStorage.getItem("lg_logged_out") === "1"; } catch { return false; }
 }
 
 export function setToken(token) {
-  try {
-    if (token) {
-      localStorage.setItem("lg_token", token);
-    } else {
-      localStorage.removeItem("lg_token");
-    }
-  } catch (error) {
-    console.warn("Unable to access local storage:", error);
-  }
+  accessToken = token || "";
+  try { localStorage.removeItem("lg_token"); } catch { /* Storage is not required for auth. */ }
 }
 
-async function request(endpoint, options = {}) {
+export function setAuthFailureHandler(handler) {
+  authFailureHandler = handler;
+}
+
+function createRequestError(responseData, statusCode) {
+  const detail = responseData?.detail || responseData?.message_bn || responseData?.message || responseData?.error || `Request failed (${statusCode})`;
+  const message = Array.isArray(detail)
+    ? detail.map((item) => item.msg || JSON.stringify(item)).join(", ")
+    : typeof detail === "string" ? detail : (detail?.message || JSON.stringify(detail));
+  const error = new Error(message);
+  error.status = statusCode;
+  error.payload = responseData;
+  error.code = detail?.code;
+  return error;
+}
+
+async function sendRequest(endpoint, options = {}, token = getToken()) {
   const headers = new Headers(options.headers || {});
   headers.set("Accept", "application/json");
 
@@ -44,7 +65,6 @@ async function request(endpoint, options = {}) {
     }, timeoutMs);
   }
 
-  const token = getToken();
   if (token && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${token}`);
   }
@@ -105,21 +125,7 @@ async function request(endpoint, options = {}) {
     }
 
     if (!response.ok) {
-      const detail =
-        responseData?.detail ||
-        responseData?.message_bn ||
-        responseData?.message ||
-        responseData?.error ||
-        `Request failed (${response.status})`;
-      const message = Array.isArray(detail)
-        ? detail.map((item) => item.msg || JSON.stringify(item)).join(", ")
-        : typeof detail === "string"
-          ? detail
-          : JSON.stringify(detail);
-      const error = new Error(message);
-      error.status = response.status;
-      error.payload = responseData;
-      throw error;
+      throw createRequestError(responseData, response.status);
     }
 
     return responseData;
@@ -127,6 +133,82 @@ async function request(endpoint, options = {}) {
     if (timeoutId) clearTimeout(timeoutId);
     callerSignal?.removeEventListener("abort", abortFromCaller);
   }
+}
+
+async function refreshAccessToken() {
+  if (hasExplicitLogoutMarker()) {
+    const error = new Error("You have logged out. Sign in again to continue.");
+    error.status = 401;
+    throw error;
+  }
+  if (refreshPromise) return refreshPromise;
+  refreshPromise = (async () => {
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      let response;
+      try {
+        const headers = new Headers({ Accept: "application/json" });
+        const legacyToken = getToken();
+        if (legacyToken) headers.set("Authorization", `Bearer ${legacyToken}`);
+        response = await fetch(`${BASE_URL}/auth/refresh`, {
+          method: "POST",
+          headers,
+          credentials: "include",
+        });
+      } catch {
+        const error = new Error("Backend-এর সাথে সংযোগ করা যাচ্ছে না; session যাচাই করা যায়নি।");
+        error.code = "BACKEND_UNAVAILABLE";
+        throw error;
+      }
+      let payload = null;
+      try { payload = await response.json(); } catch { payload = null; }
+      if (response.ok && payload?.token) {
+        setToken(payload.token);
+        return payload.token;
+      }
+      const error = createRequestError(payload, response.status);
+      if (response.status === 409 && error.code === "session_rotated" && attempt < 3) {
+        await new Promise((resolve) => setTimeout(resolve, 75));
+        continue;
+      }
+      if (response.status === 401) setToken(null);
+      throw error;
+    }
+    const error = new Error("Session refresh could not be completed.");
+    error.code = "SESSION_REFRESH_FAILED";
+    throw error;
+  })();
+  try {
+    return await refreshPromise;
+  } finally {
+    refreshPromise = null;
+  }
+}
+
+async function request(endpoint, options = {}) {
+  const sentToken = getToken();
+  try {
+    return await sendRequest(endpoint, options, sentToken);
+  } catch (error) {
+    if (error.status !== 401 || endpoint.startsWith("/auth/")) throw error;
+    try {
+      const retryToken = await tokenAfterUnauthorized(sentToken);
+      return await sendRequest(endpoint, options, retryToken);
+    } catch (refreshError) {
+      if (refreshError.status === 401) authFailureHandler?.();
+      throw refreshError;
+    }
+  }
+}
+
+function tokenAfterUnauthorized(sentToken) {
+  if (hasExplicitLogoutMarker()) {
+    const error = new Error("You have logged out. Sign in again to continue.");
+    error.status = 401;
+    return Promise.reject(error);
+  }
+  return getToken() && getToken() !== sentToken
+    ? Promise.resolve(getToken())
+    : refreshAccessToken();
 }
 
 const encode = (value) => encodeURIComponent(String(value));
@@ -159,48 +241,83 @@ export const api = {
 
   getMe: () => request("/auth/me"),
 
-  getProfilePicture: async (userId, version) => {
-    const headers = new Headers({ Accept: "image/webp" });
-    const token = getToken();
-    if (token) headers.set("Authorization", `Bearer ${token}`);
-    const response = await fetch(`${BASE_URL}/users/${encode(userId)}/profile-picture?v=${encode(version)}`, {
-      headers,
-      credentials: "include",
-    });
-    if (!response.ok) {
-      let detail = "Could not load profile picture";
-      try {
-        const payload = await response.json();
-        detail = payload?.detail || detail;
-      } catch {
-        // Keep the useful fallback for non-JSON error responses.
-      }
-      const error = new Error(detail);
-      error.status = response.status;
-      throw error;
+  restoreSession: async () => {
+    if (hasExplicitLogoutMarker()) {
+      await request("/auth/logout", { method: "POST" }).catch(() => null);
+      return null;
     }
-    return response.blob();
+    await refreshAccessToken();
+    return request("/auth/me");
+  },
+
+  logout: () => request("/auth/logout", { method: "POST" }),
+
+  getProfilePicture: async (userId, version) => {
+    const load = async (token, retried = false) => {
+      const headers = new Headers({ Accept: "image/webp" });
+      if (token) headers.set("Authorization", `Bearer ${token}`);
+      const response = await fetch(`${BASE_URL}/users/${encode(userId)}/profile-picture?v=${encode(version)}`, {
+        headers,
+        credentials: "include",
+      });
+      if (response.status === 401 && !retried) {
+        try { return await load(await tokenAfterUnauthorized(token), true); }
+        catch (error) {
+          if (error.status === 401) authFailureHandler?.();
+          throw error;
+        }
+      }
+      if (!response.ok) {
+        let detail = "Could not load profile picture";
+        try {
+          const payload = await response.json();
+          detail = payload?.detail || detail;
+        } catch {
+          // Keep the useful fallback for non-JSON error responses.
+        }
+        const error = new Error(detail);
+        error.status = response.status;
+        throw error;
+      }
+      return response.blob();
+    };
+    return load(getToken());
   },
 
   uploadProfilePicture: (formData, onProgress) => new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", `${BASE_URL}/profile-picture`);
-    xhr.withCredentials = true;
-    xhr.setRequestHeader("Accept", "application/json");
-    const token = getToken();
-    if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.upload.addEventListener("progress", (event) => {
-      if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
-    });
-    xhr.addEventListener("load", () => {
-      let payload = {};
-      try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* handled below */ }
-      if (xhr.status >= 200 && xhr.status < 300) resolve(payload);
-      else reject(new Error(payload.detail || `Upload failed (${xhr.status})`));
-    });
-    xhr.addEventListener("error", () => reject(new Error("Could not connect to the server")));
-    xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
-    xhr.send(formData);
+    const upload = (token, retried = false) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("PUT", `${BASE_URL}/profile-picture`);
+      xhr.withCredentials = true;
+      xhr.setRequestHeader("Accept", "application/json");
+      if (token) xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+      xhr.upload.addEventListener("progress", (event) => {
+        if (event.lengthComputable) onProgress?.(Math.round((event.loaded / event.total) * 100));
+      });
+      xhr.addEventListener("load", () => {
+        let payload = {};
+        try { payload = JSON.parse(xhr.responseText || "{}"); } catch { /* handled below */ }
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(payload);
+        } else if (xhr.status === 401 && !retried) {
+          tokenAfterUnauthorized(token).then((freshToken) => upload(freshToken, true)).catch((error) => {
+            if (error.status === 401) authFailureHandler?.();
+            reject(error);
+          });
+        } else if (xhr.status === 401) {
+          const error = new Error(payload.detail || "Authentication required");
+          error.status = 401;
+          authFailureHandler?.();
+          reject(error);
+        } else {
+          reject(new Error(payload.detail || `Upload failed (${xhr.status})`));
+        }
+      });
+      xhr.addEventListener("error", () => reject(new Error("Could not connect to the server")));
+      xhr.addEventListener("abort", () => reject(new Error("Upload cancelled")));
+      xhr.send(formData);
+    };
+    upload(getToken());
   }),
 
   removeProfilePicture: () => request("/profile-picture", { method: "DELETE" }),
@@ -245,6 +362,85 @@ export const api = {
       method: "POST",
       body: formData,
     }),
+
+  scanDigitizationDocument: (formData) =>
+    request("/deed-digitization/scan", {
+      method: "POST",
+      body: formData,
+      timeoutMs: 90000,
+    }),
+
+  discardDigitizationScan: (scanToken) =>
+    request(`/deed-digitization/scan/${encode(scanToken)}`, { method: "DELETE" }),
+
+  submitDigitizationApplication: (data) =>
+    request("/deed-digitization/applications", { method: "POST", body: data }),
+
+  resubmitDigitizationApplication: (id, data) =>
+    request(`/deed-digitization/applications/${encode(id)}/resubmit`, { method: "PUT", body: data }),
+
+  listDigitizationApplications: ({ page = 1, pageSize = 20, staffQueue = false } = {}) =>
+    request(`/deed-digitization/applications/${staffQueue ? "review-queue" : "mine"}?page=${encode(page)}&page_size=${encode(pageSize)}`),
+
+  listDigitizationOfficers: () => request("/deed-digitization/applications/officers"),
+
+  assignDigitizationApplication: (id, officerId) =>
+    request(`/deed-digitization/applications/${encode(id)}/assign`, {
+      method: "POST",
+      body: { officer_id: officerId },
+    }),
+
+  getDigitizationApplication: (id) => request(`/deed-digitization/applications/${encode(id)}`),
+
+  trackDigitizationApplication: (trackingId) => request(`/deed-digitization/track/${encode(trackingId)}`),
+
+  uploadDigitizationApplicationDocument: (applicationId, formData) =>
+    request(`/deed-digitization/applications/${encode(applicationId)}/documents`, { method: "POST", body: formData }),
+
+  decideDigitizationApplication: (id, action, note = "") =>
+    request(`/deed-digitization/applications/${encode(id)}/decision`, { method: "POST", body: { action, note } }),
+
+  cancelDigitizationApplication: (id) =>
+    request(`/deed-digitization/applications/${encode(id)}/cancel`, { method: "POST" }),
+
+  listDigitalDeeds: (staff = false) => request(`/deed-digitization/digital-deeds/${staff ? "review" : "mine"}`),
+
+  revokeDigitalDeed: (deedId, reason) =>
+    request(`/deed-digitization/digital-deeds/${encode(deedId)}/revoke`, { method: "POST", body: { reason } }),
+
+  getDigitalDeed: (deedId) => request(`/deed-digitization/digital-deeds/${encode(deedId)}`),
+
+  verifyDigitalDeed: (token) => request(`/deed-digitization/public/verify/${encode(token)}`),
+
+  downloadDigitizationApplicationDocument: async (applicationId, documentId) => {
+    const headers = new Headers();
+    if (getToken()) headers.set("Authorization", `Bearer ${getToken()}`);
+    const response = await fetch(`${BASE_URL}/deed-digitization/applications/${encode(applicationId)}/documents/${encode(documentId)}`, {
+      headers,
+      credentials: "include",
+    });
+    if (!response.ok) {
+      let detail = "Application document is unavailable.";
+      try { const payload = await response.json(); detail = payload?.detail || detail; } catch { /* Keep safe fallback. */ }
+      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+    return response.blob();
+  },
+
+  downloadStaffHistoryApplicationDocument: async (applicationId, documentId) => {
+    const headers = new Headers();
+    if (getToken()) headers.set("Authorization", `Bearer ${getToken()}`);
+    const response = await fetch(`${BASE_URL}/deed-digitization/applications/${encode(applicationId)}/staff-history-documents/${encode(documentId)}`, {
+      headers,
+      credentials: "include",
+    });
+    if (!response.ok) {
+      let detail = "Application document is unavailable.";
+      try { const payload = await response.json(); detail = payload?.detail || detail; } catch { /* Keep safe fallback. */ }
+      throw new Error(typeof detail === "string" ? detail : JSON.stringify(detail));
+    }
+    return response.blob();
+  },
 
   getVerificationReport: (ref) =>
     request(`/verification/report/${encode(ref)}`),
@@ -304,8 +500,22 @@ export const api = {
   trackMutation: (trackingNo) =>
     request(`/mutation/track/${encode(trackingNo)}`),
 
-  getMyMutations: (userId) =>
-    request(`/mutation/my-applications?user_id=${encode(userId || 1)}`),
+  getApplicationHistory: (query = "") =>
+    request(`/applications/my${query ? `?${query}` : ""}`),
+
+  getStaffApplicationHistory: (query = "") =>
+    request(`/applications/staff-history${query ? `?${query}` : ""}`),
+
+  getStaffApplicationHistoryDetail: (trackingId) =>
+    request(`/applications/staff-history/track/${encode(trackingId)}`),
+
+  trackMyApplication: (trackingId) =>
+    request(`/applications/my/track/${encode(trackingId)}`),
+
+  getUnifiedAdminApplications: (query = "") =>
+    request(`/applications/admin${query ? `?${query}` : ""}`),
+
+  getMyMutations: () => request("/mutation/my-applications"),
 
   getAllMutations: (statusFilter) =>
     request(
@@ -313,6 +523,12 @@ export const api = {
         statusFilter ? `?status_filter=${encode(statusFilter)}` : ""
       }`
     ),
+
+  assignMutationApplication: (trackingNo, officerId) =>
+    request(`/mutation/assign/${encode(trackingNo)}`, {
+      method: "POST",
+      body: { officer_id: officerId },
+    }),
 
   performMutationAction: (data) =>
     request("/mutation/action", {

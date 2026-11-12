@@ -1,7 +1,7 @@
 import Input from '../components/Input';
 import LocationCombobox, { displayLocationName } from '../components/LocationCombobox';
 import Button from '../components/Button';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { api } from '../api';
 import PageHeader from '../components/PageHeader';
@@ -119,6 +119,10 @@ export default function DeedVerification({
   const [districtId, setDistrictId] = useState(verificationDraft?.districtId || '');
   const [locationId, setLocationId] = useState(verificationDraft?.locationId || '');
   const [mouzaId, setMouzaId] = useState(verificationDraft?.mouzaId || '');
+  const [mouzaMode, setMouzaMode] = useState(
+    verificationDraft?.mouzaMode || (verificationDraft?.mouzaId ? 'catalog' : 'manual')
+  );
+  const mouzaModeTouched = useRef(false);
   const [unionId, setUnionId] = useState(verificationDraft?.unionId || '');
   const [locationCoverage, setLocationCoverage] = useState(null);
   const [deedTypes, setDeedTypes] = useState([]);
@@ -134,12 +138,13 @@ export default function DeedVerification({
       districtId,
       locationId,
       mouzaId,
+      mouzaMode,
       unionId,
       lookupState,
       lookupCandidates,
       selectedDeed,
     });
-  }, [formData, locationType, divisionId, districtId, locationId, mouzaId, unionId, lookupState, lookupCandidates, selectedDeed, setVerificationDraft]);
+  }, [formData, locationType, divisionId, districtId, locationId, mouzaId, mouzaMode, unionId, lookupState, lookupCandidates, selectedDeed, setVerificationDraft]);
 
   useEffect(() => {
     let active = true;
@@ -202,9 +207,22 @@ export default function DeedVerification({
       : api.getLocationMouzas({ thanaId: locationId });
     request.then((response) => {
       if (!active) return;
-      setMouzas(response.items || []);
+      const items = response.items || [];
+      setMouzas(items);
+      if (!items.length) {
+        setMouzaId('');
+        setMouzaMode('manual');
+      } else if (mouzaId && !items.some((item) => String(item.id) === String(mouzaId))) {
+        setMouzaId('');
+        setMouzaMode('manual');
+      } else if (!mouzaId && !formData.mouza && !mouzaModeTouched.current) {
+        setMouzaMode('catalog');
+      }
     }).catch(() => {
-      if (active) setMouzas([]);
+      if (!active) return;
+      setMouzas([]);
+      setMouzaId('');
+      setMouzaMode('manual');
     });
     return () => { active = false; };
   }, [locationId, locationType]);
@@ -212,12 +230,25 @@ export default function DeedVerification({
   useEffect(() => {
     let active = true;
     setUnions([]);
-    setUnionId('');
-    if (locationType !== 'upazila' || !locationId) return () => { active = false; };
+    if (locationType !== 'upazila' || !locationId) {
+      setUnionId('');
+      setFormData((previous) => ({ ...previous, union_ward: '' }));
+      return () => { active = false; };
+    }
     api.getLocationUnions(locationId).then((response) => {
-      if (active) setUnions(response.items || []);
+      if (!active) return;
+      const items = response.items || [];
+      setUnions(items);
+      const selected = items.find((item) => String(item.id) === String(unionId));
+      if (!selected) {
+        setUnionId('');
+        setFormData((previous) => ({ ...previous, union_ward: '' }));
+      }
     }).catch(() => {
-      if (active) setUnions([]);
+      if (!active) return;
+      setUnions([]);
+      setUnionId('');
+      setFormData((previous) => ({ ...previous, union_ward: '' }));
     });
     return () => { active = false; };
   }, [locationId, locationType]);
@@ -229,23 +260,16 @@ export default function DeedVerification({
     const selectedUnion = unions.find((item) => String(item.id) === String(unionId));
     setFormData((previous) => ({
       ...previous,
-      district: selectedDistrict ? displayLocationName(selectedDistrict, lang) : previous.district,
-      upazila: selectedLocation ? displayLocationName(selectedLocation, lang) : previous.upazila,
-      mouza: selectedMouza ? displayLocationName(selectedMouza, lang) : previous.mouza,
-      union_ward: selectedUnion ? displayLocationName(selectedUnion, lang) : previous.union_ward,
+      district: selectedDistrict ? displayLocationName(selectedDistrict, 'bn') : previous.district,
+      upazila: selectedLocation ? displayLocationName(selectedLocation, 'bn') : previous.upazila,
+      mouza: selectedMouza ? displayLocationName(selectedMouza, 'bn') : previous.mouza,
+      union_ward: selectedUnion ? displayLocationName(selectedUnion, 'bn') : previous.union_ward,
     }));
   }, [lang, districts, locations, mouzas, unions, districtId, locationId, mouzaId, unionId]);
 
-  useEffect(() => {
-    if (!formData.mouza || !mouzas.length) return;
-    const matched = findLocationSuggestion(mouzas, formData.mouza, lang);
-    if (!matched || String(matched.id) === String(mouzaId)) return;
-    setMouzaId(String(matched.id));
-    setFormData((previous) => ({ ...previous, mouza: displayLocationName(matched, lang) }));
-  }, [formData.mouza, lang, mouzas, mouzaId]);
-
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'mouza') mouzaModeTouched.current = true;
     setFormData(prev => ({ ...prev, [name]: value }));
     setFieldErrors((previous) => ({ ...previous, [name]: undefined }));
     if (name === 'deed_no' && value !== formData.deed_no) {
@@ -288,7 +312,7 @@ export default function DeedVerification({
         if (matchedDistrict && matchedDivision) {
           nextDivisionId = String(matchedDivision.id);
           nextDistrictId = String(matchedDistrict.id);
-          districtLabel = displayLocationName(matchedDistrict, lang);
+          districtLabel = displayLocationName(matchedDistrict, 'bn');
           const [divisionDistricts, upazilaResponse, thanaResponse] = await Promise.all([
             api.getLocationDistricts({ divisionId: matchedDivision.id, limit: 500 }),
             api.getLocationUpazilas(matchedDistrict.id, { q: upazilaLookupText, limit: 500 }),
@@ -306,7 +330,7 @@ export default function DeedVerification({
           nextLocationId = matchedLocation ? String(matchedLocation.id) : '';
           if (matchedLocation) upazilaLabel = lang === 'bn' && !matchedLocation.name_bn
             ? upazilaText
-            : displayLocationName(matchedLocation, lang);
+            : displayLocationName(matchedLocation, 'bn');
         } else {
           nextDistricts = [];
           nextLocations = [];
@@ -328,7 +352,7 @@ export default function DeedVerification({
         nextLocationId = matchedLocation ? String(matchedLocation.id) : '';
         if (matchedLocation) upazilaLabel = lang === 'bn' && !matchedLocation.name_bn
           ? upazilaText
-          : displayLocationName(matchedLocation, lang);
+          : displayLocationName(matchedLocation, 'bn');
       }
     } catch {
       if (districtText) {
@@ -343,6 +367,8 @@ export default function DeedVerification({
     setLocationType(nextLocationType);
     setLocationId(nextLocationId);
     setMouzaId('');
+    mouzaModeTouched.current = Boolean(extracted.mouza);
+    setMouzaMode(extracted.mouza ? 'manual' : 'catalog');
     setDistricts(nextDistricts);
     setLocations(nextLocations);
     setFormData((previous) => ({
@@ -350,7 +376,7 @@ export default function DeedVerification({
       district: districtLabel ?? previous.district,
       upazila: upazilaLabel ?? previous.upazila,
       mouza: extracted.mouza || previous.mouza,
-      union_ward: extracted.union_ward || previous.union_ward,
+      union_ward: '',
     }));
     setUnionId('');
     setFieldErrors((previous) => ({
@@ -389,11 +415,22 @@ export default function DeedVerification({
     if (formData.reg_year && (!Number.isInteger(Number(formData.reg_year)) || Number(formData.reg_year) < 1950 || Number(formData.reg_year) > new Date().getFullYear())) {
       errors.reg_year = lang === 'bn' ? '১৯৫০ থেকে বর্তমান সাল পর্যন্ত একটি সঠিক সাল লিখুন।' : 'Enter a valid year from 1950 through the current year.';
     }
-    if (!divisionId) errors.division_id = lang === 'bn' ? 'বিভাগ নির্বাচন করুন।' : 'Select a division.';
-    if (!districtId) errors.district_id = lang === 'bn' ? 'তালিকা থেকে জেলা নির্বাচন করুন।' : 'Choose a district from the suggestions.';
-    if (!locationId) errors.location_id = lang === 'bn' ? 'তালিকা থেকে উপজেলা / থানা নির্বাচন করুন।' : 'Choose an Upazila / Thana from the suggestions.';
-    if (mouzaId && !mouzas.some((item) => String(item.id) === String(mouzaId))) {
-      errors.mouza = lang === 'bn' ? 'তালিকার মৌজাটি আবার নির্বাচন করুন বা নাম হাতে লিখুন।' : 'Re-select the listed Mouza or enter its name manually.';
+    if (!divisionId || !divisions.some((item) => String(item.id) === String(divisionId))) {
+      errors.division_id = lang === 'bn' ? 'তালিকা থেকে বিভাগ নির্বাচন করুন।' : 'Select a division from the list.';
+    }
+    const selectedDistrict = districts.find((item) => String(item.id) === String(districtId));
+    if (!selectedDistrict || String(selectedDistrict.division_id) !== String(divisionId)) {
+      errors.district_id = lang === 'bn' ? 'নির্বাচিত বিভাগের তালিকা থেকে জেলা বাছুন।' : 'Choose a district belonging to the selected division.';
+    }
+    const selectedLocation = locations.find((item) => String(item.id) === String(locationId));
+    if (!selectedLocation || String(selectedLocation.district_id) !== String(districtId)) {
+      errors.location_id = lang === 'bn' ? 'নির্বাচিত জেলার তালিকা থেকে উপজেলা / থানা বাছুন।' : 'Choose an Upazila / Thana belonging to the selected district.';
+    }
+    required('mouza', formData.mouza, lang === 'bn' ? 'মৌজার নাম / জে.এল. নম্বর' : 'Mouza name / J.L. number');
+    if (mouzaMode === 'catalog' && !mouzas.some((item) => String(item.id) === String(mouzaId))) {
+      errors.mouza = lang === 'bn'
+        ? 'তালিকা থেকে মৌজা বাছুন, অথবা হাতে লেখার ধরন নির্বাচন করুন।'
+        : 'Select a Mouza from the list or switch to manual entry.';
     }
     required('plot_id', formData.plot_id, lang === 'bn' ? 'দাগ / প্লট নম্বর' : 'Dag / Plot number');
     required('khatian_no', formData.khatian_no, lang === 'bn' ? 'খতিয়ান নম্বর' : 'Khatian number');
@@ -465,7 +502,8 @@ export default function DeedVerification({
         district_id: districtId ? Number(districtId) : undefined,
         location_id: locationId ? Number(locationId) : undefined,
         location_type: locationId ? locationType : undefined,
-        mouza_id: mouzaId ? Number(mouzaId) : undefined,
+        mouza_id: mouzaMode === 'catalog' && mouzaId ? Number(mouzaId) : undefined,
+        mouza_input_mode: mouzaMode,
         union_id: unionId ? Number(unionId) : undefined,
       };
       const result = await api.verifyDeed(payload, user?.id);
@@ -700,10 +738,10 @@ export default function DeedVerification({
         <div className="p-3.5 rounded-lg bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-200 text-xs">
           {lang === 'bn'
             ? (locationCoverage?.dataset?.record_counts
-              ? `সরকারি GeoCodes থেকে ${locationCoverage.dataset.record_counts.divisions || 0} বিভাগ, ${locationCoverage.dataset.record_counts.districts || 0} জেলা, ${locationCoverage.dataset.record_counts.upazilas || 0} উপজেলা ও ${locationCoverage.dataset.record_counts.police_thanas || 0} মহানগর থানা যুক্ত আছে। সরকারি তালিকা থেকে ${locationCoverage.dataset.record_counts.unions || 0}টি ইউনিয়নের নাম যুক্ত আছে; মেলানো উপজেলায় suggestion দেখাবে, Ward হাতে লিখতে হবে। ${locationCoverage.dataset.record_counts.mouzas || 0}টি মৌজার যাচাইকৃত সরকারি তালিকা পাওয়া যায়নি। এটি সরকারি মালিকানা সনদ নয়।`
+              ? `Location data database-এ সফলভাবে load হয়েছে।`
               : 'Location data database-এ load হয়নি। এই অবস্থায় কোনো location option দেখা যাবে না; এটি সরকারি মালিকানা সনদও নয়।')
             : (locationCoverage?.dataset?.record_counts
-              ? `${locationCoverage.dataset.record_counts.divisions || 0} divisions, ${locationCoverage.dataset.record_counts.districts || 0} districts, ${locationCoverage.dataset.record_counts.upazilas || 0} upazilas and ${locationCoverage.dataset.record_counts.police_thanas || 0} metro thanas are loaded from official GeoCodes. ${locationCoverage.dataset.record_counts.unions || 0} Union names from the official list are imported; suggestions appear for linked Upazilas, and Ward names must be typed. No verified national Mouza list has been imported. This is not an official ownership certificate.`
+              ? `Location data has been loaded in the database successfully`
               : 'Location data has not been loaded in the database, so the selectors will be empty. This is not an official ownership certificate.')}
         </div>
       )}
@@ -861,29 +899,59 @@ export default function DeedVerification({
               <label htmlFor="verify-deed-type" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">
                 {lang === 'bn' ? 'দলিলের ধরন' : 'Deed type'} <span className="text-rose-500">*</span>
               </label>
-              <Input id="verify-deed-type" as="select" name="deed_type" value={formData.deed_type} onChange={handleChange} className={`gov-select ${fieldClass('deed_type')}`} aria-invalid={Boolean(fieldErrors.deed_type)} aria-describedby={fieldErrors.deed_type ? 'verify-deed-type-error' : undefined} required>
-                <option value="">{lang === 'bn' ? 'দলিলের ধরন নির্বাচন করুন' : 'Select deed type'}</option>
-                {deedTypes.map((item) => <option key={item.code} value={item.code}>{lang === 'bn' ? item.name_bn : item.name_en}</option>)}
-              </Input>
+              <LocationCombobox
+                id="verify-deed-type"
+                value={displayLocationName(deedTypes.find((item) => item.code === formData.deed_type), lang)}
+                selectedKey={formData.deed_type}
+                items={deedTypes.map((item) => ({ ...item, id: item.code }))}
+                lang={lang}
+                selectionOnly
+                nativeSelect
+                placeholder={lang === 'bn' ? 'দলিলের ধরন নির্বাচন করুন' : 'Select deed type'}
+                emptyText={lang === 'bn' ? 'কোনো দলিলের ধরন মেলেনি।' : 'No deed types match this search.'}
+                className={`gov-input ${fieldClass('deed_type')}`}
+                aria-invalid={Boolean(fieldErrors.deed_type)}
+                aria-describedby={fieldErrors.deed_type ? 'verify-deed-type-error' : undefined}
+                required
+                onTextChange={() => setFormData((previous) => ({ ...previous, deed_type: '' }))}
+                onSelect={(selected) => {
+                  setFormData((previous) => ({ ...previous, deed_type: selected.code }));
+                  setFieldErrors((previous) => ({ ...previous, deed_type: undefined }));
+                }}
+              />
               {fieldErrors.deed_type && <p id="verify-deed-type-error" className="mt-1 text-xs text-rose-600">{fieldErrors.deed_type}</p>}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="verify-division" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{lang === 'bn' ? 'বিভাগ' : 'Division'} <span className="text-rose-500">*</span></label>
-                <Input id="verify-division" as="select" value={divisionId} onChange={(event) => {
-                  const id = event.target.value;
-                  setDivisionId(id);
-                  setDistrictId('');
-                  setLocationId('');
-                  setMouzaId('');
-                  setFormData((previous) => ({ ...previous, district: districtId ? '' : previous.district, upazila: '', mouza: '', union_ward: '' }));
-                  setUnionId('');
-                  setFieldErrors((previous) => ({ ...previous, division_id: undefined, district_id: undefined, location_id: undefined }));
-                }} className={`gov-select ${fieldClass('division_id')}`} aria-invalid={Boolean(fieldErrors.division_id)} required>
-                  <option value="">{divisions.length ? (lang === 'bn' ? 'বিভাগ নির্বাচন করুন' : 'Select division') : (lang === 'bn' ? 'বিভাগের তথ্য পাওয়া যায়নি' : 'No divisions available')}</option>
-                  {divisions.map((item) => <option key={item.id} value={item.id}>{displayLocationName(item, lang)}</option>)}
-                </Input>
+                <LocationCombobox
+                  id="verify-division"
+                  value={displayLocationName(divisions.find((item) => String(item.id) === String(divisionId)), lang)}
+                  selectedKey={divisionId}
+                  items={divisions}
+                  lang={lang}
+                  selectionOnly
+                  nativeSelect
+                  placeholder={divisions.length ? (lang === 'bn' ? 'বিভাগ নির্বাচন করুন' : 'Select division') : (lang === 'bn' ? 'বিভাগের তথ্য পাওয়া যায়নি' : 'No divisions available')}
+                  emptyText={lang === 'bn' ? 'কোনো বিভাগ মেলেনি।' : 'No divisions match this search.'}
+                  className={`gov-input ${fieldClass('division_id')}`}
+                  aria-invalid={Boolean(fieldErrors.division_id)}
+                  aria-describedby={fieldErrors.division_id ? 'verify-division-error' : undefined}
+                  required
+                  onTextChange={() => {
+                    setDivisionId(''); setDistrictId(''); setLocationId(''); setMouzaId('');
+                    mouzaModeTouched.current = false; setMouzaMode('catalog'); setUnionId('');
+                    setFormData((previous) => ({ ...previous, district: '', upazila: '', mouza: '', union_ward: '' }));
+                    setFieldErrors((previous) => ({ ...previous, division_id: undefined, district_id: undefined, location_id: undefined }));
+                  }}
+                  onSelect={(selected) => {
+                    setDivisionId(String(selected.id)); setDistrictId(''); setLocationId(''); setMouzaId('');
+                    mouzaModeTouched.current = false; setMouzaMode('catalog'); setUnionId('');
+                    setFormData((previous) => ({ ...previous, district: '', upazila: '', mouza: '', union_ward: '' }));
+                    setFieldErrors((previous) => ({ ...previous, division_id: undefined, district_id: undefined, location_id: undefined }));
+                  }}
+                />
                 {fieldErrors.division_id && <p className="mt-1 text-xs text-rose-600">{fieldErrors.division_id}</p>}
               </div>
               <div>
@@ -891,30 +959,36 @@ export default function DeedVerification({
                 <LocationCombobox
                   id="verify-district"
                   value={formData.district}
+                  selectedKey={districtId}
                   items={districts}
-                  lang={lang}
+                  lang="bn"
                   disabled={!divisionId}
-                  placeholder={!divisionId ? (lang === 'bn' ? 'আগে বিভাগ নির্বাচন করুন' : 'Select a division first') : (lang === 'bn' ? 'জেলা লিখুন বা বাংলা / ইংরেজিতে খুঁজুন' : 'Search in English or Bengali')}
+                  selectionOnly
+                  nativeSelect
+                  placeholder={!divisionId ? (lang === 'bn' ? 'আগে বিভাগ নির্বাচন করুন' : 'Select a division first') : (lang === 'bn' ? 'তালিকা থেকে জেলা বাছুন' : 'Choose a district from the list')}
                   emptyText={lang === 'bn' ? 'এই বিভাগে কোনো জেলা মেলেনি।' : 'No districts match this search.'}
                   className={`gov-input ${fieldClass('district_id')}`}
                   aria-invalid={Boolean(fieldErrors.district_id)}
                   aria-describedby={fieldErrors.district_id ? 'verify-district-error' : undefined}
                   required
-                  onTextChange={(value) => {
-                    const selected = findLocationSuggestion(districts, value, lang);
-                    setDistrictId(selected ? String(selected.id) : '');
+                  onTextChange={() => {
+                    setDistrictId('');
                     setLocationId('');
                     setMouzaId('');
+                    mouzaModeTouched.current = false;
+                    setMouzaMode('catalog');
                     setUnionId('');
-                    setFormData((previous) => ({ ...previous, district: selected ? displayLocationName(selected, lang) : value, upazila: '', mouza: '', union_ward: '' }));
+                    setFormData((previous) => ({ ...previous, district: '', upazila: '', mouza: '', union_ward: '' }));
                     setFieldErrors((previous) => ({ ...previous, district_id: undefined, location_id: undefined, mouza: undefined }));
                   }}
                   onSelect={(selected) => {
                     setDistrictId(String(selected.id));
                     setLocationId('');
                     setMouzaId('');
+                    mouzaModeTouched.current = false;
+                    setMouzaMode('catalog');
                     setUnionId('');
-                    setFormData((previous) => ({ ...previous, district: displayLocationName(selected, lang), upazila: '', mouza: '', union_ward: '' }));
+                    setFormData((previous) => ({ ...previous, district: displayLocationName(selected, 'bn'), upazila: '', mouza: '', union_ward: '' }));
                     setFieldErrors((previous) => ({ ...previous, district_id: undefined, location_id: undefined, mouza: undefined }));
                   }}
                 />
@@ -922,45 +996,66 @@ export default function DeedVerification({
               </div>
               <div>
                 <label htmlFor="verify-location-type" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{lang === 'bn' ? 'এলাকার ধরন' : 'Location type'}</label>
-                <Input id="verify-location-type" as="select" value={locationType} onChange={(event) => {
-                  setLocationType(event.target.value);
-                  setLocationId('');
-                  setMouzaId('');
-                  setFormData((previous) => ({ ...previous, upazila: '', mouza: '', union_ward: '' }));
-                  setUnionId('');
-                  setFieldErrors((previous) => ({ ...previous, location_id: undefined, mouza: undefined }));
-                }} className="gov-select">
-                  <option value="upazila">{lang === 'bn' ? 'উপজেলা' : 'Upazila'}</option>
-                  <option value="police_thana">{lang === 'bn' ? 'মেট্রোপলিটন থানা' : 'Police Thana'}</option>
-                </Input>
+                <LocationCombobox
+                  id="verify-location-type"
+                  selectedKey={locationType}
+                  value={displayLocationName([
+                    { id: 'upazila', code: 'upazila', name_bn: 'উপজেলা', name_en: 'Upazila' },
+                    { id: 'police_thana', code: 'police_thana', name_bn: 'মেট্রোপলিটন থানা', name_en: 'Police Thana' },
+                  ].find((item) => item.id === locationType), lang)}
+                  items={[
+                    { id: 'upazila', code: 'upazila', name_bn: 'উপজেলা', name_en: 'Upazila' },
+                    { id: 'police_thana', code: 'police_thana', name_bn: 'মেট্রোপলিটন থানা', name_en: 'Police Thana' },
+                  ]}
+                  lang={lang}
+                  selectionOnly
+                  nativeSelect
+                  placeholder={lang === 'bn' ? 'এলাকার ধরন নির্বাচন করুন' : 'Select location type'}
+                  emptyText={lang === 'bn' ? 'কোনো এলাকার ধরন মেলেনি।' : 'No location types match this search.'}
+                  className="gov-input"
+                  aria-label={lang === 'bn' ? 'এলাকার ধরন' : 'Location type'}
+                  onTextChange={() => {}}
+                  onSelect={(selected) => {
+                    setLocationType(selected.id); setLocationId(''); setMouzaId('');
+                    mouzaModeTouched.current = false; setMouzaMode('catalog'); setUnionId('');
+                    setFormData((previous) => ({ ...previous, upazila: '', mouza: '', union_ward: '' }));
+                    setFieldErrors((previous) => ({ ...previous, location_id: undefined, mouza: undefined }));
+                  }}
+                />
               </div>
               <div>
                 <label htmlFor="verify-upazila" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mb-1">{locationType === 'upazila' ? t('upazila') : (lang === 'bn' ? 'থানা' : 'Police Thana')} <span className="text-rose-500">*</span></label>
                 <LocationCombobox
                   id="verify-upazila"
                   value={formData.upazila}
+                  selectedKey={locationId}
                   items={locations}
-                  lang={lang}
+                  lang="bn"
                   disabled={!districtId}
-                  placeholder={lang === 'bn' ? 'বাংলা / ইংরেজিতে লিখুন বা খুঁজুন' : 'Search in English or Bengali'}
+                  selectionOnly
+                  nativeSelect
+                  placeholder={lang === 'bn' ? 'তালিকা থেকে বাছুন' : 'Choose from the list'}
                   emptyText={lang === 'bn' ? 'এই জেলায় কোনো নাম মেলেনি।' : 'No locations match this search.'}
                   className={`gov-input ${fieldClass('location_id')}`}
                   aria-invalid={Boolean(fieldErrors.location_id)}
                   aria-describedby={fieldErrors.location_id ? 'verify-upazila-error' : undefined}
                   required
-                  onTextChange={(value) => {
-                    const selected = findLocationSuggestion(locations, value, lang);
-                    setLocationId(selected ? String(selected.id) : '');
+                  onTextChange={() => {
+                    setLocationId('');
                     setMouzaId('');
+                    mouzaModeTouched.current = false;
+                    setMouzaMode('catalog');
                     setUnionId('');
-                    setFormData((previous) => ({ ...previous, upazila: selected ? displayLocationName(selected, lang) : value, mouza: '', union_ward: '' }));
+                    setFormData((previous) => ({ ...previous, upazila: '', mouza: '', union_ward: '' }));
                     setFieldErrors((previous) => ({ ...previous, location_id: undefined, mouza: undefined }));
                   }}
                   onSelect={(selected) => {
                     setLocationId(String(selected.id));
                     setMouzaId('');
+                    mouzaModeTouched.current = false;
+                    setMouzaMode('catalog');
                     setUnionId('');
-                    setFormData((previous) => ({ ...previous, upazila: displayLocationName(selected, lang), mouza: '', union_ward: '' }));
+                    setFormData((previous) => ({ ...previous, upazila: displayLocationName(selected, 'bn'), mouza: '', union_ward: '' }));
                     setFieldErrors((previous) => ({ ...previous, location_id: undefined, mouza: undefined }));
                   }}
                 />
@@ -968,38 +1063,90 @@ export default function DeedVerification({
               </div>
               <div>
                 <label htmlFor="verify-mouza-manual" className="block text-xs font-semibold text-gray-700 dark:text-gray-300 mt-3 mb-1">
-                  {lang === 'bn' ? 'মৌজার নাম / জে.এল. নম্বর (ঐচ্ছিক)' : 'Mouza name / J.L. number (Optional)'}
+                  {lang === 'bn' ? 'মৌজার নাম / জে.এল. নম্বর' : 'Mouza name / J.L. number'} <span className="text-rose-500">*</span>
                 </label>
-                <LocationCombobox
-                  id="verify-mouza-manual"
-                  items={mouzas}
-                  lang={lang}
-                  value={formData.mouza}
-                  disabled={!locationId}
-                  placeholder={lang === 'bn' ? 'তালিকা থেকে বাছুন বা নাম / জে.এল. নম্বর লিখুন' : 'Choose from the list or enter a name / J.L. number'}
-                  emptyText={lang === 'bn' ? 'তালিকায় নেই—দলিল অনুযায়ী মৌজার নাম বা জে.এল. নম্বর লিখুন।' : 'Not listed—enter the Mouza name or J.L. number from the deed.'}
-                  className={`gov-input ${fieldClass('mouza')}`}
-                  aria-invalid={Boolean(fieldErrors.mouza)}
-                  aria-describedby={fieldErrors.mouza ? 'verify-mouza-error' : undefined}
-                  onTextChange={(value) => {
-                    const selected = findLocationSuggestion(mouzas, value, lang);
-                    setMouzaId(selected ? String(selected.id) : '');
-                    setFormData((previous) => ({ ...previous, mouza: value }));
-                    setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
-                  }}
-                  onSelect={(selected) => {
-                    setMouzaId(String(selected.id));
-                    setFormData((previous) => ({ ...previous, mouza: displayLocationName(selected, lang) }));
-                    setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
-                  }}
-                />
+                <div className="mb-2 grid grid-cols-2 gap-1 rounded-xl border border-slate-200 bg-slate-50 p-1 dark:border-slate-700 dark:bg-slate-900/50" role="group" aria-label={lang === 'bn' ? 'মৌজা দেওয়ার পদ্ধতি' : 'Mouza entry method'}>
+                  <button
+                    type="button"
+                    disabled={!mouzas.length}
+                    aria-pressed={mouzaMode === 'catalog'}
+                    onClick={() => {
+                      if (!mouzas.length) return;
+                      mouzaModeTouched.current = true;
+                      const selected = findLocationSuggestion(mouzas, formData.mouza, lang);
+                      setMouzaMode('catalog');
+                      setMouzaId(selected ? String(selected.id) : '');
+                      setFormData((previous) => ({ ...previous, mouza: selected ? displayLocationName(selected, 'bn') : '' }));
+                      setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
+                    }}
+                    className={`rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-45 ${mouzaMode === 'catalog' ? 'bg-white text-emerald-800 shadow-sm dark:bg-slate-800 dark:text-emerald-300' : 'text-slate-600 hover:bg-white/70 dark:text-slate-300 dark:hover:bg-slate-800/60'}`}
+                  >
+                    {lang === 'bn' ? 'তালিকা থেকে বাছুন' : 'Select from list'}
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={mouzaMode === 'manual'}
+                    onClick={() => {
+                      mouzaModeTouched.current = true;
+                      setMouzaMode('manual');
+                      setMouzaId('');
+                      setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
+                    }}
+                    className={`rounded-lg px-2.5 py-2 text-xs font-semibold transition-colors ${mouzaMode === 'manual' ? 'bg-white text-emerald-800 shadow-sm dark:bg-slate-800 dark:text-emerald-300' : 'text-slate-600 hover:bg-white/70 dark:text-slate-300 dark:hover:bg-slate-800/60'}`}
+                  >
+                    {lang === 'bn' ? 'নাম হাতে লিখুন' : 'Enter manually'}
+                  </button>
+                </div>
+                {mouzaMode === 'catalog' ? (
+                  <LocationCombobox
+                    id="verify-mouza-manual"
+                    items={mouzas}
+                    lang="bn"
+                    value={formData.mouza}
+                    selectedKey={mouzaId}
+                    selectionOnly
+                    nativeSelect
+                    disabled={!locationId || !mouzas.length}
+                    placeholder={mouzas.length
+                      ? (lang === 'bn' ? 'তালিকা থেকে মৌজা বাছুন' : 'Choose a Mouza from the list')
+                      : (lang === 'bn' ? 'যাচাইকৃত মৌজার তালিকা নেই' : 'No verified Mouza list available')}
+                    emptyText={lang === 'bn' ? 'কোনো মৌজা মেলেনি—হাতে লেখার পদ্ধতি বেছে নিন।' : 'No Mouza found—switch to manual entry.'}
+                    className={`gov-input ${fieldClass('mouza')}`}
+                    aria-invalid={Boolean(fieldErrors.mouza)}
+                    aria-describedby={fieldErrors.mouza ? 'verify-mouza-error' : undefined}
+                    onTextChange={() => {
+                      setMouzaId('');
+                      setFormData((previous) => ({ ...previous, mouza: '' }));
+                      setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
+                    }}
+                    onSelect={(selected) => {
+                      setMouzaId(String(selected.id));
+                      setFormData((previous) => ({ ...previous, mouza: displayLocationName(selected, 'bn') }));
+                      setFieldErrors((previous) => ({ ...previous, mouza: undefined }));
+                    }}
+                  />
+                ) : (
+                  <Input
+                    id="verify-mouza-manual"
+                    type="text"
+                    name="mouza"
+                    value={formData.mouza}
+                    disabled={!locationId}
+                    onChange={handleChange}
+                    placeholder={lang === 'bn' ? 'দলিল অনুযায়ী মৌজার নাম বা জে.এল. নম্বর লিখুন' : 'Enter the Mouza name or J.L. number from the deed'}
+                    className={`gov-input ${fieldClass('mouza')}`}
+                    aria-invalid={Boolean(fieldErrors.mouza)}
+                    aria-describedby={fieldErrors.mouza ? 'verify-mouza-error' : undefined}
+                    required
+                  />
+                )}
                 {fieldErrors.mouza && <p id="verify-mouza-error" className="mt-1 text-xs text-rose-600">{fieldErrors.mouza}</p>}
                 <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
-                  {mouzaId
+                  {mouzaMode === 'catalog' && mouzaId
                     ? (lang === 'bn' ? 'তালিকার মৌজা নির্বাচন করা হয়েছে; এটি মালিকানার সরকারি যাচাই নয়।' : 'A listed Mouza is selected; this does not verify legal ownership.')
                     : (lang === 'bn'
-                      ? <>তালিকায় না থাকলে দলিল থেকে হাতে লিখুন; সরকারি DLRS অনুসন্ধানও দেখুন। <a className="text-emerald-700 underline" href="https://settlement.gov.bd/Map/MapSearch" target="_blank" rel="noreferrer">DLRS মৌজা অনুসন্ধান</a></>
-                      : <>If it is not listed, enter it from the deed; you can also check the <a className="text-emerald-700 underline" href="https://settlement.gov.bd/Map/MapSearch" target="_blank" rel="noreferrer">official DLRS Mouza search</a>.</>)}
+                      ? <>হাতে দেওয়া মৌজার নাম সরকারি তালিকায় যাচাই করা হয়নি। দলিল দেখে লিখুন; <a className="text-emerald-700 underline" href="https://settlement.gov.bd/Map/MapSearch" target="_blank" rel="noreferrer">DLRS মৌজা অনুসন্ধান</a> দেখুন।</>
+                      : <>A manually entered Mouza is not verified against an official catalog. Check the deed and the <a className="text-emerald-700 underline" href="https://settlement.gov.bd/Map/MapSearch" target="_blank" rel="noreferrer">official DLRS Mouza search</a>.</>)}
                 </p>
               </div>
               <div className="sm:col-span-2">
@@ -1009,26 +1156,30 @@ export default function DeedVerification({
                 <LocationCombobox
                   id="verify-union-ward"
                   value={formData.union_ward}
+                  selectedKey={unionId}
                   items={unions}
-                  lang={lang}
+                  lang="bn"
+                  selectionOnly
+                  nativeSelect
                   disabled={locationType !== 'upazila' || !locationId}
-                  placeholder={lang === 'bn' ? 'ইউনিয়ন বাংলা / ইংরেজিতে খুঁজুন, অথবা ওয়ার্ড লিখুন' : 'Search Union in English or Bengali, or enter Ward'}
-                  emptyText={lang === 'bn' ? 'ইউনিয়ন মেলেনি—ওয়ার্ড বা নাম হাতে লিখতে পারেন।' : 'No Union matches—enter a Ward or name manually.'}
+                  placeholder={locationType === 'upazila'
+                    ? (lang === 'bn' ? 'তালিকা থেকে ইউনিয়ন বাছুন' : 'Choose a Union from the list')
+                    : (lang === 'bn' ? 'এই থানার ওয়ার্ড তালিকা পাওয়া যায়নি' : 'No verified Ward list for this Thana')}
+                  emptyText={lang === 'bn' ? 'এই উপজেলার জন্য সরকারি ইউনিয়ন তালিকা পাওয়া যায়নি।' : 'No official Union list is available for this Upazila.'}
                   className="gov-input"
-                  onTextChange={(value) => {
-                    const selected = findLocationSuggestion(unions, value, lang);
-                    setUnionId(selected ? String(selected.id) : '');
-                    setFormData((previous) => ({ ...previous, union_ward: value }));
+                  onTextChange={() => {
+                    setUnionId('');
+                    setFormData((previous) => ({ ...previous, union_ward: '' }));
                   }}
                   onSelect={(selected) => {
                     setUnionId(String(selected.id));
-                    setFormData((previous) => ({ ...previous, union_ward: displayLocationName(selected, lang) }));
+                    setFormData((previous) => ({ ...previous, union_ward: displayLocationName(selected, 'bn') }));
                   }}
                 />
                 <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
                   {locationType === 'upazila' && unions.length
-                    ? (lang === 'bn' ? 'সরকারি তালিকার ইউনিয়ন নাম suggestion-এ আছে। ওয়ার্ড বা তালিকায় না থাকা নাম হাতে লিখুন।' : 'Official Union names appear in suggestions. Type a Ward or any name missing from the list.')
-                    : (lang === 'bn' ? 'সরকারি ওয়ার্ড তালিকা যুক্ত নেই; ইউনিয়ন / ওয়ার্ডের নাম বা নম্বর হাতে লিখুন।' : 'An official Ward list is not available here; type the Union / Ward name or number.')}
+                    ? (lang === 'bn' ? 'শুধু তালিকাভুক্ত সরকারি ইউনিয়ন নির্বাচন করা যাবে; এটি ঐচ্ছিক।' : 'Only listed official Unions can be selected; this field is optional.')
+                    : (lang === 'bn' ? 'সরকারি ওয়ার্ড তালিকা বা এই এলাকার ইউনিয়ন তালিকা নেই; তাই এখানে কোনো নাম হাতে যোগ করা যাবে না।' : 'No official Ward list, or no Union list for this area, is available; names cannot be added manually here.')}
                 </p>
               </div>
             </div>

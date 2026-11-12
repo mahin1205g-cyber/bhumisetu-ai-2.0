@@ -24,6 +24,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
   const [quickTrackResult, setQuickTrackResult] = useState(null);
   const [trackingLoading, setTrackingLoading] = useState(false);
   const [trackError, setTrackError] = useState('');
+  const [applicationHistory, setApplicationHistory] = useState({ items: [], summary: { total: 0, pending: 0, under_review: 0, completed: 0, closed: 0 } });
 
   // Dashboard Fast Binary Search State
   const [dashboardQuery, setDashboardQuery] = useState('');
@@ -50,6 +51,14 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
     fetchStats();
   }, []);
 
+  useEffect(() => {
+    let active = true;
+    api.getApplicationHistory('page=1&page_size=3')
+      .then((data) => { if (active) setApplicationHistory(data); })
+      .catch((err) => console.warn('Application history summary is unavailable:', err.code || err.message));
+    return () => { active = false; };
+  }, [user?.id]);
+
   const handleQuickTrack = async (e) => {
     e.preventDefault();
     if (!trackInput.trim()) return;
@@ -59,7 +68,7 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
     setQuickTrackResult(null);
 
     try {
-      const data = await api.trackMutation(trackInput.trim());
+      const data = await api.trackMyApplication(trackInput.trim());
       setQuickTrackResult(data);
     } catch (err) {
       setTrackError(err.message || 'আবেদনটি খুঁজে পাওয়া যায়নি');
@@ -170,6 +179,10 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
           </Button>
         </div>
       )}
+
+      <button type="button" onClick={() => setActiveTab('deed-digitization')} className="group w-full rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-emerald-400 hover:shadow-md dark:border-emerald-900/60 dark:from-emerald-950/40 dark:to-slate-900 sm:p-5">
+        <span className="flex flex-wrap items-center justify-between gap-3"><span><strong className="block text-base text-slate-900 dark:text-white">{lang === 'bn' ? 'দলিল ডিজিটাইজেশন আবেদন ও ট্র্যাকিং' : 'Deed digitization applications & tracking'}</strong><span className="mt-1 block text-xs text-slate-600 dark:text-slate-300">{lang === 'bn' ? 'OCR, আবেদন জমা, কর্মকর্তার পর্যালোচনা এবং অনুমোদিত ডিজিটাল কপি' : 'OCR, application submission, officer review, and approved digital copies'}</span></span><span className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-semibold text-white">{lang === 'bn' ? 'শুরু করুন' : 'Open service'}</span></span>
+      </button>
 
       {/* 1. Welcoming Hero Banner & Personalized Greeting */}
       <div className="gov-card p-6 bg-gradient-to-r from-[#065F46] via-[#047857] to-[#0b462d] text-white border border-emerald-500/20 shadow-lg relative overflow-hidden">
@@ -586,28 +599,48 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
         </div>
       </div>
 
-      {/* 5. In-Dashboard Instant Application Tracker Widget */}
+      <section className="gov-card space-y-4 p-5">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 className="flex items-center gap-2 text-base font-bold text-slate-900 dark:text-white"><GitBranchPlus className="h-5 w-5 text-emerald-700"/>{lang === 'bn' ? 'আবেদন ইতিহাস ও ট্র্যাকিং' : 'Application History & Tracking'}</h2>
+            <p className="mt-1 text-xs text-slate-500">{lang === 'bn' ? 'আপনার নামজারি ও দলিল ডিজিটাইজেশন আবেদনের সারাংশ।' : 'A live summary of your Mutation and Deed Digitization applications.'}</p>
+          </div>
+          <Button type="button" onClick={() => setActiveTab('mutation-track')} className="gov-btn-secondary inline-flex items-center gap-2 px-3 py-2 text-xs">{lang === 'bn' ? 'সব আবেদন দেখুন' : 'View all applications'}<ArrowRight className="h-3.5 w-3.5"/></Button>
+        </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+          {[
+            [lang === 'bn' ? 'মোট' : 'Total', applicationHistory.summary?.total || 0],
+            [lang === 'bn' ? 'অপেক্ষমাণ' : 'Pending', applicationHistory.summary?.pending || 0],
+            [lang === 'bn' ? 'পর্যালোচনায়' : 'Under review', applicationHistory.summary?.under_review || 0],
+            [lang === 'bn' ? 'সম্পন্ন' : 'Completed', applicationHistory.summary?.completed || 0],
+            [lang === 'bn' ? 'বন্ধ' : 'Closed', applicationHistory.summary?.closed || 0],
+          ].map(([label, value]) => <div key={label} className="rounded-lg bg-slate-50 p-3 dark:bg-slate-800"><span className="block text-[11px] text-slate-500">{label}</span><strong className="text-lg">{value}</strong></div>)}
+        </div>
+        {applicationHistory.items?.length > 0 && <ul className="divide-y divide-slate-100 dark:divide-slate-800">{applicationHistory.items.map((item) => <li key={`${item.application_type}:${item.application_id}`}><button type="button" onClick={() => { if (setSelectedTracking) setSelectedTracking(item.tracking_id); setActiveTab('mutation-track'); }} className="flex w-full flex-wrap items-center justify-between gap-2 py-3 text-left hover:text-emerald-800"><span><strong className="font-mono text-xs">{item.tracking_id}</strong><span className="ml-2 text-xs text-slate-500">{item.application_type === 'mutation' ? (lang === 'bn' ? 'নামজারি' : 'Mutation') : (lang === 'bn' ? 'দলিল ডিজিটাইজেশন' : 'Deed Digitization')}</span></span><span className="text-[11px] text-slate-500">{item.updated_at ? new Date(item.updated_at).toLocaleDateString(lang === 'bn' ? 'bn-BD' : 'en-US') : '—'}</span></button></li>)}</ul>}
+      </section>
+
+      {/* 5. In-Dashboard Universal Application Tracker Widget */}
       <div className="gov-card p-5 bg-gradient-to-br from-emerald-50/30 to-emerald-50/70 dark:from-[#131d27] dark:to-[#0f241a] border border-[#E2E8F0] dark:border-emerald-900/60">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-gray-200/60 dark:border-gray-800">
           <div>
             <h3 className="text-sm font-bold text-gray-900 dark:text-white flex items-center gap-2">
               <Clock className="w-4 h-4 text-[#047857] dark:text-emerald-400" />
-              <span>{lang === 'bn' ? 'তাৎক্ষণিক নামজারি আবেদন ট্র্যাকার' : 'Instant E-Namjari Status Checker'}</span>
+              <span>{lang === 'bn' ? 'আবেদন ইতিহাস ও Tracking ID' : 'Application History & Tracking'}</span>
             </h3>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
               {lang === 'bn'
-                ? 'আপনার ট্র্যাকিং নম্বর প্রবেশ করিয়ে বর্তমান পর্যায় ও এসিল্যান্ডের সিদ্ধান্ত জানুন।'
-                : 'Enter your tracking reference number to inspect real-time application workflow.'}
+                ? 'নামজারি বা দলিল ডিজিটাইজেশনের Tracking ID দিয়ে নিজের আবেদনের অবস্থা দেখুন।'
+                : 'Find your own Mutation or Deed Digitization application by its Tracking ID.'}
             </p>
           </div>
 
           <form onSubmit={handleQuickTrack} className="flex items-center gap-2 w-full md:w-auto">
             <Input
               type="text"
-              aria-label={lang === 'bn' ? 'নামজারি ট্র্যাকিং নম্বর' : 'Mutation tracking number'}
+              aria-label={lang === 'bn' ? 'নিজের আবেদনের Tracking ID' : 'Your application Tracking ID'}
               value={trackInput}
               onChange={(e) => setTrackInput(e.target.value)}
-              placeholder="e.g. MUT-2026-DHK-4821"
+              placeholder="MUT-... / BHM-DIG-..."
               className="gov-input py-1.5 px-3 text-xs w-full sm:w-64 font-mono uppercase"
             />
             <Button
@@ -633,42 +666,29 @@ export default function Dashboard({ setActiveTab, setSelectedRef, setSelectedTra
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <span className="font-mono font-bold text-xs text-gray-900 dark:text-white">
-                  {quickTrackResult.tracking_no}
+                  {quickTrackResult.tracking_id}
                 </span>
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300">
-                  {quickTrackResult.status_bn || quickTrackResult.status}
+                  {quickTrackResult.status === 'under_review' ? (lang === 'bn' ? 'পর্যালোচনাধীন' : 'Under Review') : quickTrackResult.status === 'completed' ? (lang === 'bn' ? 'সম্পন্ন' : 'Completed') : quickTrackResult.status}
                 </span>
               </div>
 
               <Button
                 onClick={() => {
-                  if (setSelectedTracking) setSelectedTracking(quickTrackResult.tracking_no);
+                  if (setSelectedTracking) setSelectedTracking(quickTrackResult.tracking_id);
                   setActiveTab('mutation-track');
                 }}
                 className="text-xs text-[#047857] dark:text-emerald-400 hover:underline font-semibold flex items-center gap-1"
               >
-                <span>{lang === 'bn' ? 'সম্পূর্ণ ট্র্যাকিং পেজ দেখুন' : 'View Full Details'}</span>
+              <span>{lang === 'bn' ? 'আবেদন ইতিহাসে বিস্তারিত দেখুন' : 'View in application history'}</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs pt-1">
-              <div>
-                <span className="text-gray-400 block text-[10px]">{lang === 'bn' ? 'আবেদনকারী' : 'Applicant'}</span>
-                <span className="font-semibold">{quickTrackResult.applicant_name}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 block text-[10px]">{lang === 'bn' ? 'দাগ ও খতিয়ান' : 'Plot & Khatian'}</span>
-                <span className="font-semibold">{quickTrackResult.plot_no} ({quickTrackResult.khatian_no})</span>
-              </div>
-              <div>
-                <span className="text-gray-400 block text-[10px]">{lang === 'bn' ? 'মৌজা ও জেলা' : 'Mouza & Dist'}</span>
-                <span className="font-semibold">{quickTrackResult.mouza}, {quickTrackResult.district}</span>
-              </div>
-              <div>
-                <span className="text-gray-400 block text-[10px]">{lang === 'bn' ? 'জমির পরিমাণ' : 'Area'}</span>
-                <span className="font-semibold">{quickTrackResult.land_area} শতক</span>
-              </div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-1 text-xs">
+              <div><span className="block text-[10px] text-gray-400">{lang === 'bn' ? 'আবেদনের ধরন' : 'Application type'}</span><span className="font-semibold">{quickTrackResult.application_type === 'mutation' ? (lang === 'bn' ? 'নামজারি' : 'Mutation') : (lang === 'bn' ? 'দলিল ডিজিটাইজেশন' : 'Deed Digitization')}</span></div>
+              <div><span className="block text-[10px] text-gray-400">{lang === 'bn' ? 'রেফারেন্স' : 'Reference'}</span><span className="font-semibold">{quickTrackResult.details?.deed_no || quickTrackResult.details?.deed_data?.deed_no || '—'}</span></div>
+              <div><span className="block text-[10px] text-gray-400">{lang === 'bn' ? 'সর্বশেষ হালনাগাদ' : 'Last updated'}</span><span className="font-semibold">{quickTrackResult.updated_at ? new Date(quickTrackResult.updated_at).toLocaleDateString(lang === 'bn' ? 'bn-BD' : 'en-US') : '—'}</span></div>
             </div>
           </div>
         )}

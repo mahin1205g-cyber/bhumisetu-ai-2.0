@@ -160,9 +160,10 @@ def test_deed_number_lookup_is_parameterized(monkeypatch):
     assert len(rows) == 1
     exact_sql, exact_params = calls[0]
     normalized_sql, normalized_params = calls[1]
-    assert "WHERE deed_no = %s" in exact_sql
+    assert "COALESCE(is_verified,1)<>0 AND deed_no = %s" in exact_sql
     assert exact_params == ("d-১০০১",)
     assert "IS DISTINCT FROM %s" in normalized_sql
+    assert "COALESCE(is_verified,1)<>0" in normalized_sql
     assert normalized_params == ("D-1001", "d-১০০১")
 
 
@@ -219,6 +220,7 @@ def test_advanced_search_is_parameterized_and_paginated(monkeypatch):
     assert len(calls) == 2
 
     select_sql, select_params = calls[-1]
+    assert "COALESCE(is_verified,1)<>0" in select_sql
     assert "district" not in select_sql.split("WHERE")[0]
     assert "ঢাকা" not in select_sql and "রহিম" not in select_sql
     assert select_params == ("D-1001", 2025, "%ঢাকা%", "%রহিম%", ds.MAX_PAGE_SIZE, ds.MAX_PAGE_SIZE)

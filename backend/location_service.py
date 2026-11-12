@@ -283,7 +283,11 @@ def resolve_location_reference(connection, record: dict) -> dict:
 
     location_id = location.get("id") if location else explicit_location_id
     mouza = None
-    if location_id is not None and location_type in {"upazila", "police_thana"}:
+    if (
+        location_id is not None
+        and location_type in {"upazila", "police_thana"}
+        and record.get("mouza_input_mode") != "manual"
+    ):
         parent_column = "upazila_id" if location_type == "upazila" else "police_thana_id"
         mouza = _resolve_location_row(
             connection, "mouzas", record.get("mouza"), record.get("mouza_id"),

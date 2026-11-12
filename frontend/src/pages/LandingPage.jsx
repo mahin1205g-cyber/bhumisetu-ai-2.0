@@ -14,6 +14,16 @@ export default function LandingPage({ setActiveTab }) {
 
   const features = [
     {
+      id: 'deed-digitization',
+      badge: lang === 'bn' ? 'আবেদন ও অনুমোদন' : 'Application & Approval',
+      title: lang === 'bn' ? 'দলিল ডিজিটাইজেশন ও ট্র্যাকিং' : 'Deed Digitization & Tracking',
+      desc: lang === 'bn'
+        ? 'বিদ্যমান OCR দিয়ে দলিলের তথ্য তুলুন, আবেদন জমা দিন এবং কর্মকর্তা পর্যালোচনার অবস্থা ট্র্যাক করুন। অনুমোদনের পর ডিজিটাল কপি, শেয়ার লিংক ও QR যাচাই পাওয়া যাবে।'
+        : 'Use the existing OCR to prepare an application, track officer review, and receive an approved digital copy with share and QR verification.',
+      icon: FileText,
+      cta: lang === 'bn' ? 'আবেদন শুরু করুন' : 'Start an application'
+    },
+    {
       id: 'deed-verify',
       badge: lang === 'bn' ? 'দলিল ও বালাম যাচাই' : 'Deed Verification',
       title: lang === 'bn' ? 'ডিজিটাল দলিল ও মালিকানা যাচাই' : 'Deed & Ownership Verification',
@@ -222,6 +232,15 @@ export default function LandingPage({ setActiveTab }) {
                     <span>{f.cta}</span>
                     <ChevronRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
                   </Button>
+                  {(f.id === 'deed-digitization' || f.id === 'mutation') && (
+                    <Button
+                      onClick={() => setActiveTab('mutation-track')}
+                      className="mt-2 w-full justify-center border border-[#D1FAE5] bg-[#F0FDF4]/60 py-2 text-xs text-[#047857] hover:bg-[#D1FAE5] dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-300"
+                    >
+                      <span>{lang === 'bn' ? 'আবেদন ট্র্যাক করুন' : 'Track an application'}</span>
+                      <ArrowRight className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
                 </div>
               </div>
             );

@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 
 export default function OfficerReview({ setActiveTab, setSelectedTracking, navigateBack }) {
-  const { lang, t, user } = useApp();
+  const { lang, t } = useApp();
   const [applications, setApplications] = useState([]);
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(true);
@@ -22,14 +22,17 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
   const [remarks, setRemarks] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [actionMsg, setActionMsg] = useState('');
+  const [listError, setListError] = useState('');
 
   const fetchApps = async () => {
     setLoading(true);
+    setListError('');
     try {
       const data = await api.getAllMutations(filter);
       setApplications(data);
     } catch (err) {
-      console.error(err);
+      setApplications([]);
+      setListError(err.message || (lang === 'bn' ? 'আবেদন তালিকা লোড হয়নি।' : 'Could not load applications.'));
     } finally {
       setLoading(false);
     }
@@ -79,9 +82,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
       await api.performMutationAction({
         tracking_no: selectedApp.tracking_no,
         new_status: newStatus,
-        changed_by_name: user?.name || 'বেগম ফরিদা পারভীন, সহকারী কমিশনার (ভূমি)',
-        changed_by_role: 'officer',
-        remarks: remarks || (actionModal.type === 'approve' ? 'কাগজপত্র ও সার্ভেয়ার প্রতিবেদন সঠিক পাওয়ায় ডেমো সিস্টেমে নামজারি মঞ্জুর করা হলো।' : ''),
+        remarks: remarks.trim(),
         rejection_reason: actionModal.type === 'reject' ? remarks.trim() : '',
         correction_details: actionModal.type === 'info' ? remarks.trim() : ''
       });
@@ -112,7 +113,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
         title={lang === 'bn' ? 'ই-নামজারি আবেদন পর্যালোচনা ও সিদ্ধান্ত' : 'Officer Mutation Review & Approval Queue'}
         subtitle={
           lang === 'bn'
-            ? 'সহকারী কমিশনার (ভূমি) / এসি ল্যান্ডের ডিজিটাল নথি পর্যালোচনা, সংশোধন তলব ও ডেমো মঞ্জুরি।'
+            ? 'দাখিলকৃত নামজারি আবেদন পর্যালোচনা, সংশোধন তলব ও সিদ্ধান্ত নথিভুক্ত করুন।'
             : 'Review submitted mutation files, issue correction notices, approve or reject applications.'
         }
         icon={ClipboardCheck}
@@ -141,6 +142,7 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
           <span>{actionMsg}</span>
         </div>
       )}
+      {listError && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{listError}</div>}
 
       {/* Filter Bar */}
       <div className="gov-card p-4 flex flex-wrap items-center justify-between gap-3 text-xs">
@@ -423,10 +425,10 @@ export default function OfficerReview({ setActiveTab, setSelectedTracking, navig
                 rows="3"
                 placeholder={
                   actionModal.type === 'approve'
-                    ? (lang === 'bn' ? 'কাগজপত্র ও সার্ভেয়ার প্রতিবেদন সঠিক পাওয়ায় ডেমো সিস্টেমে নামজারি মঞ্জুর করা হলো।' : 'Approved after verifying survey report and chain.')
+                    ? (lang === 'bn' ? 'প্রয়োজনে পর্যালোচনার সংক্ষিপ্ত নোট লিখুন।' : 'Optional: add a concise review note.')
                     : actionModal.type === 'reject'
-                    ? (lang === 'bn' ? 'মালিকানার ধারাবাহিকতা অসম্পূর্ণ বা জমি নিয়ে দেওয়ানি আদালতের নিষেধাজ্ঞা থাকায় খারিজ।' : 'Rejected due to broken title chain or litigation.')
-                    : (lang === 'bn' ? 'আগামী ৭ কার্যদিবসের মধ্যে বায়া দলিলের স্পষ্ট কপি ও হালনাগাদ খাজনার দাখিলা আপলোড করুন।' : 'Please submit clearer Baya Dalil and updated tax dakhila within 7 days.')
+                    ? (lang === 'bn' ? 'প্রকৃত সিদ্ধান্তের কারণ লিখুন।' : 'Enter the actual reason for this decision.')
+                    : (lang === 'bn' ? 'যে তথ্য বা নথি প্রয়োজন তা লিখুন।' : 'Describe the information or documents required.')
                 }
                 className="gov-input resize-none text-xs"
               ></Input>

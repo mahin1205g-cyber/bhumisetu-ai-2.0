@@ -242,6 +242,34 @@ html.dark body {
   box-shadow: var(--shadow-card-hover);
 }
 
+@keyframes application-history-card-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes application-history-overlay-enter {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes application-history-dialog-enter {
+  from { opacity: 0; transform: translateY(8px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.application-history-card {
+  animation: application-history-card-enter 320ms ease-out both;
+  animation-delay: calc(var(--application-card-index, 0) * 35ms);
+}
+
+.application-history-overlay {
+  animation: application-history-overlay-enter 150ms ease-out both;
+}
+
+.application-history-dialog {
+  animation: application-history-dialog-enter 200ms ease-out both;
+}
+
 html.dark .gov-card:hover {
   border-color: var(--border-hover);
   box-shadow: var(--shadow-card-hover);
@@ -411,6 +439,16 @@ html.dark .gov-btn-secondary:hover {
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
 }
 
+@keyframes location-menu-enter {
+  from { opacity: 0; transform: translateY(-3px) scale(0.99); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.location-combobox-menu {
+  transform-origin: top center;
+  animation: location-menu-enter 130ms cubic-bezier(0.2, 0.75, 0.25, 1) both;
+}
+
 /* Keep decorative leading icons and trailing password actions outside text. */
 .gov-input.pl-8 { padding-left: 2rem; }
 .gov-input.pl-9 { padding-left: 2.25rem; }
@@ -430,6 +468,34 @@ html.dark .gov-input, html.dark .gov-select {
 html.dark .gov-input:focus, html.dark .gov-select:focus {
   border-color: #10B981;
   box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.2);
+}
+
+/* Keep native dropdowns on the Digital Deed Registration form simple and consistent. */
+.deed-digitization-page .gov-select {
+  min-height: 44px;
+  padding: 0.6rem 0.85rem;
+  appearance: auto;
+  border: 1px solid #CBD5E1;
+  border-radius: 0.5rem;
+  background-color: #FFFFFF;
+  color: #17212B;
+  box-shadow: none;
+}
+
+.deed-digitization-page .gov-select option {
+  background-color: #FFFFFF;
+  color: #17212B;
+}
+
+.deed-digitization-page .gov-select option:checked,
+.deed-digitization-page .gov-select option:hover {
+  background-color: #2563EB;
+  color: #FFFFFF;
+}
+
+html.dark .deed-digitization-page .gov-select {
+  background-color: #14201C;
+  color: #E5E7EB;
 }
 
 /* Typography Helpers */

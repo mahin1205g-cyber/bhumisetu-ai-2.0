@@ -47,6 +47,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
       items: [
         { id: 'home', label: t('navHome'), icon: Home, badge: null },
         { id: 'dashboard', label: t('navDashboard'), icon: LayoutDashboard, badge: null },
+        { id: 'deed-digitization', label: t('navDigitization'), icon: FileText, badge: lang === 'bn' ? 'আবেদন' : 'Apply', badgeColor: 'bg-emerald-600 text-white' },
         { id: 'deed-verify', label: t('navDeedVerify'), icon: FileCheck2, badge: null },
         { id: 'deed-search', label: lang === 'bn' ? 'দলিল নম্বর খুঁজুন' : 'Search Deed Number', icon: Search, badge: lang === 'bn' ? 'নতুন' : 'New', badgeColor: 'bg-emerald-600 text-white' },
         { id: 'mutation', label: t('navMutation'), icon: GitBranchPlus, badge: null },
@@ -57,7 +58,7 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
     {
       title: lang === 'bn' ? 'নাগরিক কর্নার ও ট্র্যাকিং' : 'Citizen Portal & Tracking',
       items: [
-        { id: 'mutation-track', label: lang === 'bn' ? 'আবেদন ট্র্যাকিং' : 'Application Tracking', icon: Search, badge: null },
+        ...(['citizen', 'officer', 'admin'].includes(user?.role) ? [{ id: 'mutation-track', label: lang === 'bn' ? 'আবেদন ইতিহাস ও ট্র্যাকিং' : 'Application History & Tracking', icon: Search, badge: null }] : []),
         { id: 'profile', label: t('navProfile'), icon: User, badge: user ? user.role : null },
         { id: 'notifications', label: lang === 'bn' ? 'বিজ্ঞপ্তি ও নোটিফিকেশন' : 'Notifications', icon: Bell, badge: unreadCount > 0 ? `${unreadCount} new` : null, badgeColor: 'bg-rose-600 text-white' },
         { id: 'audit-logs', label: t('navAudit'), icon: History, badge: null }
@@ -67,6 +68,8 @@ export default function SlideDrawer({ isOpen, onClose, activeTab, setActiveTab }
       {
         title: lang === 'bn' ? 'কর্মকর্তা ও প্রশাসন' : 'Officer & Administration',
         items: [
+          { id: 'application-admin', label: lang === 'bn' ? 'আবেদন পর্যালোচনা ও অনুমোদন' : 'Application Review', icon: ClipboardCheck, badge: 'Staff', badgeColor: 'bg-indigo-600 text-white' },
+          { id: 'approved-applications', label: lang === 'bn' ? 'অনুমোদিত আবেদন' : 'Approved Applications', icon: FileCheck2, badge: null },
           { id: 'officer-review', label: t('navOfficerReview'), icon: ClipboardCheck, badge: 'Officer', badgeColor: 'bg-indigo-600 text-white' },
           ...(user?.role === 'admin' ? [
             { id: 'admin', label: t('navAdmin'), icon: ShieldAlert, badge: 'Admin', badgeColor: 'bg-rose-700 text-white' }

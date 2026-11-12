@@ -77,6 +77,9 @@ export default function VerificationResult({ result, setActiveTab, navigateBack,
           district: report.district,
           upazila: report.upazila,
           mouza: report.mouza,
+          mouza_id: report.mouza_id,
+          mouza_input_mode: extractedSummary?.submitted_mouza_input_mode || (report.mouza_id ? 'catalog' : 'unknown'),
+          mouza_source: extractedSummary?.submitted_mouza_source || (report.mouza_id ? 'official_catalog' : 'unknown'),
           union_ward: report.union_ward,
           union_id: report.union_id,
           plot_id: report.plot_id,
@@ -221,6 +224,7 @@ export default function VerificationResult({ result, setActiveTab, navigateBack,
   const locationFieldKeys = new Set(['division', 'district', 'upazila', 'mouza', 'union_ward']);
   const normalizeComparison = (value) => String(value || '')
     .normalize('NFKC')
+    .normalize('NFC')
     .trim()
     .replace(/\s+/g, ' ')
     .toLocaleLowerCase();
@@ -234,7 +238,7 @@ export default function VerificationResult({ result, setActiveTab, navigateBack,
     { key: 'division', label_bn: 'বিভাগ', label_en: 'Division', required: true, submitted: safeSubmittedSummary.division, recorded: extracted_summary.division, available: hasDeedRecord, source_bn: 'অ্যাপের deeds রেকর্ড', source_en: 'Application deeds record' },
     { key: 'district', label_bn: 'জেলা', label_en: 'District', required: true, submitted: safeSubmittedSummary.district, recorded: extracted_summary.district, available: hasDeedRecord || hasPropertyRecord, source_bn: 'অ্যাপের জমির রেকর্ড', source_en: 'Application land record' },
     { key: 'upazila', label_bn: 'উপজেলা / থানা', label_en: 'Upazila / Thana', required: true, submitted: safeSubmittedSummary.upazila, recorded: extracted_summary.upazila, available: hasDeedRecord || hasPropertyRecord, source_bn: 'অ্যাপের জমির রেকর্ড', source_en: 'Application land record' },
-    { key: 'mouza', label_bn: 'মৌজা', label_en: 'Mouza', required: false, optional: true, submitted: safeSubmittedSummary.mouza, recorded: extracted_summary.mouza, available: hasDeedRecord || hasPropertyRecord, source_bn: 'অ্যাপের জমির রেকর্ড', source_en: 'Application land record' },
+    { key: 'mouza', label_bn: 'মৌজা', label_en: 'Mouza', required: true, submitted: safeSubmittedSummary.mouza, recorded: extracted_summary.mouza, available: hasDeedRecord || hasPropertyRecord, input_source: safeSubmittedSummary.mouza_source || extracted_summary.submitted_mouza_source, source_bn: 'অ্যাপের জমির রেকর্ড', source_en: 'Application land record' },
     { key: 'plot_id', label_bn: 'দাগ / প্লট নম্বর', label_en: 'Dag / Plot Number', required: true, submitted: safeSubmittedSummary.plot_id, recorded: extracted_summary.plot_id, available: hasDeedRecord || hasPropertyRecord, source_bn: 'অ্যাপের জমির রেকর্ড', source_en: 'Application land record' },
     { key: 'khatian_no', label_bn: 'খতিয়ান নম্বর', label_en: 'Khatian Number', required: true, submitted: safeSubmittedSummary.khatian_no, recorded: extracted_summary.khatian_no, available: hasDeedRecord || hasPropertyRecord, source_bn: 'অ্যাপের জমির রেকর্ড', source_en: 'Application land record' },
     { key: 'union_ward', label_bn: 'ইউনিয়ন / ওয়ার্ড', label_en: 'Union / Ward', submitted: safeSubmittedSummary.union_ward, recorded: extracted_summary.union_ward, available: hasDeedRecord, optional: true, source_bn: 'অ্যাপের deeds রেকর্ড', source_en: 'Application deeds record' },
@@ -289,7 +293,12 @@ export default function VerificationResult({ result, setActiveTab, navigateBack,
       && field.submitted_location_id !== undefined
       && field.recorded_location_id !== null
       && field.recorded_location_id !== undefined;
-    if (locationFieldKeys.has(field.key) && field.status === 'MISMATCH' && !hasCanonicalLocationIds) {
+    const isManualMouza = field.key === 'mouza'
+      && (field.official_verification_status === 'NOT_VERIFIED' || field.input_source === 'manual_unverified');
+    if (isManualMouza && normalizeComparison(field.submitted) && normalizeComparison(field.submitted) === normalizeComparison(field.recorded)) {
+      return 'MATCHED';
+    }
+    if (locationFieldKeys.has(field.key) && field.status === 'MISMATCH' && !hasCanonicalLocationIds && !isManualMouza) {
       return 'UNAVAILABLE';
     }
     if (knownStatuses.includes(field.status)) {
@@ -1099,6 +1108,21 @@ export default function VerificationResult({ result, setActiveTab, navigateBack,
                       {lang === 'bn' ? field.label_bn : field.label_en}
                       {field.required && <span className="ml-1 text-rose-600" aria-label={lang === 'bn' ? 'বাধ্যতামূলক' : 'Required'}>*</span>}
                       {field.optional && <span className="ml-1 text-xs font-normal text-gray-500">({lang === 'bn' ? 'ঐচ্ছিক' : 'optional'})</span>}
+                      {field.key === 'mouza' && (field.official_verification_status === 'NOT_VERIFIED' || (!field.official_verification_status && field.input_source === 'manual_unverified')) && (
+                        <span className="mt-1 block text-[11px] font-medium text-amber-700 dark:text-amber-300">
+                         
+                        </span>
+                      )}
+                      {field.key === 'mouza' && (field.official_verification_status === 'VERIFIED' || (!field.official_verification_status && field.input_source === 'official_catalog')) && (
+                        <span className="mt-1 block text-[11px] font-medium text-emerald-700 dark:text-emerald-300">
+                          {lang === 'bn' ? 'সরকারি মৌজা তালিকায় যাচাইকৃত · মালিকানার যাচাই নয়' : 'Verified in official Mouza list · not ownership verification'}
+                        </span>
+                      )}
+                      {field.key === 'mouza' && field.official_verification_status === 'UNAVAILABLE' && (
+                        <span className="mt-1 block text-[11px] font-medium text-slate-500 dark:text-slate-400">
+                          {lang === 'bn' ? 'সরকারি মৌজা যাচাইয়ের তথ্য অনুপলব্ধ' : 'Official Mouza verification is unavailable'}
+                        </span>
+                      )}
                     </h4>
                     <span
                       className="inline-flex w-fit shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 text-[13px] font-bold leading-tight"

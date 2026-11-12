@@ -365,6 +365,7 @@ def init():
         deed_date TEXT NOT NULL,
         supporting_docs TEXT,
         status TEXT NOT NULL DEFAULT 'Draft',
+        assigned_officer_id INTEGER REFERENCES users(id) ON DELETE RESTRICT,
         review_notes TEXT,
         rejection_reason TEXT,
         created_at TEXT NOT NULL,
@@ -380,6 +381,7 @@ def init():
         to_status TEXT NOT NULL,
         changed_by_name TEXT NOT NULL,
         changed_by_role TEXT NOT NULL,
+        changed_by_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         remarks TEXT,
         created_at TEXT NOT NULL
     )""")
@@ -458,6 +460,19 @@ def init():
             c.execute("CREATE INDEX IF NOT EXISTS idx_audit_created ON audit_logs(created_at)")
             c.execute("CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)")
             c.execute("ALTER TABLE users ADD COLUMN IF NOT EXISTS auth_version INTEGER NOT NULL DEFAULT 0")
+            c.execute("""CREATE TABLE IF NOT EXISTS auth_sessions(
+                session_id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                auth_version INTEGER NOT NULL,
+                refresh_token_hash TEXT NOT NULL UNIQUE,
+                previous_refresh_token_hash TEXT,
+                previous_rotated_at TIMESTAMPTZ,
+                expires_at TIMESTAMPTZ NOT NULL,
+                revoked_at TIMESTAMPTZ,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+            c.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_auth_sessions_previous_refresh ON auth_sessions(previous_refresh_token_hash) WHERE previous_refresh_token_hash IS NOT NULL")
+            c.execute("CREATE INDEX IF NOT EXISTS idx_auth_sessions_user_expiry ON auth_sessions(user_id, expires_at)")
             c.execute("""CREATE TABLE IF NOT EXISTS password_recovery_attempts(
                 scope_type TEXT NOT NULL,
                 scope_hash TEXT NOT NULL,
@@ -538,7 +553,7 @@ def init():
 
 
 
-def binary_search_land_records(query: str, category: str = "all", limit: int = 25):
+def binary_search_land_records(query: str, category: str = "all", limit: int = 25, mutation_owner_id: Optional[int] = None):
     """
     Search land records using PostgreSQL queries and available indexes.
     Actual performance depends on data size, indexes, query patterns, and database resources.
@@ -567,7 +582,7 @@ def binary_search_land_records(query: str, category: str = "all", limit: int = 2
         # 2. Deeds
         if category in ["all", "deed"]:
             deeds = c.execute(
-                "SELECT * FROM deeds WHERE deed_no LIKE %s OR plot_id LIKE %s LIMIT %s",
+                "SELECT * FROM deeds WHERE COALESCE(is_verified,1)<>0 AND (deed_no LIKE %s OR plot_id LIKE %s) LIMIT %s",
                 (f"{q}%", f"{q}%", limit)
             ).fetchall()
             for de in deeds:
@@ -578,10 +593,14 @@ def binary_search_land_records(query: str, category: str = "all", limit: int = 2
                 results.append(d)
 
         # 3. Mutation Applications
-        if category in ["all", "tracking"]:
+        if category in ["all", "tracking"] and mutation_owner_id is not None:
             muts = c.execute(
-                "SELECT * FROM mutation_applications WHERE tracking_no LIKE %s OR applicant_nid LIKE %s LIMIT %s",
-                (f"{q}%", f"{q}%", limit)
+                """SELECT id,tracking_no,user_id,applicant_name,district,upazila,mouza,plot_no,khatian_no,
+                          status,created_at,updated_at
+                   FROM mutation_applications
+                   WHERE user_id=%s AND tracking_no ILIKE %s
+                   ORDER BY id DESC LIMIT %s""",
+                (int(mutation_owner_id), f"{q}%", limit)
             ).fetchall()
             for m in muts:
                 d = dict(m)
@@ -711,6 +730,24 @@ def get_user_by_id(uid: int):
         return d
 
 
+def get_user_by_auth_session(session_id: str):
+    """Return a current profile only while its server-side auth session is active."""
+    init()
+    with conn() as c:
+        user = c.execute(
+            """SELECT u.id,u.name,u.username,u.email,u.phone,u.role,u.designation,
+                      u.created_at,u.updated_at,u.profile_picture,u.auth_version,
+                      CASE WHEN COALESCE(u.nid,'')='' THEN NULL ELSE '••••••••' || RIGHT(u.nid,4) END AS nid_masked
+               FROM auth_sessions s
+               JOIN users u ON u.id=s.user_id
+               WHERE s.session_id=%s AND s.revoked_at IS NULL
+                 AND s.expires_at > CURRENT_TIMESTAMP
+                 AND s.auth_version=u.auth_version""",
+            (session_id,),
+        ).fetchone()
+        return dict(user) if user else None
+
+
 def _mask_nid_value(value):
     text = str(value or "")
     return ("••••••••" + text[-4:]) if text else None
@@ -813,6 +850,29 @@ def _select_deed_candidate(candidates, input_data=None, requested_year=None):
     return None, True
 
 
+def _classify_mouza_check(input_mode, provided, recorded, same_parent, identifier_match):
+    """Compare Mouza names independently from whether the name is in the official catalog."""
+    if input_mode == "catalog":
+        if identifier_match is None:
+            return "UNAVAILABLE"
+        return "MATCHED" if identifier_match else "MISMATCH"
+    if not provided or not recorded:
+        return "UNAVAILABLE"
+    normalize = lambda value: " ".join(
+        unicodedata.normalize("NFC", unicodedata.normalize("NFKC", str(value or "")))
+        .casefold()
+        .split()
+    )
+    normalized_provided = normalize(provided)
+    normalized_recorded = normalize(recorded)
+    if not normalized_provided or not normalized_recorded:
+        return "UNAVAILABLE"
+    if normalized_provided == normalized_recorded:
+        return "MATCHED"
+    similarity = cpp_bridge.fuzzy_match(normalized_provided, normalized_recorded) if cpp_bridge else 0.0
+    return "PARTIAL_MATCH" if similarity >= 80 else "MISMATCH"
+
+
 def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
     init()
     deed_no = str(input_data.get("deed_no", "")).strip()
@@ -823,6 +883,10 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
     district = str(input_data.get("district", "")).strip()
     upazila = str(input_data.get("upazila", "")).strip()
     mouza = str(input_data.get("mouza", "")).strip()
+    mouza_input_mode = input_data.get("mouza_input_mode") or (
+        "catalog" if input_data.get("mouza_id") is not None else "manual"
+    )
+    mouza_source = "official_catalog" if mouza_input_mode == "catalog" else "manual_unverified"
     plot_id = str(input_data.get("plot_id", "")).strip()
     khatian_no = str(input_data.get("khatian_no", "")).strip()
     buyer_name = str(input_data.get("buyer_name") or input_data.get("owner_name", "")).strip()
@@ -849,7 +913,7 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
                    LEFT JOIN divisions AS v ON v.id=d.division_id
                    LEFT JOIN admin_unions AS u ON u.id=d.union_id"""
         if selected_deed_id:
-            selected = c.execute(query + " WHERE d.id = %s", (selected_deed_id,)).fetchone()
+            selected = c.execute(query + " WHERE d.id = %s AND COALESCE(d.is_verified,1)<>0", (selected_deed_id,)).fetchone()
             if selected and _normalize_deed_lookup_number(selected.get("deed_no")) == _normalize_deed_lookup_number(deed_no):
                 deed_record = selected
             else:
@@ -858,14 +922,14 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
             if not deed_record and not selected_deed_id:
                 # Use the existing raw deed_no btree for the common exact case.
                 exact_candidates = c.execute(
-                    query + " WHERE d.deed_no = %s ORDER BY d.reg_year DESC, d.id DESC LIMIT 51",
+                    query + " WHERE d.deed_no = %s AND COALESCE(d.is_verified,1)<>0 ORDER BY d.reg_year DESC, d.id DESC LIMIT 51",
                     (deed_no,),
                 ).fetchall()
                 normalized_no = _normalize_deed_lookup_number(deed_no)
                 normalized_candidates = []
                 if len(exact_candidates) < 51:
                     normalized_candidates = c.execute(
-                        query + " WHERE REGEXP_REPLACE(TRANSLATE(UPPER(d.deed_no), '০১২৩৪৫৬৭৮৯', '0123456789'), '[[:space:]]+', '', 'g') = %s AND d.deed_no IS DISTINCT FROM %s ORDER BY d.reg_year DESC, d.id DESC LIMIT 51",
+                        query + " WHERE REGEXP_REPLACE(TRANSLATE(UPPER(d.deed_no), '০১২৩৪৫৬৭৮৯', '0123456789'), '[[:space:]]+', '', 'g') = %s AND d.deed_no IS DISTINCT FROM %s AND COALESCE(d.is_verified,1)<>0 ORDER BY d.reg_year DESC, d.id DESC LIMIT 51",
                         (normalized_no, deed_no),
                     ).fetchall()
                 unique_candidates = {}
@@ -955,6 +1019,7 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
                      AND LOWER(BTRIM(upazila)) = LOWER(BTRIM(%s))
                      AND LOWER(BTRIM(mouza)) = LOWER(BTRIM(%s))
                      AND LOWER(BTRIM(plot_id)) = LOWER(BTRIM(%s))
+                     AND COALESCE(is_verified,1)<>0
                    ORDER BY reg_year ASC, reg_date ASC, id ASC
                    LIMIT 101""",
                 (history_scope["district"], history_scope["upazila"],
@@ -1046,6 +1111,8 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
         "location_type": input_data.get("location_type"),
         "mouza": mouza or None,
         "mouza_id": input_data.get("mouza_id"),
+        "mouza_input_mode": mouza_input_mode,
+        "mouza_source": mouza_source,
         "union_ward": union_ward or None,
         "union_id": union_id,
         "plot_id": plot_id or None,
@@ -1067,8 +1134,12 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
         submitted_location_id=None, recorded_location_id=None,
         submitted_location_names=None, recorded_location_names=None,
         unresolved_comparison=False, submitted_names=None, recorded_names=None,
+        manual_location_input=False, input_source=None, forced_status=None,
     ):
-        if not provided and optional:
+        if forced_status:
+            status_value = forced_status
+            similarity = None
+        elif not provided and optional:
             status_value = "NOT_PROVIDED"
             similarity = None
         elif reference_only:
@@ -1076,6 +1147,10 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
             similarity = None
         elif unresolved_location:
             status_value = "UNAVAILABLE"
+            similarity = None
+        elif manual_location_input:
+            exact_manual_text = bool(provided and recorded) and normalize_comparison(provided) == normalize_comparison(recorded)
+            status_value = "PARTIAL_MATCH" if exact_manual_text else "UNAVAILABLE"
             similarity = None
         elif unresolved_comparison:
             status_value = "UNAVAILABLE"
@@ -1123,6 +1198,19 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
         if unresolved_comparison:
             message_bn = "দলিলের ধরনটি সক্রিয় তালিকার সঙ্গে নিশ্চিতভাবে মেলেনি; তাই তুলনা করা যায়নি।"
             message_en = "The deed type could not be resolved uniquely in the active catalog; comparison is unavailable."
+        if manual_location_input:
+            if status_value == "MATCHED":
+                message_bn = "নাম মিলেছে, তবে সরকারি মৌজা তালিকায় যাচাই হয়নি।"
+                message_en = "Name matches, but it has not been verified against the official Mouza list."
+            elif status_value == "PARTIAL_MATCH":
+                message_bn = "নামটি আংশিক মিলেছে; সরকারি মৌজা তালিকায় যাচাই হয়নি। মূল দলিলের সঙ্গে মিলিয়ে দেখুন।"
+                message_en = "The name partially matches; it has not been verified against the official Mouza list. Review the original deed."
+            elif status_value == "MISMATCH":
+                message_bn = "মৌজার নাম ডেটাবেজের নামের সঙ্গে মেলেনি; সরকারি তালিকায়ও যাচাই হয়নি।"
+                message_en = "The Mouza name does not match the database value and has not been verified against the official list."
+            else:
+                message_bn = "হাতে দেওয়া মৌজার নাম সরকারি তালিকায় যাচাই হয়নি; এই রেকর্ডের সঙ্গে নির্ভরযোগ্য তুলনা করা যায়নি।"
+                message_en = "The manually entered Mouza is not verified in the official catalog; a reliable comparison is unavailable."
         if key == "seller_name" and status_value == "UNAVAILABLE":
             message_bn = "বিক্রেতার রেকর্ড পাওয়া যায়নি।"
             message_en = "Seller Record Unavailable."
@@ -1162,6 +1250,15 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
             check["submitted_names"] = submitted_names
         if recorded_names:
             check["recorded_names"] = recorded_names
+        if input_source:
+            check["input_source"] = input_source
+        if key == "mouza":
+            if input_source == "official_catalog" and submitted_location_id is not None:
+                check["official_verification_status"] = "VERIFIED"
+            elif input_source == "manual_unverified" and provided:
+                check["official_verification_status"] = "NOT_VERIFIED"
+            else:
+                check["official_verification_status"] = "UNAVAILABLE"
         field_checks.append(check)
         return status_value
 
@@ -1280,19 +1377,23 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
                 "upazila": recorded_location_ref.get("location_id"),
                 "mouza": recorded_location_ref.get("mouza_id"),
             }[key]
-            if key == "mouza" and submitted_ref_id is None and recorded_ref_id is None:
-                # The app's Mouza catalog can be incomplete. Identical manual
-                # Mouza text is only compared within the same resolved parent.
+            manual_mouza_input = key == "mouza" and mouza_input_mode == "manual"
+            forced_mouza_status = None
+            if key == "mouza":
+                identifier_match = (
+                    int(submitted_ref_id) == int(recorded_ref_id)
+                    if submitted_ref_id is not None and recorded_ref_id is not None else None
+                )
+                unresolved = bool(recorded_value and (submitted_ref_id is None or recorded_ref_id is None))
                 same_parent = (
                     submitted_location_ref.get("location_id") is not None
                     and str(submitted_location_ref.get("location_id")) == str(recorded_location_ref.get("location_id"))
                 )
-                if same_parent and normalize_comparison(provided) == normalize_comparison(recorded_value):
-                    identifier_match = True
+                forced_mouza_status = _classify_mouza_check(
+                    mouza_input_mode, provided, recorded_value, same_parent, identifier_match
+                )
+                if manual_mouza_input:
                     unresolved = False
-                else:
-                    identifier_match = None
-                    unresolved = bool(recorded_value)
             else:
                 identifier_match = (
                     int(submitted_ref_id) == int(recorded_ref_id)
@@ -1301,13 +1402,16 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
                 unresolved = bool(recorded_value and (submitted_ref_id is None or recorded_ref_id is None))
             add_basic_check(
                 key, field_bn, field_en, provided, recorded_value,
-                source_en, source_bn, required=key != "mouza", optional=key == "mouza",
+                source_en, source_bn, required=True,
                 identifier_match=identifier_match,
                 unresolved_location=unresolved,
                 submitted_location_id=submitted_ref_id,
                 recorded_location_id=recorded_ref_id,
                 submitted_location_names=location_name_pair(submitted_location_ref, ref_key),
                 recorded_location_names=location_name_pair(recorded_location_ref, ref_key),
+                manual_location_input=manual_mouza_input,
+                input_source=mouza_source if key == "mouza" else None,
+                forced_status=forced_mouza_status,
             )
         else:
             add_basic_check(
@@ -1619,6 +1723,8 @@ def verify_deed(input_data: dict, user_id=None, user_name="Citizen"):
         "record_found": bool(deed_record),
         "property_found": bool(prop_record),
         "data_source": "application_database",
+        "submitted_mouza_input_mode": mouza_input_mode,
+        "submitted_mouza_source": mouza_source,
         "overall_category": overall_category,
         "coverage": coverage,
         "verification_fields": field_checks,
@@ -1795,7 +1901,7 @@ STATUS_TRANSLATIONS = {
     "Under Review": {"bn": "নথি পর্যালোচনা চলছে", "en": "Under Review", "color": "indigo"},
     "Correction Required": {"bn": "সংশোধনের অনুরোধ / তথ্য তলব", "en": "Correction Required", "color": "orange"},
     "Resubmitted": {"bn": "সংশোধিত তথ্য দাখিলকৃত", "en": "Resubmitted", "color": "teal"},
-    "Approved": {"bn": "অনুমোদিত (ডেমো মঞ্জুরি)", "en": "Approved", "color": "emerald"},
+    "Approved": {"bn": "অনুমোদিত", "en": "Approved", "color": "emerald"},
     "Rejected": {"bn": "খারিজ / বাতিল", "en": "Rejected", "color": "rose"},
     # Legacy aliases
     "Initial Review": {"bn": "নথি পর্যালোচনা চলছে", "en": "Under Review", "color": "indigo"},
@@ -1864,11 +1970,11 @@ def create_mutation_application(data: dict, user_id=None, user_name="Citizen"):
         # Insert first timeline entry
         c.execute(
             """INSERT INTO mutation_status_history (
-                application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, remarks, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
+                application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, changed_by_id, remarks, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
             (
                 app_id, tracking_no, None, status,
-                user_name, "citizen",
+                user_name, "citizen", user_id,
                 "আবেদনটি খসড়া হিসেবে সংরক্ষিত হয়েছে" if is_draft else "নতুন ই-নামজারি আবেদন সফলভাবে দাখিল করা হয়েছে",
                 now_iso
             )
@@ -1876,15 +1982,14 @@ def create_mutation_application(data: dict, user_id=None, user_name="Citizen"):
 
     log_audit(user_name, "citizen", "MUTATION_CREATE", "P4_MUTATION", f"Created application {tracking_no} (Status: {status})")
 
-    # If submitted, add notification for officers
+    # New submissions remain visible to admins for explicit assignment. Do not
+    # broadcast applicant details to every officer before an assignment exists.
     if not is_draft:
         add_notification(
-            None, "officer",
-            f"নতুন ই-নামজারি আবেদন ({tracking_no})",
-            f"New E-Namjari Application ({tracking_no})",
-            f"আবেদনকারী {data.get('applicant_name')} দাগ {data.get('plot_no')} এর জন্য নামজারি আবেদন করেছেন।",
-            f"Applicant {data.get('applicant_name')} submitted mutation for plot {data.get('plot_no')}.",
-            "info", f"/officer/review/{tracking_no}"
+            None, "admin",
+            "নতুন ই-নামজারি আবেদন পর্যালোচনার অপেক্ষায়", "New E-Namjari application awaiting assignment",
+            f"ট্র্যাকিং নম্বর: {tracking_no}", f"Tracking ID: {tracking_no}",
+            "info", "#application-admin"
         )
 
     return get_mutation_application(tracking_no)
@@ -1962,19 +2067,39 @@ def get_mutation_application(tracking_no_or_id):
         return d
 
 
-def list_mutation_applications(user_id=None, role=None, status_filter=None, limit=50):
+def list_mutation_applications(user_id=None, role=None, status_filter=None, limit=50, assigned_officer_id=None, exclude_drafts=False):
     init()
     with conn() as c:
-        query = "SELECT m.*, u.username, u.profile_picture FROM mutation_applications m LEFT JOIN users u ON u.id = m.user_id"
+        query = """SELECT m.*, u.username, u.profile_picture,
+                          officer.name AS assigned_officer_name,
+                          officer.username AS assigned_officer_username
+                   FROM mutation_applications m
+                   LEFT JOIN users u ON u.id = m.user_id
+                   LEFT JOIN users officer ON officer.id = m.assigned_officer_id"""
         params = []
         conditions = []
 
         if role == "citizen" and user_id:
             conditions.append("m.user_id = %s")
             params.append(user_id)
+        if assigned_officer_id is not None:
+            assignment_column = c.execute(
+                """SELECT EXISTS (
+                       SELECT 1 FROM information_schema.columns
+                       WHERE table_schema='public' AND table_name='mutation_applications'
+                         AND column_name='assigned_officer_id'
+                   ) AS available"""
+            ).fetchone()["available"]
+            if assignment_column:
+                conditions.append("m.assigned_officer_id = %s")
+                params.append(int(assigned_officer_id))
+            else:
+                conditions.append("FALSE")
         if status_filter:
             conditions.append("m.status = %s")
             params.append(status_filter)
+        if exclude_drafts:
+            conditions.append("LOWER(m.status) <> 'draft'")
 
         if conditions:
             query += " WHERE " + " AND ".join(conditions)
@@ -2000,41 +2125,47 @@ def update_mutation_status(
     changed_by_role: str,
     remarks: str = "",
     rejection_reason: str = "",
-    correction_details: str = ""
+    correction_details: str = "",
+    changed_by_id: Optional[int] = None,
+    assigned_officer_id: Optional[int] = None,
 ):
     init()
     canonical_new = STATUS_CANONICAL_MAP.get(new_status.strip().lower())
     if not canonical_new or canonical_new not in VALID_MUTATION_STATUSES:
         raise ValueError(f"Invalid status: {new_status}")
 
-    app = get_mutation_application(tracking_no)
-    if not app:
-        raise ValueError("Application not found")
-
-    old_status = app["status"]
-    canonical_old = STATUS_CANONICAL_MAP.get(old_status.strip().lower(), old_status)
-
-    # State transition validation
-    if canonical_old != canonical_new:
-        allowed = ALLOWED_TRANSITIONS.get(canonical_old, [])
-        if canonical_new not in allowed:
-            raise ValueError(f"Invalid status transition from '{old_status}' to '{canonical_new}'")
-
-    # Rejection reason validation
-    final_rejection_reason = rejection_reason.strip() or remarks.strip()
-    if canonical_new == "Rejected" and not final_rejection_reason:
-        raise ValueError("Rejection reason is required")
-
-    # Correction details validation
-    final_correction_details = correction_details.strip() or remarks.strip()
-    if canonical_new == "Correction Required" and not final_correction_details:
-        raise ValueError("Correction details or notice remarks are required")
-
-    now_iso = datetime.now().isoformat()
-    rejection_reason_to_store = final_rejection_reason if canonical_new == "Rejected" else (app.get("rejection_reason") or "")
-    review_notes_to_store = final_correction_details if canonical_new == "Correction Required" else (remarks.strip() or app.get("review_notes") or "")
-
     with conn() as c:
+        app_row = c.execute(
+            "SELECT * FROM mutation_applications WHERE UPPER(tracking_no)=UPPER(%s) FOR UPDATE",
+            (tracking_no.strip(),),
+        ).fetchone()
+        if not app_row:
+            raise ValueError("Application not found")
+        app = dict(app_row)
+        if assigned_officer_id is not None and app.get("assigned_officer_id") != int(assigned_officer_id):
+            raise PermissionError("Application is not assigned to this officer")
+
+        old_status = app["status"]
+        canonical_old = STATUS_CANONICAL_MAP.get(old_status.strip().lower(), old_status)
+
+        # State transition validation runs under the row lock to prevent
+        # simultaneous reviewers from applying conflicting final decisions.
+        if canonical_old != canonical_new:
+            allowed = ALLOWED_TRANSITIONS.get(canonical_old, [])
+            if canonical_new not in allowed:
+                raise ValueError(f"Invalid status transition from '{old_status}' to '{canonical_new}'")
+
+        final_rejection_reason = rejection_reason.strip() or remarks.strip()
+        if canonical_new == "Rejected" and not final_rejection_reason:
+            raise ValueError("Rejection reason is required")
+
+        final_correction_details = correction_details.strip() or remarks.strip()
+        if canonical_new == "Correction Required" and not final_correction_details:
+            raise ValueError("Correction details or notice remarks are required")
+
+        now_iso = datetime.now().isoformat()
+        rejection_reason_to_store = final_rejection_reason if canonical_new == "Rejected" else (app.get("rejection_reason") or "")
+        review_notes_to_store = final_correction_details if canonical_new == "Correction Required" else (remarks.strip() or app.get("review_notes") or "")
         c.execute(
             """UPDATE mutation_applications SET
                 status = %s,
@@ -2047,9 +2178,9 @@ def update_mutation_status(
 
         c.execute(
             """INSERT INTO mutation_status_history (
-                application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, remarks, created_at
-            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s)""",
-            (app["id"], tracking_no, old_status, canonical_new, changed_by_name, changed_by_role, remarks.strip(), now_iso)
+                application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, changed_by_id, remarks, created_at
+            ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+            (app["id"], tracking_no, old_status, canonical_new, changed_by_name, changed_by_role, changed_by_id, remarks.strip(), now_iso)
         )
 
     log_audit(changed_by_name, changed_by_role, "MUTATION_STATUS_CHANGE", "P4_MUTATION",
@@ -2123,23 +2254,21 @@ def resubmit_mutation_application(tracking_no: str, user_id: Optional[int], user
 
         c.execute(
             """INSERT INTO mutation_status_history (
-                application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, remarks, created_at
-            ) VALUES (%s, %s, %s, 'Resubmitted', %s, 'citizen', %s, %s)""",
-            (app["id"], tracking_no, old_status, user_name, applicant_remarks, now_iso)
+                application_id, tracking_no, from_status, to_status, changed_by_name, changed_by_role, changed_by_id, remarks, created_at
+            ) VALUES (%s, %s, %s, 'Resubmitted', %s, 'citizen', %s, %s, %s)""",
+            (app["id"], tracking_no, old_status, user_name, user_id, applicant_remarks, now_iso)
         )
 
     log_audit(user_name, "citizen", "MUTATION_RESUBMIT", "P4_MUTATION",
               f"Resubmitted corrected application {tracking_no}. Remarks: {applicant_remarks}")
 
-    # Notify officer
+    # Notify admins so they can assign the resubmission to an officer.
     add_notification(
-        None, "officer",
-        f"সংশোধিত ই-নামজারি আবেদন ({tracking_no})",
-        f"Resubmitted E-Namjari Application ({tracking_no})",
-        f"আবেদনকারী {user_name} তলবকৃত তথ্য সংশোধন করে পুনরায় দাখিল করেছেন।",
-        f"Applicant {user_name} has resubmitted corrected information for {tracking_no}.",
+        None, "admin",
+        "সংশোধিত নামজারি আবেদন দায়িত্ব দেওয়ার অপেক্ষায়", "Resubmitted mutation application awaiting assignment",
+        f"ট্র্যাকিং নম্বর: {tracking_no}", f"Tracking ID: {tracking_no}",
         "info",
-        f"/officer/review/{tracking_no}"
+        "#application-admin"
     )
 
     return get_mutation_application(tracking_no)
@@ -2196,6 +2325,7 @@ def assess_due_diligence(data: dict, user_id=None, user_name="Citizen"):
                      AND LOWER(BTRIM(district)) = LOWER(BTRIM(%s))
                      AND LOWER(BTRIM(upazila)) = LOWER(BTRIM(%s))
                      AND LOWER(BTRIM(mouza)) = LOWER(BTRIM(%s))
+                     AND COALESCE(is_verified,1)<>0
                    ORDER BY reg_year ASC, reg_date ASC, id ASC""",
                 (plot_no, district, upazila, mouza),
             ).fetchall()
@@ -2491,7 +2621,7 @@ def get_property_by_plot(plot_id: str):
             return None
         d = dict(p)
         # Fetch related deeds & sales
-        d["deeds"] = [dict(r) for r in c.execute("SELECT * FROM deeds WHERE LOWER(plot_id) = LOWER(%s) ORDER BY reg_year DESC", (plot_id,)).fetchall()]
+        d["deeds"] = [dict(r) for r in c.execute("SELECT * FROM deeds WHERE COALESCE(is_verified,1)<>0 AND LOWER(plot_id) = LOWER(%s) ORDER BY reg_year DESC", (plot_id,)).fetchall()]
         d["sales"] = [row(r) for r in c.execute("SELECT * FROM records WHERE LOWER(plot_id) = LOWER(%s) ORDER BY sale_date DESC", (plot_id,)).fetchall()]
         return d
 
@@ -2504,7 +2634,7 @@ def dashboard_stats():
     init()
     with conn() as c:
         total_props = c.execute("SELECT COUNT(*) n FROM properties").fetchone()["n"]
-        total_deeds = c.execute("SELECT COUNT(*) n FROM deeds").fetchone()["n"]
+        total_deeds = c.execute("SELECT COUNT(*) n FROM deeds WHERE COALESCE(is_verified,1)<>0").fetchone()["n"]
         total_verifications = c.execute("SELECT COUNT(*) n FROM deed_verifications").fetchone()["n"]
 
         m_stats = {status: 0 for status in VALID_MUTATION_STATUSES}

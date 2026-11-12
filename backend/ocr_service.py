@@ -188,13 +188,15 @@ def extract_document_text(filename: str, contents: bytes) -> OCRResult:
                 raise DocumentProcessingError("Password-protected PDFs are not supported.")
             if len(reader.pages) > MAX_PDF_PAGES:
                 raise UnsupportedDocumentError(f"PDFs are limited to {MAX_PDF_PAGES} pages.")
-            text = "\n".join(page.extract_text() or "" for page in reader.pages).strip()
+            extracted_pages = [page.extract_text() or "" for page in reader.pages]
         except DocumentProcessingError:
             raise
         except Exception as exc:
             raise DocumentProcessingError("Could not read the uploaded PDF.") from exc
 
-        if not text:
+        text = "\n".join(extracted_pages).strip()
+        missing_pages = [index for index, page_text in enumerate(extracted_pages) if not page_text.strip()]
+        if missing_pages:
             try:
                 import fitz
             except ImportError as exc:
@@ -202,20 +204,24 @@ def extract_document_text(filename: str, contents: bytes) -> OCRResult:
                     "Scanned PDF OCR needs PyMuPDF. Install the backend requirements and Tesseract OCR."
                 ) from exc
             try:
-                pages: list[str] = []
+                scanned_pages: dict[int, str] = {}
                 with fitz.open(stream=contents, filetype="pdf") as document:
                     if len(document) > MAX_PDF_PAGES:
                         raise UnsupportedDocumentError(f"PDFs are limited to {MAX_PDF_PAGES} pages.")
-                    for page in document:
+                    for index in missing_pages:
+                        page = document[index]
                         rect = page.rect
                         scale = min(2.0, 2800 / max(rect.width, rect.height, 1))
                         pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
                         with Image.open(io.BytesIO(pixmap.tobytes("png"))) as page_image:
                             page_text, page_warnings = _ocr_image(page_image)
                         if page_text:
-                            pages.append(page_text)
+                            scanned_pages[index] = page_text
                         warnings.extend(page_warnings)
-                text = "\n".join(pages).strip()
+                text = "\n".join(
+                    page_text.strip() or scanned_pages.get(index, "")
+                    for index, page_text in enumerate(extracted_pages)
+                ).strip()
             except DocumentProcessingError:
                 raise
             except Exception as exc:
@@ -298,6 +304,10 @@ def parse_deed_fields(text: str) -> dict:
     khatian_no = _capture(text, (
         r"খতিয়ান\s*(?:নং|নম্বর)?", r"খতিয়ান\s*(?:নং|নম্বর)?", r"Khatian\s*(?:No\.?|Number)?",
     ), r"([A-Za-z0-9০-৯০-৯/.-]{1,50})")
+    reg_date = _capture(text, (
+        r"নিবন্ধনের\s*তারিখ", r"রেজিস্ট্রেশনের\s*তারিখ", r"দলিলের\s*তারিখ",
+        r"Registration\s*Date", r"Date\s*of\s*Registration", r"Deed\s*Date",
+    ), r"([^\r\n]{1,60})")
     mouza = _capture(text, (r"মৌজা", r"Mouza"))
     district = _capture(text, (r"জেলা", r"District"))
     normalized_text = _normalize_text(text)
@@ -340,6 +350,15 @@ def parse_deed_fields(text: str) -> dict:
     owner = _capture(text, (r"মালিক(?:ের)?\s*নাম", r"Owner(?:\s*Name)?"))
     seller = _capture(text, (r"বিক্রেতা(?:র)?\s*নাম", r"Seller(?:\s*Name)?"))
     area = _capture(text, (r"জমির\s*পরিমাণ", r"জমির\s*পরিমান", r"আয়তন", r"আয়তন", r"Area"))
+    sub_registry_office = _capture(text, (
+        r"সাব-?রেজিস্ট্রি\s*অফিস", r"সাব\s*রেজিস্ট্রার\s*অফিস",
+        r"Sub-?Registry\s*Office", r"Sub-?Registrar(?:'s)?\s*Office",
+    ))
+    division = _capture(text, (r"বিভাগ", r"Division"))
+    price = _capture(text, (r"দলিলের\s*মূল্য", r"জমির\s*মূল্য", r"মূল্য", r"Price", r"Consideration"))
+    land_class = _capture(text, (r"জমির\s*শ্রেণি", r"জমির\s*শ্রেণী", r"Land\s*Classification", r"Class\s*of\s*Land"))
+    land_description = _capture(text, (r"জমির\s*বিবরণ", r"Land\s*Description"))
+    boundary = _capture(text, (r"চৌহদ্দি", r"সীমানা", r"Boundary(?:\s*Information)?"))
     deed_type = "sale" if re.search(r"(?:[সশল]া?ফ\s*কবলা|sale\s+deed)", text, re.IGNORECASE) else ""
     union_ward_match = re.search(
         r"([০-৯0-9]{1,3}\s*(?:নং|নম্বর)\s*(?:ওয়ার্ড|ওয়ার্ড|ward))",
@@ -353,7 +372,10 @@ def parse_deed_fields(text: str) -> dict:
         "deed_no": deed_no.translate(_BN_DIGITS) if deed_no else "",
         "deed_type": deed_type,
         "reg_year": int(normalized_year) if normalized_year.isdigit() else None,
+        "reg_date": reg_date,
+        "sub_registry_office": sub_registry_office,
         "district": district,
+        "division": division,
         "upazila": upazila,
         "upazila_type": summary_fields.get("upazila_type", ""),
         "mouza": mouza,
@@ -364,4 +386,8 @@ def parse_deed_fields(text: str) -> dict:
         "seller_name": seller,
         "buyer_name": buyer,
         "area": area,
+        "price": price,
+        "land_class": land_class,
+        "land_description": land_description,
+        "boundary_information": boundary,
     }

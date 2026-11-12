@@ -14,7 +14,7 @@ import {
   ChevronDown, AlertTriangle, RefreshCw, WifiOff
 } from 'lucide-react';
 
-export default function LiveChatWidget({ setActiveTab }) {
+export default function LiveChatWidget({ setActiveTab, currentPage }) {
   const { lang } = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [isMaximized, setIsMaximized] = useState(false);
@@ -26,11 +26,14 @@ export default function LiveChatWidget({ setActiveTab }) {
   const [copiedIndex, setCopiedIndex] = useState(null);
   const [feedbackState, setFeedbackState] = useState({});
   const [isListening, setIsListening] = useState(false);
+  const [chatPosition, setChatPosition] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [chatStatus, setChatStatus] = useState({
     status: 'checking',
     provider: '',
     model: null,
-    ai_configured: null
+    ai_configured: null,
+    provider_availability: 'unknown'
   });
 
   const messagesEndRef = useRef(null);
@@ -38,6 +41,51 @@ export default function LiveChatWidget({ setActiveTab }) {
   const recognitionRef = useRef(null);
   const streamIntervalRef = useRef(null);
   const inFlightRef = useRef(false);
+  const panelRef = useRef(null);
+  const dragRef = useRef(null);
+
+  const clampPanelPosition = (left, top) => {
+    const rect = panelRef.current?.getBoundingClientRect();
+    const gap = 8;
+    const maxLeft = Math.max(gap, window.innerWidth - (rect?.width || 420) - gap);
+    const maxTop = Math.max(gap, window.innerHeight - (rect?.height || 580) - gap);
+    return {
+      left: Math.min(maxLeft, Math.max(gap, left)),
+      top: Math.min(maxTop, Math.max(gap, top)),
+    };
+  };
+
+  const startPanelDrag = (event) => {
+    if (isMaximized || event.button !== 0 || event.target.closest('button, a, input, textarea')) return;
+    const rect = panelRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+    };
+    event.currentTarget.setPointerCapture(event.pointerId);
+    setChatPosition({ left: rect.left, top: rect.top });
+    setIsDragging(true);
+    event.preventDefault();
+  };
+
+  const movePanelDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setChatPosition(clampPanelPosition(
+      drag.left + event.clientX - drag.startX,
+      drag.top + event.clientY - drag.startY,
+    ));
+  };
+
+  const endPanelDrag = (event) => {
+    if (!dragRef.current || dragRef.current.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    setIsDragging(false);
+  };
 
   // Fetch AI backend service status
   useEffect(() => {
@@ -49,7 +97,7 @@ export default function LiveChatWidget({ setActiveTab }) {
       })
       .catch(err => {
         console.warn('Chat status lookup notice:', err);
-        setChatStatus({ status: 'offline', provider: '', model: null, ai_configured: null });
+        setChatStatus({ status: 'offline', provider: '', model: null, ai_configured: null, provider_availability: 'unknown' });
       });
   }, []);
 
@@ -88,6 +136,17 @@ export default function LiveChatWidget({ setActiveTab }) {
       setTimeout(() => inputRef.current?.focus(), 200);
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || !chatPosition || isMaximized) return undefined;
+    const keepPanelVisible = () => {
+      requestAnimationFrame(() => {
+        setChatPosition((position) => position ? clampPanelPosition(position.left, position.top) : position);
+      });
+    };
+    window.addEventListener('resize', keepPanelVisible);
+    return () => window.removeEventListener('resize', keepPanelVisible);
+  }, [isOpen, isMaximized, chatPosition]);
 
   // Setup Web Speech API for voice recognition if available
   useEffect(() => {
@@ -137,7 +196,7 @@ export default function LiveChatWidget({ setActiveTab }) {
   };
 
   // Reveal the (real) backend answer progressively for a responsive feel.
-  const streamResponse = (fullText, action) => {
+  const streamResponse = (fullText, action, grounding) => {
     setIsThinking(false);
     setIsStreaming(true);
 
@@ -153,7 +212,8 @@ export default function LiveChatWidget({ setActiveTab }) {
         sender: 'ai',
         text: '',
         time: timestamp,
-        action: action || null
+        action: action || null,
+        grounding: grounding || null,
       }
     ]);
 
@@ -225,7 +285,8 @@ export default function LiveChatWidget({ setActiveTab }) {
 
       const response = await api.sendChatMessage({
         message: textToSend,
-        history: historyPayload
+        history: historyPayload,
+        current_page: currentPage
       });
 
       if (response && response.provider) {
@@ -234,7 +295,8 @@ export default function LiveChatWidget({ setActiveTab }) {
           status: 'online',
           provider: response.provider,
           model: response.model ?? prev.model,
-          ai_configured: response.ai_configured
+          ai_configured: response.ai_configured,
+          provider_availability: response.provider_availability || prev.provider_availability || 'unknown'
         }));
       }
 
@@ -245,6 +307,7 @@ export default function LiveChatWidget({ setActiveTab }) {
           isError: true,
           errorCode: response.error.code,
           retryable: Boolean(response.error.retryable),
+          grounding: response.grounding || null,
           retryText: textToSend,
           relatedUserId: userMessage.id
         });
@@ -263,7 +326,7 @@ export default function LiveChatWidget({ setActiveTab }) {
         };
       }
 
-      streamResponse(response.reply, action);
+      streamResponse(response.reply, action, response.grounding);
     } catch (err) {
       console.warn('Chat API request failed:', err);
       setChatStatus(prev => ({ ...prev, status: 'offline' }));
@@ -330,23 +393,46 @@ export default function LiveChatWidget({ setActiveTab }) {
   const renderFormattedText = (rawText) => {
     if (!rawText) return null;
 
-    const lines = rawText.split('\n');
+    const blocks = [];
+    let codeLines = null;
+    rawText.split('\n').forEach((line, index) => {
+      if (line.trimStart().startsWith('```')) {
+        if (codeLines) {
+          blocks.push({ type: 'code', content: codeLines.join('\n'), key: index });
+          codeLines = null;
+        } else {
+          codeLines = [];
+        }
+        return;
+      }
+      if (codeLines) codeLines.push(line);
+      else blocks.push({ type: 'line', text: line, key: index });
+    });
+    if (codeLines) blocks.push({ type: 'code', content: codeLines.join('\n'), key: 'open-code' });
     return (
       <div className="space-y-2 text-xs sm:text-[13px] leading-relaxed text-gray-800 dark:text-gray-100">
-        {lines.map((line, lIdx) => {
+        {blocks.map((block, lIdx) => {
+          if (block.type === 'code') {
+            return (
+              <pre key={block.key ?? lIdx} className="max-w-full overflow-x-auto rounded-lg bg-slate-950 p-3 text-[11px] leading-relaxed text-slate-100">
+                <code>{block.content}</code>
+              </pre>
+            );
+          }
+          const line = block.text;
           const trimmed = line.trim();
 
           // Markdown headers ###
           if (trimmed.startsWith('### ')) {
             return (
-              <h4 key={lIdx} className="font-bold text-sm sm:text-base text-[#0b462d] dark:text-emerald-400 mt-2 mb-1 border-b border-emerald-500/20 pb-1 flex items-center gap-1.5">
+              <h4 key={block.key ?? lIdx} className="font-bold text-sm sm:text-base text-[#0b462d] dark:text-emerald-400 mt-2 mb-1 border-b border-emerald-500/20 pb-1 flex items-center gap-1.5">
                 {trimmed.replace('### ', '')}
               </h4>
             );
           }
           if (trimmed.startsWith('#### ')) {
             return (
-              <h5 key={lIdx} className="font-bold text-xs sm:text-sm text-amber-700 dark:text-amber-300 mt-2 mb-1">
+              <h5 key={block.key ?? lIdx} className="font-bold text-xs sm:text-sm text-amber-700 dark:text-amber-300 mt-2 mb-1">
                 {trimmed.replace('#### ', '')}
               </h5>
             );
@@ -356,7 +442,7 @@ export default function LiveChatWidget({ setActiveTab }) {
           if (trimmed.startsWith('* ') || trimmed.startsWith('- ')) {
             const content = trimmed.substring(2);
             return (
-              <div key={lIdx} className="flex items-start gap-2 pl-2">
+              <div key={block.key ?? lIdx} className="flex items-start gap-2 pl-2">
                 <span className="text-emerald-600 dark:text-emerald-400 font-bold">•</span>
                 <span>{renderInlineFormatting(content)}</span>
               </div>
@@ -368,7 +454,7 @@ export default function LiveChatWidget({ setActiveTab }) {
             const num = trimmed.match(/^\d+\./)[0];
             const content = trimmed.replace(/^\d+\.\s/, '');
             return (
-              <div key={lIdx} className="flex items-start gap-2 pl-2">
+              <div key={block.key ?? lIdx} className="flex items-start gap-2 pl-2">
                 <span className="text-[#0b462d] dark:text-emerald-400 font-bold min-w-[18px]">{num}</span>
                 <span>{renderInlineFormatting(content)}</span>
               </div>
@@ -380,7 +466,7 @@ export default function LiveChatWidget({ setActiveTab }) {
             const cells = trimmed.split('|').filter(c => c.trim().length > 0);
             if (trimmed.includes('---')) return null; // skip markdown table separator
             return (
-              <div key={lIdx} className="grid grid-cols-3 gap-1 bg-emerald-50/50 dark:bg-emerald-950/30 p-1.5 rounded text-[11px] font-mono border border-emerald-200/50 dark:border-emerald-800/50">
+              <div key={block.key ?? lIdx} className="grid grid-cols-3 gap-1 bg-emerald-50/50 dark:bg-emerald-950/30 p-1.5 rounded text-[11px] font-mono border border-emerald-200/50 dark:border-emerald-800/50">
                 {cells.map((cell, cIdx) => (
                   <div key={cIdx} className="px-1 overflow-hidden text-ellipsis">
                     {renderInlineFormatting(cell.trim())}
@@ -392,11 +478,11 @@ export default function LiveChatWidget({ setActiveTab }) {
 
           // Empty line
           if (!trimmed) {
-            return <div key={lIdx} className="h-1" />;
+            return <div key={block.key ?? lIdx} className="h-1" />;
           }
 
           // Regular paragraph
-          return <p key={lIdx}>{renderInlineFormatting(trimmed)}</p>;
+          return <p key={block.key ?? lIdx}>{renderInlineFormatting(trimmed)}</p>;
         })}
       </div>
     );
@@ -421,32 +507,49 @@ export default function LiveChatWidget({ setActiveTab }) {
       {/* Live Chat Modal Popup (ChatGPT-Style UI) */}
       {isOpen && (
         <div
+          ref={panelRef}
           className={`live-chat-panel mb-4 flex flex-col bg-white dark:bg-[#111915] border border-gray-300 dark:border-emerald-800/60 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 animate-fade-up ${
             isMaximized
               ? 'live-chat-maximized max-w-4xl h-[88vh]'
               : 'w-[92vw] sm:w-[420px] h-[580px] max-h-[85vh]'
           }`}
           style={{
-            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(11, 70, 45, 0.15)'
+            boxShadow: '0 20px 50px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(11, 70, 45, 0.15)',
+            ...(chatPosition && !isMaximized ? {
+              position: 'fixed',
+              left: `${chatPosition.left}px`,
+              top: `${chatPosition.top}px`,
+              margin: 0,
+            } : {}),
+            ...(isDragging ? { transition: 'none', userSelect: 'none' } : {}),
           }}
         >
           {/* ChatGPT Style Premium Header */}
-          <div className="bg-gradient-to-r from-[#065F46] via-[#047857] to-[#0b462d] text-white p-3.5 sm:p-4 flex items-center justify-between border-b border-emerald-600/30 shadow-md">
+          <div
+            className={`bg-gradient-to-r from-[#065F46] via-[#047857] to-[#0b462d] text-white p-3.5 sm:p-4 flex items-center justify-between border-b border-emerald-600/30 shadow-md select-none ${isMaximized ? '' : (isDragging ? 'cursor-grabbing' : 'cursor-grab')}`}
+            style={{ touchAction: isMaximized ? 'auto' : 'none' }}
+            onPointerDown={startPanelDrag}
+            onPointerMove={movePanelDrag}
+            onPointerUp={endPanelDrag}
+            onPointerCancel={endPanelDrag}
+            onLostPointerCapture={endPanelDrag}
+            title={lang === 'bn' ? 'এই হেডার ধরে চ্যাট উইন্ডো সরান' : 'Drag this header to move the chat window'}
+          >
             <div className="flex items-center gap-3">
               <div className="relative">
                 <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 to-[#F5B544] flex items-center justify-center text-slate-950 font-black shadow-lg">
                   <Bot className="w-5 h-5 text-white" />
                 </div>
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-emerald-400 border-2 border-[#065F46] rounded-full animate-pulse" />
+                <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 border-2 border-[#065F46] rounded-full ${chatStatus.provider_availability === 'available' ? 'bg-emerald-400' : chatStatus.provider_availability === 'unavailable' || chatStatus.status === 'offline' ? 'bg-red-400' : 'bg-amber-300'}`} />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
                   <h3 className="font-bold text-sm sm:text-base leading-tight tracking-wide">
                     {lang === 'bn' ? 'ভূমিসেতু এআই সহকারী' : 'Bhumisetu AI Assistant'}
                   </h3>
-                  <span className="bg-[#F5B544]/30 text-[#F5B544] text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#F5B544]/50 font-bold">
+                  <span className="bg-[#F5B544]/20 text-[#F5B544] text-[10px] font-mono px-1.5 py-0.5 rounded border border-[#F5B544]/40 font-bold">
                     {chatStatus.ai_configured
-                      ? 'AI Live'
+                      ? (lang === 'bn' ? 'কনফিগার করা' : 'Configured')
                       : chatStatus.status === 'offline'
                         ? (lang === 'bn' ? 'অফলাইন' : 'Offline')
                         : chatStatus.status === 'checking'
@@ -455,11 +558,15 @@ export default function LiveChatWidget({ setActiveTab }) {
                   </span>
                 </div>
                 <p className="text-[11px] text-emerald-100 flex items-center gap-1.5">
-                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${chatStatus.ai_configured ? 'bg-emerald-300 animate-ping' : chatStatus.status === 'offline' ? 'bg-red-300' : 'bg-amber-300'}`}></span>
+                  <span className={`inline-block w-1.5 h-1.5 rounded-full ${chatStatus.status === 'offline' || chatStatus.provider_availability === 'unavailable' ? 'bg-red-300' : chatStatus.provider_availability === 'available' ? 'bg-emerald-300' : 'bg-amber-300'}`}></span>
                   <span className="truncate max-w-[220px]">
                     {chatStatus.status === 'offline'
                       ? (lang === 'bn' ? 'সার্ভারে সংযোগ নেই' : 'Server unreachable')
-                      : chatStatus.provider || (lang === 'bn' ? 'সংযোগ যাচাই হচ্ছে…' : 'Checking connection…')}
+                      : `${chatStatus.provider || (lang === 'bn' ? 'সংযোগ যাচাই হচ্ছে…' : 'Checking connection…')} · ${chatStatus.provider_availability === 'available'
+                        ? (lang === 'bn' ? 'সাড়া পাওয়া গেছে' : 'Responded')
+                        : chatStatus.provider_availability === 'unavailable'
+                          ? (lang === 'bn' ? 'সর্বশেষ অনুরোধ ব্যর্থ' : 'Last request failed')
+                          : (lang === 'bn' ? 'এখনও পরীক্ষা হয়নি' : 'Not checked yet')}`}
                   </span>
                 </p>
               </div>
@@ -475,7 +582,12 @@ export default function LiveChatWidget({ setActiveTab }) {
                 <RotateCcw className="w-4 h-4" />
               </Button>
               <Button
-                onClick={() => setIsMaximized(!isMaximized)}
+                onClick={() => {
+                  setIsMaximized(!isMaximized);
+                  setChatPosition(null);
+                  setIsDragging(false);
+                  dragRef.current = null;
+                }}
                 title={isMaximized ? (lang === 'bn' ? 'ছোট করুন' : 'Restore') : (lang === 'bn' ? 'বড় করুন' : 'Maximize')}
                 className="p-1.5 hover:bg-white/10 rounded-lg transition hidden sm:inline-flex"
               >
@@ -567,6 +679,13 @@ export default function LiveChatWidget({ setActiveTab }) {
                         renderFormattedText(msg.text)
                       ) : (
                         <p className="whitespace-pre-wrap leading-relaxed">{msg.text}</p>
+                      )}
+
+                      {isAi && msg.grounding && (
+                        <div className="mt-2 flex items-center gap-1.5 border-t border-gray-100 dark:border-gray-800 pt-2 text-[10px] font-medium text-gray-500 dark:text-gray-400">
+                          <span aria-hidden="true">{msg.grounding.kind === 'database' ? '▣' : msg.grounding.kind === 'unavailable' ? '!' : '◇'}</span>
+                          <span>{lang === 'bn' ? msg.grounding.label_bn : msg.grounding.label_en}</span>
+                        </div>
                       )}
 
                       {/* Retry for failed AI requests */}

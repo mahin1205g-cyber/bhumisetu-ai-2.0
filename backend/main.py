@@ -91,10 +91,12 @@ try:
 
     import location_service
     import ocr_service
+    import deed_digitization_service
+    import deed_digitization_api
 
 except ImportError:
 
-    from backend import location_service, ocr_service
+    from backend import location_service, ocr_service, deed_digitization_service, deed_digitization_api
 
 
 
@@ -555,8 +557,7 @@ class DeedVerifyRequest(BaseModel):
 
     mouza_id: Optional[int] = Field(default=None, gt=0)
 
-
-
+    mouza_input_mode: Optional[Literal["catalog", "manual"]] = None
 
 
 class MutationApplyRequest(BaseModel):
@@ -625,6 +626,10 @@ class MutationActionRequest(BaseModel):
 
 
 
+class MutationAssignmentRequest(BaseModel):
+    officer_id: Optional[int] = Field(default=None, gt=0)
+
+
 class MutationResubmitRequest(BaseModel):
 
     applicant_name: Optional[str] = None
@@ -655,7 +660,9 @@ class ChatMessageRequest(BaseModel):
 
     history: Optional[List[dict]] = []
 
-    tracking_no: Optional[str] = None
+    tracking_no: Optional[str] = Field(default=None, max_length=80)
+
+    current_page: Optional[str] = Field(default=None, max_length=64)
 
 
 
@@ -756,7 +763,12 @@ def index():
 
 
 @app.post("/api/auth/login")
-def login(req: LoginRequest, request: Request):
+def login(
+    req: LoginRequest,
+    request: Request,
+    response: Response = None,
+    refresh_cookie: Optional[str] = Cookie(None, alias="bhumisetu_refresh"),
+):
     identifier = req.identifier.strip().lower()
     identifier_is_email = "@" in identifier
     client_ip = request.client.host if request.client else "unknown"
@@ -808,7 +820,7 @@ def login(req: LoginRequest, request: Request):
         authenticated_user["name"], authenticated_user["role"], "USER_LOGIN", "AUTH",
         f"Successful login for {authenticated_user['email']}",
     )
-    token = issue_access_token(authenticated_user["id"], authenticated_user.get("auth_version", 0))
+    token = _issue_login_access_token(authenticated_user, request, response, refresh_cookie)
     return {
         "success": True,
         "token": token,
@@ -870,7 +882,12 @@ def username_availability(username: str = ""):
 
 
 @app.post("/api/auth/register")
-def register(req: RegisterRequest, request: Request = None):
+def register(
+    req: RegisterRequest,
+    request: Request = None,
+    response: Response = None,
+    refresh_cookie: Optional[str] = Cookie(None, alias="bhumisetu_refresh"),
+):
     client_ip = request.client.host if request and request.client else "unit-or-unknown"
     _enforce_login_ip_rate_limit(client_ip, "register")
     email = req.email.strip().lower()
@@ -913,7 +930,7 @@ def register(req: RegisterRequest, request: Request = None):
     user = engine.get_user_by_id(created["id"])
     engine.log_audit(user["name"], "citizen", "USER_REGISTER", "AUTH", "User registered")
 
-    token = issue_access_token(user["id"], user.get("auth_version", 0))
+    token = _issue_login_access_token(user, request, response, refresh_cookie)
 
     return {
 
@@ -944,6 +961,90 @@ _LOGIN_MAX_FAILURES = 5
 _LOGIN_LOCK_SECONDS = 10 * 60 * 60
 _RECOVERY_IP_WINDOW_SECONDS = 60
 _RECOVERY_IP_MAX_REQUESTS = 30
+
+AUTH_REFRESH_COOKIE = "bhumisetu_refresh"
+AUTH_SESSION_SECONDS = 30 * 24 * 60 * 60
+AUTH_ROTATION_GRACE_SECONDS = 20
+
+
+def _refresh_token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _set_refresh_cookie(response: Response, request: Request, token: str):
+    secure = request.url.scheme == "https" or os.environ.get("APP_ENV", "development").lower() == "production"
+    response.set_cookie(
+        key=AUTH_REFRESH_COOKIE,
+        value=token,
+        max_age=AUTH_SESSION_SECONDS,
+        httponly=True,
+        secure=secure,
+        samesite="none" if secure else "lax",
+        path="/api/auth",
+    )
+
+
+def _clear_refresh_cookie(response: Response, request: Request):
+    secure = request.url.scheme == "https" or os.environ.get("APP_ENV", "development").lower() == "production"
+    response.delete_cookie(
+        key=AUTH_REFRESH_COOKIE,
+        httponly=True,
+        secure=secure,
+        samesite="none" if secure else "lax",
+        path="/api/auth",
+    )
+
+
+def _validate_auth_origin(request: Request):
+    origin = request.headers.get("origin")
+    if origin and origin not in cors_origins:
+        raise HTTPException(status_code=403, detail="Authentication request origin is not allowed.")
+
+
+def _create_auth_session(user_id: int, auth_version: int, prior_refresh_token: Optional[str] = None):
+    session_id = secrets.token_urlsafe(24)
+    refresh_token = secrets.token_urlsafe(48)
+    with engine.conn() as c:
+        if prior_refresh_token:
+            prior_hash = _refresh_token_hash(prior_refresh_token)
+            c.execute(
+                """UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP)
+                   WHERE (refresh_token_hash=%s OR previous_refresh_token_hash=%s)
+                     AND revoked_at IS NULL""",
+                (prior_hash, prior_hash),
+            )
+        c.execute(
+            """INSERT INTO auth_sessions
+                   (session_id,user_id,auth_version,refresh_token_hash,expires_at)
+               VALUES (%s,%s,%s,%s,CURRENT_TIMESTAMP + INTERVAL '30 days')""",
+            (session_id, int(user_id), int(auth_version), _refresh_token_hash(refresh_token)),
+        )
+        c.execute(
+            """DELETE FROM auth_sessions
+               WHERE expires_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+                  OR revoked_at < CURRENT_TIMESTAMP - INTERVAL '30 days'"""
+        )
+    return session_id, refresh_token
+
+
+def _issue_login_access_token(
+    user: dict,
+    request: Optional[Request],
+    response: Optional[Response],
+    prior_refresh_token: Optional[str] = None,
+):
+    user_id = int(user["id"])
+    auth_version = int(user.get("auth_version", 0))
+    # Direct function callers in older tests have no HTTP response object. Real
+    # HTTP login and registration requests always get a server-managed cookie.
+    if request is None or response is None:
+        return issue_access_token(user_id, auth_version)
+    if prior_refresh_token:
+        session_id, refresh_token = _create_auth_session(user_id, auth_version, prior_refresh_token)
+    else:
+        session_id, refresh_token = _create_auth_session(user_id, auth_version)
+    _set_refresh_cookie(response, request, refresh_token)
+    return issue_access_token(user_id, auth_version, session_id=session_id)
 
 
 def _enforce_upload_rate_limit(ip: str, user_id: int, upload_type: str):
@@ -1307,13 +1408,16 @@ def recovery_reset(req: RecoveryResetRequest, request: Request):
     engine.log_audit(account["name"], account["role"], "PASSWORD_RECOVERY", "AUTH", "Password reset through username, phone, and NID match")
     return {"success": True, "role": account["role"], "message": "Password reset successfully. Sign in with your new password."}
 
-def issue_access_token(user_id: int, auth_version: int = 0) -> str:
-    payload = json.dumps({"sub": int(user_id), "ver": int(auth_version), "exp": int(time.time()) + 3600}, separators=(",", ":")).encode()
+def issue_access_token(user_id: int, auth_version: int = 0, session_id: Optional[str] = None) -> str:
+    payload_data = {"sub": int(user_id), "ver": int(auth_version), "exp": int(time.time()) + 900}
+    if session_id:
+        payload_data["sid"] = str(session_id)
+    payload = json.dumps(payload_data, separators=(",", ":")).encode()
     body = base64.urlsafe_b64encode(payload).rstrip(b"=")
     signature = hmac.new(_auth_secret(), body, hashlib.sha256).digest()
     return body.decode() + "." + base64.urlsafe_b64encode(signature).rstrip(b"=").decode()
 
-def extract_user_from_auth_header(authorization: Optional[str]) -> Optional[dict]:
+def _verified_access_payload(authorization: Optional[str]) -> Optional[dict]:
     if not authorization:
         return None
     scheme, _, token = authorization.partition(" ")
@@ -1328,15 +1432,129 @@ def extract_user_from_auth_header(authorization: Optional[str]) -> Optional[dict
         payload = json.loads(base64.urlsafe_b64decode(body + "=" * (-len(body) % 4)))
         if not isinstance(payload.get("sub"), int) or int(payload.get("exp", 0)) <= int(time.time()):
             return None
-        user = engine.get_user_by_id(payload["sub"])
-        if not user or payload.get("ver") != int(user.get("auth_version", 0)):
-            return None
-        return user
+        return payload
     except (ValueError, TypeError, json.JSONDecodeError, UnicodeDecodeError):
         return None
 
 
+def extract_user_from_auth_header(authorization: Optional[str]) -> Optional[dict]:
+    payload = _verified_access_payload(authorization)
+    if not payload:
+        return None
+    if payload.get("sid") is not None:
+        if not isinstance(payload["sid"], str) or len(payload["sid"]) > 128:
+            return None
+        user = engine.get_user_by_auth_session(payload["sid"])
+    else:
+        # Continue accepting already-issued short-lived tokens during rollout.
+        user = engine.get_user_by_id(payload["sub"])
+    if not user or int(payload.get("sub", 0)) != int(user["id"]):
+        return None
+    if payload.get("ver") != int(user.get("auth_version", 0)):
+        return None
+    return user
 
+
+
+
+
+@app.post("/api/auth/refresh")
+def refresh_auth_session(
+    request: Request,
+    response: Response,
+    authorization: Optional[str] = Header(None),
+    refresh_cookie: Optional[str] = Cookie(None, alias=AUTH_REFRESH_COOKIE),
+):
+    _validate_auth_origin(request)
+    if not refresh_cookie:
+        # One-time upgrade for users who still have a valid pre-cookie token.
+        payload = _verified_access_payload(authorization)
+        user = extract_user_from_auth_header(authorization) if payload and not payload.get("sid") else None
+        if not user:
+            _clear_refresh_cookie(response, request)
+            raise HTTPException(status_code=401, detail={"code": "invalid_session", "message": "Session expired or invalid."})
+        session_id, new_refresh_cookie = _create_auth_session(user["id"], user.get("auth_version", 0))
+        _set_refresh_cookie(response, request, new_refresh_cookie)
+        return {"success": True, "token": issue_access_token(user["id"], user.get("auth_version", 0), session_id)}
+
+    token_hash = _refresh_token_hash(refresh_cookie)
+    next_refresh_cookie = secrets.token_urlsafe(48)
+    next_hash = _refresh_token_hash(next_refresh_cookie)
+    invalid_session = False
+    rotation_in_progress = False
+    session = None
+    with engine.conn() as c:
+        row = c.execute(
+            """SELECT s.session_id,s.user_id,s.auth_version,s.refresh_token_hash,
+                      s.previous_refresh_token_hash,s.previous_rotated_at,s.revoked_at,
+                      (s.expires_at <= CURRENT_TIMESTAMP) AS expired,
+                      u.auth_version AS current_auth_version
+               FROM auth_sessions s JOIN users u ON u.id=s.user_id
+               WHERE s.refresh_token_hash=%s OR s.previous_refresh_token_hash=%s
+               FOR UPDATE OF s""",
+            (token_hash, token_hash),
+        ).fetchone()
+        if not row:
+            invalid_session = True
+        elif row["revoked_at"] or row["expired"] or int(row["auth_version"]) != int(row["current_auth_version"]):
+            c.execute(
+                "UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP) WHERE session_id=%s",
+                (row["session_id"],),
+            )
+            invalid_session = True
+        elif row["refresh_token_hash"] != token_hash:
+            rotated_at = row.get("previous_rotated_at")
+            rotation_in_progress = bool(
+                rotated_at and (datetime.now(timezone.utc) - rotated_at).total_seconds() <= AUTH_ROTATION_GRACE_SECONDS
+            )
+            invalid_session = not rotation_in_progress
+        else:
+            c.execute(
+                """UPDATE auth_sessions
+                   SET previous_refresh_token_hash=refresh_token_hash,
+                       previous_rotated_at=CURRENT_TIMESTAMP,
+                       refresh_token_hash=%s,
+                       expires_at=CURRENT_TIMESTAMP + INTERVAL '30 days'
+                   WHERE session_id=%s""",
+                (next_hash, row["session_id"]),
+            )
+            session = {
+                "id": row["user_id"],
+                "auth_version": row["current_auth_version"],
+                "session_id": row["session_id"],
+            }
+
+    if rotation_in_progress:
+        raise HTTPException(status_code=409, detail={"code": "session_rotated", "message": "Session refresh completed in another tab. Retry."})
+    if invalid_session or not session:
+        _clear_refresh_cookie(response, request)
+        raise HTTPException(status_code=401, detail={"code": "invalid_session", "message": "Session expired or invalid."})
+
+    _set_refresh_cookie(response, request, next_refresh_cookie)
+    return {
+        "success": True,
+        "token": issue_access_token(session["id"], session["auth_version"], session["session_id"]),
+    }
+
+
+@app.post("/api/auth/logout")
+def logout_auth_session(
+    request: Request,
+    response: Response,
+    refresh_cookie: Optional[str] = Cookie(None, alias=AUTH_REFRESH_COOKIE),
+):
+    _validate_auth_origin(request)
+    if refresh_cookie:
+        token_hash = _refresh_token_hash(refresh_cookie)
+        with engine.conn() as c:
+            c.execute(
+                """UPDATE auth_sessions SET revoked_at=COALESCE(revoked_at,CURRENT_TIMESTAMP)
+                   WHERE (refresh_token_hash=%s OR previous_refresh_token_hash=%s)
+                     AND revoked_at IS NULL""",
+                (token_hash, token_hash),
+            )
+    _clear_refresh_cookie(response, request)
+    return {"success": True}
 
 
 @app.get("/api/auth/me")
@@ -1522,6 +1740,16 @@ def _resolve_location_payload(district_id, location_type, location_id, mouza_id)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
 
+app.include_router(deed_digitization_api.build_router(
+    engine=engine,
+    location_service=location_service,
+    ocr_service=ocr_service,
+    storage_service=deed_digitization_service,
+    get_user=extract_user_from_auth_header,
+    enforce_upload_rate_limit=_enforce_upload_rate_limit,
+))
+
+
 def _normalized_location_name(value: str) -> str:
     normalized = unicodedata.normalize("NFKC", str(value or "")).casefold()
     normalized = re.sub(r"[\W_]+", "", normalized, flags=re.UNICODE)
@@ -1561,6 +1789,13 @@ def verify_deed_api(req: DeedVerifyRequest, authorization: Optional[str] = Heade
         field_errors["location_id"] = "Choose an Upazila or Thana from the official location list."
     if req.union_id is not None and req.location_type != "upazila":
         field_errors["union_ward"] = "An official Union can only be selected under an Upazila."
+    if req.union_ward and req.union_id is None:
+        field_errors["union_ward"] = "ইউনিয়ন / ওয়ার্ড হাতে লেখা যাবে না; তালিকা থেকে সরকারি ইউনিয়ন নির্বাচন করুন।"
+    mouza_input_mode = req.mouza_input_mode or ("catalog" if req.mouza_id is not None else "manual")
+    if mouza_input_mode == "catalog" and req.mouza_id is None:
+        field_errors["mouza"] = "তালিকা থেকে মৌজা নির্বাচন করুন, অথবা হাতে লেখার পদ্ধতি বেছে নিন।"
+    if mouza_input_mode == "manual" and req.mouza_id is not None:
+        field_errors["mouza"] = "হাতে লেখার পদ্ধতিতে তালিকার Mouza ID পাঠানো যাবে না।"
     if req.deed_type and not engine.is_supported_deed_type(req.deed_type):
         field_errors["deed_type"] = "Choose a deed type from the list."
     if field_errors:
@@ -1568,6 +1803,7 @@ def verify_deed_api(req: DeedVerifyRequest, authorization: Optional[str] = Heade
 
     data = req.model_dump()
     data["owner_name"] = req.buyer_name
+    data["mouza_input_mode"] = mouza_input_mode
     if not _location_db_call(
         lambda: location_service.district_belongs_to_division(req.district_id, req.division_id)
     ):
@@ -1579,8 +1815,9 @@ def verify_deed_api(req: DeedVerifyRequest, authorization: Optional[str] = Heade
     try:
         resolved = _resolve_location_payload(req.district_id, req.location_type, req.location_id, req.mouza_id)
     except HTTPException as exc:
+        error_field = "mouza" if req.mouza_id is not None and "Mouza" in str(exc.detail) else "location_id"
         raise HTTPException(status_code=422, detail={
-            "field_errors": {"location_id": str(exc.detail)}
+            "field_errors": {error_field: str(exc.detail)}
         }) from exc
     data.update(
         division=resolved["division"], division_id=resolved["division_id"],
@@ -1589,6 +1826,7 @@ def verify_deed_api(req: DeedVerifyRequest, authorization: Optional[str] = Heade
         district_id=resolved["district_id"], upazila_id=resolved["upazila_id"],
         police_thana_id=resolved["police_thana_id"], mouza_id=resolved["mouza_id"],
     )
+    data["mouza_source"] = "official_catalog" if mouza_input_mode == "catalog" else "manual_unverified"
     data["union_ward"] = (req.union_ward or "").strip()
     data["union_id"] = None
     if req.union_id is not None:
@@ -2254,7 +2492,11 @@ def update_mutation(tracking_no: str, data: dict, authorization: Optional[str] =
     existing = engine.get_mutation_application(tracking_no)
     if not existing:
         raise HTTPException(status_code=404, detail="Application not found")
-    if auth_user["role"] not in ("officer", "admin") and existing.get("user_id") != auth_user["id"]:
+    if auth_user["role"] not in ("citizen", "officer", "admin"):
+        raise HTTPException(status_code=403, detail="Application update is not allowed for this role.")
+    if auth_user["role"] == "officer":
+        raise HTTPException(status_code=403, detail="Officers cannot edit applicant-submitted fields.")
+    if auth_user["role"] != "admin" and existing.get("user_id") != auth_user["id"]:
         raise HTTPException(status_code=403, detail="Cannot modify another user's application")
 
     res = engine.update_mutation_application(tracking_no, data)
@@ -2283,8 +2525,15 @@ def track_mutation(tracking_no: str, authorization: Optional[str] = Header(None)
 
         raise HTTPException(status_code=404, detail="উক্ত ট্র্যাকিং নম্বরে কোনো আবেদন পাওয়া যায়নি (Application not found)")
 
-    if auth_user["role"] not in ("officer", "admin") and res.get("user_id") != auth_user["id"]:
-        raise HTTPException(status_code=403, detail="Cannot access another user's application")
+    if auth_user["role"] == "officer":
+        try:
+            with engine.conn() as connection:
+                _require_officer_assignment(connection, "mutation_applications", "tracking_no", tracking_no, int(auth_user["id"]))
+        except UndefinedTable as exc:
+            raise HTTPException(status_code=503, detail="Application schema is unavailable.") from exc
+    elif auth_user["role"] != "admin" and res.get("user_id") != auth_user["id"]:
+        # Keep unknown IDs and another user's IDs indistinguishable in tracking search.
+        raise HTTPException(status_code=404, detail="এই Tracking ID-এর কোনো আবেদন আপনার অ্যাকাউন্টে পাওয়া যায়নি।")
 
     return res
 
@@ -2304,6 +2553,544 @@ def my_mutations(user_id: Optional[int] = None, authorization: Optional[str] = H
     return engine.list_mutation_applications(user_id=uid, role="citizen")
 
 
+def _database_has_column(connection, table_name: str, column_name: str) -> bool:
+    """Check optional assignment support without requiring a schema migration."""
+    return bool(connection.execute(
+        """SELECT EXISTS (
+               SELECT 1 FROM information_schema.columns
+               WHERE table_schema='public' AND table_name=%s AND column_name=%s
+           ) AS available""",
+        (table_name, column_name),
+    ).fetchone()["available"])
+
+
+def _require_officer_assignment(connection, table_name: str, key_column: str, key_value, officer_id: int):
+    """Fail closed for officers until an application is explicitly assigned."""
+    if table_name not in {"mutation_applications", "deed_digitization_applications"} or key_column not in {"id", "tracking_no"}:
+        raise HTTPException(status_code=403, detail="Officer assignment is unavailable.")
+    if not _database_has_column(connection, table_name, "assigned_officer_id"):
+        raise HTTPException(status_code=403, detail="Officer application assignments are not configured.")
+    row = connection.execute(
+        f"SELECT 1 FROM {table_name} WHERE {key_column}=%s AND assigned_officer_id=%s LIMIT 1",
+        (key_value, int(officer_id)),
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Application not found in this officer's assigned scope.")
+
+
+def _unified_application_query(
+    user_id: Optional[int],
+    include_deed_digitization: bool,
+    officer_id: Optional[int] = None,
+    mutation_has_assignment: bool = False,
+    deed_has_assignment: bool = False,
+):
+    """Build an owner- or assignment-scoped union over the existing workflows."""
+    mutation_assignment_select = (
+        "m.assigned_officer_id, assigned.name AS assigned_officer_name, assigned.username AS assigned_officer_username"
+        if mutation_has_assignment else
+        "NULL::integer AS assigned_officer_id, NULL::text AS assigned_officer_name, NULL::text AS assigned_officer_username"
+    )
+    deed_assignment_select = (
+        "a.assigned_officer_id, assigned.name AS assigned_officer_name, assigned.username AS assigned_officer_username"
+        if deed_has_assignment else
+        "NULL::integer AS assigned_officer_id, NULL::text AS assigned_officer_name, NULL::text AS assigned_officer_username"
+    )
+    mutation_assignment_join = "LEFT JOIN users assigned ON assigned.id=m.assigned_officer_id" if mutation_has_assignment else ""
+    deed_assignment_join = "LEFT JOIN users assigned ON assigned.id=a.assigned_officer_id" if deed_has_assignment else ""
+    mutation = """
+        SELECT 'mutation'::text AS application_type,
+               m.id::text AS application_id,
+               m.tracking_no AS tracking_id,
+               u.name AS applicant_name, u.username AS applicant_username,
+               m.status AS source_status,
+               CASE
+                 WHEN LOWER(REPLACE(m.status, ' ', '_')) IN ('additional_information_required','correction_required') THEN 'correction_required'
+                 WHEN LOWER(REPLACE(m.status, ' ', '_')) IN ('initial_review','document_verification') THEN 'under_review'
+                 ELSE LOWER(REPLACE(m.status, ' ', '_'))
+               END AS status,
+               m.created_at::timestamptz AS submitted_at,
+               m.updated_at::timestamptz AS updated_at,
+               m.deed_no AS reference,
+               m.district, m.upazila, m.mouza, m.plot_no,
+               {mutation_assignment_select},
+               h.remarks AS latest_progress
+        FROM mutation_applications m
+        LEFT JOIN users u ON u.id=m.user_id
+        {mutation_assignment_join}
+        LEFT JOIN LATERAL (
+            SELECT remarks FROM mutation_status_history
+            WHERE application_id = m.id OR tracking_no = m.tracking_no
+            ORDER BY id DESC LIMIT 1
+        ) h ON TRUE
+        WHERE LOWER(m.status) <> 'draft'
+    """.format(mutation_assignment_select=mutation_assignment_select, mutation_assignment_join=mutation_assignment_join)
+    parameters = []
+    if user_id is not None:
+        mutation += " AND m.user_id = %s"
+        parameters.append(int(user_id))
+    if officer_id is not None:
+        if mutation_has_assignment:
+            mutation += " AND m.assigned_officer_id = %s"
+            parameters.append(int(officer_id))
+        else:
+            mutation += " AND FALSE"
+    if include_deed_digitization:
+        mutation += """
+        UNION ALL
+        SELECT 'deed_digitization'::text AS application_type,
+               a.id::text AS application_id,
+               a.tracking_id,
+               u.name AS applicant_name, u.username AS applicant_username,
+               a.status AS source_status,
+               CASE WHEN a.status = 'digitization_processing' THEN 'processing' ELSE a.status END AS status,
+               a.submitted_at, a.updated_at,
+               a.deed_data->>'deed_no' AS reference,
+               a.deed_data->>'district' AS district,
+               a.deed_data->>'upazila' AS upazila,
+               a.deed_data->>'mouza' AS mouza,
+               a.deed_data->>'plot_id' AS plot_no,
+               {deed_assignment_select},
+               h.note AS latest_progress
+        FROM deed_digitization_applications a
+        LEFT JOIN users u ON u.id=a.owner_user_id
+        {deed_assignment_join}
+        LEFT JOIN LATERAL (
+            SELECT note FROM deed_digitization_status_history
+            WHERE application_id = a.id ORDER BY id DESC LIMIT 1
+        ) h ON TRUE
+        WHERE TRUE
+        """.format(deed_assignment_select=deed_assignment_select, deed_assignment_join=deed_assignment_join)
+        if user_id is not None:
+            mutation += " AND a.owner_user_id = %s"
+            parameters.append(int(user_id))
+        if officer_id is not None:
+            if deed_has_assignment:
+                mutation += " AND a.assigned_officer_id = %s"
+                parameters.append(int(officer_id))
+            else:
+                mutation += " AND FALSE"
+    return mutation, parameters
+
+
+@app.get("/api/applications/my")
+@app.get("/api/applications/my/history")
+def get_my_unified_application_history(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    application_type: str = Query("all", pattern="^(all|mutation|deed_digitization)$"),
+    application_status: Optional[str] = Query(None, alias="status"),
+    date_field: str = Query("submitted", pattern="^(submitted|updated)$"),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    sort: str = Query("latest", pattern="^(latest|oldest|recently_updated)$"),
+    authorization: Optional[str] = Header(None),
+):
+    auth_user = extract_user_from_auth_header(authorization)
+    if not auth_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if auth_user.get("role") != "citizen":
+        raise HTTPException(status_code=403, detail="Citizen application history is limited to citizen accounts.")
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="Invalid date range.")
+    allowed_statuses = {"submitted", "under_review", "correction_required", "resubmitted", "approved", "processing", "completed", "rejected", "cancelled"}
+    if application_status and application_status not in allowed_statuses:
+        raise HTTPException(status_code=422, detail="Unknown application status.")
+
+    try:
+        with engine.conn() as connection:
+            deed_schema_available = bool(connection.execute(
+                "SELECT to_regclass('public.deed_digitization_applications') IS NOT NULL AS available"
+            ).fetchone()["available"])
+            union_sql, union_params = _unified_application_query(int(auth_user["id"]), deed_schema_available)
+            summary = connection.execute(
+                """SELECT COUNT(*) AS total,
+                          COUNT(*) FILTER (WHERE status IN ('submitted','resubmitted','correction_required')) AS pending,
+                          COUNT(*) FILTER (WHERE status='under_review') AS under_review,
+                          COUNT(*) FILTER (WHERE status='completed' OR (application_type='mutation' AND status='approved')) AS completed,
+                          COUNT(*) FILTER (WHERE status IN ('rejected','cancelled')) AS closed
+                   FROM (""" + union_sql + ") apps", union_params,
+            ).fetchone()
+            filters = []
+            params = list(union_params)
+            if application_type != "all":
+                filters.append("application_type=%s")
+                params.append(application_type)
+            if application_status:
+                filters.append("status=%s")
+                params.append(application_status)
+            timestamp_column = "submitted_at" if date_field == "submitted" else "updated_at"
+            if date_from:
+                filters.append(f"{timestamp_column}::date >= %s")
+                params.append(date_from)
+            if date_to:
+                filters.append(f"{timestamp_column}::date <= %s")
+                params.append(date_to)
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+            order_sql = "updated_at DESC, submitted_at DESC" if sort == "recently_updated" else ("submitted_at ASC, application_id ASC" if sort == "oldest" else "submitted_at DESC, application_id DESC")
+            count = connection.execute("SELECT COUNT(*) AS total FROM (" + union_sql + ") apps" + where_sql, [*params]).fetchone()["total"]
+            rows = connection.execute(
+                "SELECT * FROM (" + union_sql + ") apps" + where_sql + f" ORDER BY {order_sql} LIMIT %s OFFSET %s",
+                [*params, page_size, (page - 1) * page_size],
+            ).fetchall()
+    except UndefinedTable as exc:
+        raise HTTPException(status_code=503, detail="Application history schema is unavailable.") from exc
+
+    return {
+        "items": [dict(row) for row in rows],
+        "total": int(count),
+        "page": page,
+        "page_size": page_size,
+        "summary": {key: int(summary[key] or 0) for key in ("total", "pending", "under_review", "completed", "closed")},
+        "available_types": ["mutation"] + (["deed_digitization"] if deed_schema_available else []),
+    }
+
+
+@app.get("/api/applications/admin")
+def get_unified_application_admin_queue(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    application_type: str = Query("all", pattern="^(all|mutation|deed_digitization)$"),
+    application_status: Optional[str] = Query(None, alias="status"),
+    q: str = Query("", max_length=160),
+    date_field: str = Query("submitted", pattern="^(submitted|updated)$"),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    sort: str = Query("latest", pattern="^(latest|oldest|recently_updated)$"),
+    authorization: Optional[str] = Header(None),
+):
+    auth_user = extract_user_from_auth_header(authorization)
+    if not auth_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if auth_user.get("role") not in ("officer", "admin"):
+        raise HTTPException(status_code=403, detail="Officer or admin access required")
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="Invalid date range.")
+    allowed_statuses = {"pending", "submitted", "under_review", "correction_required", "resubmitted", "approved", "processing", "completed", "rejected", "cancelled"}
+    if application_status and application_status not in allowed_statuses:
+        raise HTTPException(status_code=422, detail="Unknown application status.")
+    try:
+        with engine.conn() as connection:
+            deed_schema_available = bool(connection.execute(
+                "SELECT to_regclass('public.deed_digitization_applications') IS NOT NULL AS available"
+            ).fetchone()["available"])
+            is_officer = auth_user.get("role") == "officer"
+            mutation_has_assignment = _database_has_column(connection, "mutation_applications", "assigned_officer_id")
+            deed_has_assignment = (
+                _database_has_column(connection, "deed_digitization_applications", "assigned_officer_id")
+                if deed_schema_available else False
+            )
+            union_sql, union_params = _unified_application_query(
+                None, deed_schema_available,
+                officer_id=int(auth_user["id"]) if is_officer else None,
+                mutation_has_assignment=mutation_has_assignment,
+                deed_has_assignment=deed_has_assignment,
+            )
+            filters = []
+            params = list(union_params)
+            if application_type != "all":
+                filters.append("application_type=%s")
+                params.append(application_type)
+            if application_status == "pending":
+                filters.append("status IN ('submitted','resubmitted','correction_required')")
+            elif application_status == "approved":
+                filters.append("(status='approved' OR (application_type='deed_digitization' AND status='completed'))")
+            elif application_status:
+                filters.append("status=%s")
+                params.append(application_status)
+            if q.strip():
+                filters.append("(tracking_id ILIKE %s OR COALESCE(applicant_name,'') ILIKE %s OR COALESCE(applicant_username,'') ILIKE %s)")
+                search_value = f"%{q.strip()}%"
+                params.extend((search_value, search_value, search_value))
+            timestamp_column = "submitted_at" if date_field == "submitted" else "updated_at"
+            if date_from:
+                filters.append(f"{timestamp_column}::date >= %s")
+                params.append(date_from)
+            if date_to:
+                filters.append(f"{timestamp_column}::date <= %s")
+                params.append(date_to)
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+            order_sql = "updated_at DESC, submitted_at DESC" if sort == "recently_updated" else ("submitted_at ASC, application_id ASC" if sort == "oldest" else "submitted_at DESC, application_id DESC")
+            total = connection.execute("SELECT COUNT(*) AS total FROM (" + union_sql + ") apps" + where_sql, params).fetchone()["total"]
+            rows = connection.execute(
+                "SELECT * FROM (" + union_sql + ") apps" + where_sql + f" ORDER BY {order_sql} LIMIT %s OFFSET %s",
+                [*params, page_size, (page - 1) * page_size],
+            ).fetchall()
+            summary = connection.execute(
+                """SELECT COUNT(*) AS total,
+                          COUNT(*) FILTER (WHERE status IN ('submitted','resubmitted','correction_required')) AS pending,
+                          COUNT(*) FILTER (WHERE status='under_review') AS under_review,
+                          COUNT(*) FILTER (WHERE status IN ('approved','processing','completed')) AS completed,
+                          COUNT(*) FILTER (WHERE status IN ('rejected','cancelled')) AS closed
+                   FROM (""" + union_sql + ") apps", union_params,
+            ).fetchone()
+    except UndefinedTable as exc:
+        raise HTTPException(status_code=503, detail="Application history schema is unavailable.") from exc
+    return {
+        "items": [dict(row) for row in rows], "total": int(total), "page": page, "page_size": page_size,
+        "available_types": ["mutation"] + (["deed_digitization"] if deed_schema_available else []),
+        "summary": {key: int(summary[key] or 0) for key in ("total", "pending", "under_review", "completed", "closed")},
+        "assignment_scope_configured": None if auth_user.get("role") == "admin" else (
+            mutation_has_assignment and (not deed_schema_available or deed_has_assignment)
+        ),
+    }
+
+
+@app.get("/api/applications/staff-history")
+def get_staff_application_history(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=50),
+    application_type: str = Query("all", pattern="^(all|mutation|deed_digitization)$"),
+    application_status: Optional[str] = Query(None, alias="status"),
+    q: str = Query("", max_length=160),
+    date_field: str = Query("submitted", pattern="^(submitted|updated)$"),
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    sort: str = Query("latest", pattern="^(latest|oldest|recently_updated)$"),
+    authorization: Optional[str] = Header(None),
+):
+    """System-wide read-only history for staff; does not grant review/action rights."""
+    auth_user = extract_user_from_auth_header(authorization)
+    if not auth_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if auth_user.get("role") not in ("officer", "admin"):
+        raise HTTPException(status_code=403, detail="Officer or admin access required")
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(status_code=422, detail="Invalid date range.")
+    allowed_statuses = {
+        "submitted", "under_review", "correction_required", "resubmitted", "approved",
+        "processing", "completed", "rejected", "cancelled",
+    }
+    if application_status and application_status not in allowed_statuses:
+        raise HTTPException(status_code=422, detail="Unknown application status.")
+
+    try:
+        with engine.conn() as connection:
+            deed_schema_available = bool(connection.execute(
+                "SELECT to_regclass('public.deed_digitization_applications') IS NOT NULL AS available"
+            ).fetchone()["available"])
+            mutation_has_assignment = _database_has_column(connection, "mutation_applications", "assigned_officer_id")
+            deed_has_assignment = (
+                _database_has_column(connection, "deed_digitization_applications", "assigned_officer_id")
+                if deed_schema_available else False
+            )
+            # No officer_id is supplied here by design: this read-only history
+            # feature is system-wide for both staff roles. Review endpoints keep
+            # their stricter assignment checks independently.
+            union_sql, union_params = _unified_application_query(
+                None, deed_schema_available,
+                mutation_has_assignment=mutation_has_assignment,
+                deed_has_assignment=deed_has_assignment,
+            )
+            filters = ["LOWER(status) <> 'draft'"]
+            params = list(union_params)
+            if application_type != "all":
+                filters.append("application_type=%s")
+                params.append(application_type)
+            if application_status:
+                if application_status == "approved":
+                    filters.append("(status='approved' OR (application_type='deed_digitization' AND status='completed'))")
+                else:
+                    filters.append("status=%s")
+                    params.append(application_status)
+            if q.strip():
+                filters.append("(tracking_id ILIKE %s OR COALESCE(applicant_name,'') ILIKE %s OR COALESCE(applicant_username,'') ILIKE %s)")
+                value = f"%{q.strip()}%"
+                params.extend((value, value, value))
+            timestamp_column = "submitted_at" if date_field == "submitted" else "updated_at"
+            if date_from:
+                filters.append(f"{timestamp_column}::date >= %s")
+                params.append(date_from)
+            if date_to:
+                filters.append(f"{timestamp_column}::date <= %s")
+                params.append(date_to)
+            where_sql = " WHERE " + " AND ".join(filters) if filters else ""
+            order_sql = "updated_at DESC, submitted_at DESC" if sort == "recently_updated" else (
+                "submitted_at ASC, application_id ASC" if sort == "oldest" else "submitted_at DESC, application_id DESC"
+            )
+            total = connection.execute(
+                "SELECT COUNT(*) AS total FROM (" + union_sql + ") apps" + where_sql, params,
+            ).fetchone()["total"]
+            rows = connection.execute(
+                "SELECT * FROM (" + union_sql + ") apps" + where_sql +
+                f" ORDER BY {order_sql} LIMIT %s OFFSET %s",
+                [*params, page_size, (page - 1) * page_size],
+            ).fetchall()
+            summary = connection.execute(
+                """SELECT COUNT(*) AS total,
+                          COUNT(*) FILTER (WHERE status IN ('submitted','resubmitted','correction_required')) AS pending,
+                          COUNT(*) FILTER (WHERE status='under_review') AS under_review,
+                          COUNT(*) FILTER (WHERE status='completed' OR (application_type='mutation' AND status='approved')) AS completed,
+                          COUNT(*) FILTER (WHERE status IN ('rejected','cancelled')) AS closed
+                   FROM (""" + union_sql + ") apps WHERE LOWER(status) <> 'draft'", union_params,
+            ).fetchone()
+    except UndefinedTable as exc:
+        raise HTTPException(status_code=503, detail="Application history schema is unavailable.") from exc
+    return {
+        "items": [dict(row) for row in rows], "total": int(total), "page": page, "page_size": page_size,
+        "available_types": ["mutation"] + (["deed_digitization"] if deed_schema_available else []),
+        "summary": {key: int(summary[key] or 0) for key in ("total", "pending", "under_review", "completed", "closed")},
+    }
+
+
+@app.get("/api/applications/staff-history/track/{tracking_id}")
+def get_staff_application_history_detail(tracking_id: str, authorization: Optional[str] = Header(None)):
+    """Read a full application and timeline for authenticated Admin/Officer history."""
+    auth_user = extract_user_from_auth_header(authorization)
+    if not auth_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if auth_user.get("role") not in ("officer", "admin"):
+        raise HTTPException(status_code=403, detail="Officer or admin access required")
+    if not tracking_id or len(tracking_id) > 100:
+        raise HTTPException(status_code=404, detail="Application not found.")
+    try:
+        with engine.conn() as connection:
+            mutation = connection.execute(
+                """SELECT m.*, u.username AS account_username
+                   FROM mutation_applications m LEFT JOIN users u ON u.id=m.user_id
+                   WHERE UPPER(m.tracking_no)=UPPER(%s)""",
+                (tracking_id.strip(),),
+            ).fetchone()
+            if mutation:
+                details = dict(mutation)
+                details["applicant_name"] = details.get("applicant_name") or details.get("name")
+                details.pop("applicant_nid", None)
+                raw_docs = details.get("supporting_docs")
+                try:
+                    details["supporting_docs"] = json.loads(raw_docs) if raw_docs else []
+                except (TypeError, ValueError):
+                    details["supporting_docs"] = []
+                history = connection.execute(
+                    """SELECT to_status AS status,changed_by_name AS actor_name,changed_by_role AS actor_role,
+                              remarks AS note,created_at
+                       FROM mutation_status_history
+                       WHERE application_id=%s OR tracking_no=%s ORDER BY id""",
+                    (mutation["id"], mutation["tracking_no"]),
+                ).fetchall()
+                return {
+                    "application_type": "mutation", "tracking_id": details["tracking_no"],
+                    "status": details["status"], "submitted_at": details["created_at"],
+                    "updated_at": details["updated_at"], "applicant_name": details.get("applicant_name"),
+                    "applicant_username": details.get("account_username"), "details": details,
+                    "timeline": [dict(item) for item in history], "documents": [],
+                }
+
+            deed_table_available = bool(connection.execute(
+                "SELECT to_regclass('public.deed_digitization_applications') IS NOT NULL AS available"
+            ).fetchone()["available"])
+            if deed_table_available:
+                deed = connection.execute(
+                    """SELECT a.*, u.name AS applicant_name, u.username AS applicant_username
+                       FROM deed_digitization_applications a JOIN users u ON u.id=a.owner_user_id
+                       WHERE UPPER(a.tracking_id)=UPPER(%s)""",
+                    (tracking_id.strip(),),
+                ).fetchone()
+                if deed:
+                    history = connection.execute(
+                        """SELECT h.to_status AS status,h.actor_role,u.name AS actor_name,h.note,h.created_at
+                           FROM deed_digitization_status_history h LEFT JOIN users u ON u.id=h.actor_user_id
+                           WHERE h.application_id=%s ORDER BY h.id""",
+                        (deed["id"],),
+                    ).fetchall()
+                    documents = connection.execute(
+                        """SELECT id,original_filename,content_type,byte_length,created_at
+                           FROM deed_digitization_documents WHERE application_id=%s ORDER BY id""",
+                        (deed["id"],),
+                    ).fetchall()
+                    digital_deed = None
+                    if deed.get("finalized_deed_id") and connection.execute(
+                        "SELECT to_regclass('public.deed_digitization_metadata') IS NOT NULL AS available"
+                    ).fetchone()["available"]:
+                        digital_deed = connection.execute(
+                            """SELECT deed_id,digital_deed_id,record_status FROM deed_digitization_metadata
+                               WHERE deed_id=%s AND owner_user_id=%s""",
+                            (deed["finalized_deed_id"], deed["owner_user_id"]),
+                        ).fetchone()
+                    return {
+                        "application_type": "deed_digitization", "tracking_id": deed["tracking_id"],
+                        "status": deed["status"], "submitted_at": deed["submitted_at"],
+                        "updated_at": deed["updated_at"], "applicant_name": deed["applicant_name"],
+                        "applicant_username": deed["applicant_username"],
+                        "details": {"id": int(deed["id"]), "entry_method": deed["entry_method"],
+                                    "deed_data": deed["deed_data"], "ocr_text": deed["ocr_text"]},
+                        "timeline": [dict(item) for item in history], "documents": [dict(item) for item in documents],
+                        "digital_deed": dict(digital_deed) if digital_deed else None,
+                    }
+    except UndefinedTable as exc:
+        raise HTTPException(status_code=503, detail="Application history schema is unavailable.") from exc
+    raise HTTPException(status_code=404, detail="Application not found.")
+
+
+@app.get("/api/applications/my/track/{tracking_id}")
+def get_my_application_by_tracking_id(tracking_id: str, authorization: Optional[str] = Header(None)):
+    """Exact tracking lookup. A missing and another user's ID are indistinguishable."""
+    auth_user = extract_user_from_auth_header(authorization)
+    if not auth_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if auth_user.get("role") != "citizen":
+        raise HTTPException(status_code=403, detail="Citizen tracking is limited to citizen accounts.")
+    if not tracking_id or len(tracking_id) > 100:
+        raise HTTPException(status_code=404, detail="এই Tracking ID-এর কোনো আবেদন আপনার অ্যাকাউন্টে পাওয়া যায়নি।")
+    try:
+        with engine.conn() as connection:
+            mutation = connection.execute(
+                "SELECT * FROM mutation_applications WHERE user_id=%s AND UPPER(tracking_no)=UPPER(%s)",
+                (int(auth_user["id"]), tracking_id.strip()),
+            ).fetchone()
+            if mutation:
+                history = connection.execute(
+                    """SELECT to_status AS status,changed_by_name AS actor_name,changed_by_role AS actor_role,remarks AS note,created_at
+                       FROM mutation_status_history WHERE application_id=%s OR tracking_no=%s ORDER BY id""",
+                    (mutation["id"], mutation["tracking_no"]),
+                ).fetchall()
+                details = dict(mutation)
+                raw_docs = details.get("supporting_docs")
+                try:
+                    details["supporting_docs"] = json.loads(raw_docs) if raw_docs else []
+                except (TypeError, ValueError):
+                    details["supporting_docs"] = []
+                details.pop("applicant_nid", None)
+                return {"application_type": "mutation", "tracking_id": details["tracking_no"], "status": details["status"],
+                        "submitted_at": details["created_at"], "updated_at": details["updated_at"], "details": details,
+                        "timeline": [dict(item) for item in history], "digital_deed": None}
+
+            deed_table_available = bool(connection.execute(
+                "SELECT to_regclass('public.deed_digitization_applications') IS NOT NULL AS available"
+            ).fetchone()["available"])
+            if deed_table_available:
+                deed = connection.execute(
+                    "SELECT * FROM deed_digitization_applications WHERE owner_user_id=%s AND UPPER(tracking_id)=UPPER(%s)",
+                    (int(auth_user["id"]), tracking_id.strip()),
+                ).fetchone()
+                if deed:
+                    history = connection.execute(
+                        """SELECT h.to_status AS status,h.actor_role,u.name AS actor_name,h.note,h.created_at
+                           FROM deed_digitization_status_history h LEFT JOIN users u ON u.id=h.actor_user_id
+                           WHERE h.application_id=%s ORDER BY h.id""",
+                        (deed["id"],),
+                    ).fetchall()
+                    documents = connection.execute(
+                        "SELECT id,original_filename,content_type,byte_length,created_at FROM deed_digitization_documents WHERE application_id=%s ORDER BY id",
+                        (deed["id"],),
+                    ).fetchall()
+                    digital_deed = None
+                    if deed.get("finalized_deed_id") and connection.execute(
+                        "SELECT to_regclass('public.deed_digitization_metadata') IS NOT NULL AS available"
+                    ).fetchone()["available"]:
+                        digital_deed = connection.execute(
+                            "SELECT deed_id,digital_deed_id,record_status FROM deed_digitization_metadata WHERE deed_id=%s AND owner_user_id=%s",
+                            (deed["finalized_deed_id"], int(auth_user["id"])),
+                        ).fetchone()
+                    return {"application_type": "deed_digitization", "tracking_id": deed["tracking_id"], "status": deed["status"],
+                            "submitted_at": deed["submitted_at"], "updated_at": deed["updated_at"],
+                            "details": {"id": int(deed["id"]), "entry_method": deed["entry_method"], "deed_data": deed["deed_data"], "ocr_text": deed["ocr_text"]},
+                            "timeline": [dict(item) for item in history], "documents": [dict(item) for item in documents],
+                            "digital_deed": dict(digital_deed) if digital_deed else None}
+    except UndefinedTable as exc:
+        raise HTTPException(status_code=503, detail="Application history schema is unavailable.") from exc
+    raise HTTPException(status_code=404, detail="এই Tracking ID-এর কোনো আবেদন আপনার অ্যাকাউন্টে পাওয়া যায়নি।")
+
+
 
 
 
@@ -2315,10 +3102,71 @@ def all_mutations(status_filter: Optional[str] = None, authorization: Optional[s
         raise HTTPException(status_code=401, detail="Authentication required")
     if auth_user.get("role") not in ("officer", "admin"):
         raise HTTPException(status_code=403, detail="Officer or admin access required")
-    return engine.list_mutation_applications(status_filter=status_filter)
+    if auth_user.get("role") == "admin":
+        return engine.list_mutation_applications(status_filter=status_filter, exclude_drafts=True)
+    return engine.list_mutation_applications(
+        status_filter=status_filter, assigned_officer_id=int(auth_user["id"]), exclude_drafts=True,
+    )
 
 
 
+
+
+@app.post("/api/mutation/assign/{tracking_no}")
+def assign_mutation_application(
+    tracking_no: str,
+    assignment: MutationAssignmentRequest,
+    authorization: Optional[str] = Header(None),
+):
+    auth_user = extract_user_from_auth_header(authorization)
+    if not auth_user:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    if auth_user.get("role") != "admin":
+        raise HTTPException(status_code=403, detail="Only admins can assign applications.")
+
+    officer = None
+    next_officer_id = None
+    with engine.conn() as connection:
+        application = connection.execute(
+            "SELECT id,tracking_no,status,assigned_officer_id FROM mutation_applications WHERE UPPER(tracking_no)=UPPER(%s) FOR UPDATE",
+            (tracking_no.strip(),),
+        ).fetchone()
+        if not application:
+            raise HTTPException(status_code=404, detail="Application not found.")
+        assignable_statuses = {
+            "submitted", "under review", "initial review", "document verification",
+            "decision pending", "correction required", "additional information required", "resubmitted",
+        }
+        if str(application["status"]).strip().lower() not in assignable_statuses:
+            raise HTTPException(status_code=409, detail="Only applications awaiting review can be assigned.")
+        if assignment.officer_id is not None:
+            officer = connection.execute(
+                "SELECT id,name,username FROM users WHERE id=%s AND role='officer'",
+                (int(assignment.officer_id),),
+            ).fetchone()
+            if not officer:
+                raise HTTPException(status_code=422, detail="Select a valid officer account.")
+            next_officer_id = int(officer["id"])
+        if application.get("assigned_officer_id") == next_officer_id:
+            return {"tracking_id": application["tracking_no"], "assigned_officer_id": next_officer_id,
+                    "assigned_officer_name": officer["name"] if officer else None, "unchanged": True}
+        connection.execute(
+            "UPDATE mutation_applications SET assigned_officer_id=%s,updated_at=%s WHERE id=%s",
+            (next_officer_id, datetime.now().isoformat(), int(application["id"])),
+        )
+        audit_details = f"tracking_id={application['tracking_no']}; officer_id={next_officer_id}"
+
+    engine.log_audit(auth_user.get("name", ""), "admin", "MUTATION_ASSIGNED" if officer else "MUTATION_UNASSIGNED",
+                     "mutation_applications", audit_details)
+    if officer:
+        engine.add_notification(
+            int(officer["id"]), "officer",
+            "নতুন নামজারি আবেদন দায়িত্ব দেওয়া হয়েছে", "A mutation application was assigned to you",
+            "ট্র্যাকিং নম্বর: " + application["tracking_no"], "Tracking ID: " + application["tracking_no"],
+            "info", f"/officer/review/{application['tracking_no']}",
+        )
+    return {"tracking_id": application["tracking_no"], "assigned_officer_id": next_officer_id,
+            "assigned_officer_name": officer["name"] if officer else None, "unchanged": False}
 
 
 @app.post("/api/mutation/start-review/{tracking_no}")
@@ -2349,6 +3197,13 @@ def start_review_endpoint(tracking_no: str, authorization: Optional[str] = Heade
 
         raise HTTPException(status_code=404, detail="আবেদন পাওয়া যায়নি (Application not found)")
 
+    if officer_role == "officer":
+        try:
+            with engine.conn() as connection:
+                _require_officer_assignment(connection, "mutation_applications", "tracking_no", tracking_no, int(auth_user["id"]))
+        except UndefinedTable as exc:
+            raise HTTPException(status_code=503, detail="Application schema is unavailable.") from exc
+
 
 
     cur_status = app_record.get("status")
@@ -2371,9 +3226,14 @@ def start_review_endpoint(tracking_no: str, authorization: Optional[str] = Heade
 
             changed_by_role=officer_role,
 
-            remarks="সহকারী কমিশনার (ভূমি) কর্তৃক নথি পর্যালোচনা শুরু হয়েছে"
+            remarks="নথি পর্যালোচনা শুরু হয়েছে" if officer_role == "officer" else "প্রশাসক নথি পর্যালোচনা শুরু করেছেন",
+            changed_by_id=int(auth_user["id"]),
+            assigned_officer_id=int(auth_user["id"]) if officer_role == "officer" else None
 
         )
+
+    except PermissionError as e:
+        raise HTTPException(status_code=404, detail="Application not found in this officer's assigned scope.") from e
 
     except ValueError as e:
 
@@ -2403,7 +3263,7 @@ def resubmit_mutation_endpoint(
     app_record = engine.get_mutation_application(tracking_no)
     if not app_record:
         raise HTTPException(status_code=404, detail="Application not found")
-    if auth_user["role"] not in ("admin", "officer") and app_record.get("user_id") != auth_user["id"]:
+    if auth_user["role"] != "admin" and app_record.get("user_id") != auth_user["id"]:
         raise HTTPException(status_code=403, detail="Cannot resubmit another user's application")
     uid = auth_user["id"]
     uname = auth_user["name"]
@@ -2454,9 +3314,16 @@ def mutation_action(req: MutationActionRequest, authorization: Optional[str] = H
 
             )
 
-        officer_name = auth_user.get("name") or req.changed_by_name
+        officer_name = auth_user.get("name") or "Reviewer"
 
-        officer_role = auth_user.get("role") or req.changed_by_role
+        officer_role = auth_user["role"]
+
+        if officer_role == "officer":
+            try:
+                with engine.conn() as connection:
+                    _require_officer_assignment(connection, "mutation_applications", "tracking_no", req.tracking_no, int(auth_user["id"]))
+            except UndefinedTable as exc:
+                raise HTTPException(status_code=503, detail="Application schema is unavailable.") from exc
 
 
 
@@ -2477,11 +3344,19 @@ def mutation_action(req: MutationActionRequest, authorization: Optional[str] = H
 
             rejection_reason=req.rejection_reason or "",
 
-            correction_details=req.correction_details or ""
+            correction_details=req.correction_details or "",
+
+            changed_by_id=int(auth_user["id"]),
+
+            assigned_officer_id=int(auth_user["id"]) if officer_role == "officer" else None
 
         )
 
         return updated
+
+    except PermissionError as e:
+
+        raise HTTPException(status_code=404, detail="Application not found in this officer's assigned scope.") from e
 
     except ValueError as e:
 
@@ -2527,6 +3402,8 @@ async def chat_message_api(req: ChatMessageRequest, authorization: Optional[str]
 
             tracking_no=req.tracking_no,
 
+            current_page=req.current_page,
+
         )
 
 
@@ -2569,6 +3446,8 @@ def chat_status_api():
 
             "ai_configured": configured,
 
+            "provider_availability": chat_service.get_provider_availability(),
+
             "provider": chat_service.get_provider_name(),
 
             "model": chat_service.get_model_name(),
@@ -2609,7 +3488,21 @@ def get_mutation_stats(authorization: Optional[str] = Header(None)):
     user = extract_user_from_auth_header(authorization)
     if not user or user["role"] not in ("admin", "officer"):
         raise HTTPException(status_code=403, detail="Officer or admin access required")
-    return engine.mutation_stats()
+    if user["role"] == "admin":
+        return engine.mutation_stats()
+    with engine.conn() as connection:
+        has_assignment = _database_has_column(connection, "mutation_applications", "assigned_officer_id")
+        counts = {status: 0 for status in engine.VALID_MUTATION_STATUSES}
+        if has_assignment:
+            rows = connection.execute(
+                "SELECT status,COUNT(*) AS n FROM mutation_applications WHERE assigned_officer_id=%s GROUP BY status",
+                (int(user["id"]),),
+            ).fetchall()
+            for row in rows:
+                counts[row["status"]] = int(row["n"])
+    counts["total"] = sum(counts.values())
+    counts["pending"] = sum(counts.get(status, 0) for status in ["Submitted", "Initial Review", "Document Verification", "Additional Information Required", "Decision Pending"])
+    return counts
 
 
 
@@ -2775,8 +3668,25 @@ def get_dashboard_stats(authorization: Optional[str] = Header(None)):
     auth_user = extract_user_from_auth_header(authorization)
     if not auth_user:
         raise HTTPException(status_code=401, detail="Authentication required")
-    if auth_user["role"] in ("admin", "officer"):
+    if auth_user["role"] == "admin":
         return engine.dashboard_stats()
+    if auth_user["role"] == "officer":
+        with engine.conn() as c:
+            has_assignment = _database_has_column(c, "mutation_applications", "assigned_officer_id")
+            mutations = c.execute(
+                "SELECT status,COUNT(*) AS total FROM mutation_applications WHERE assigned_officer_id=%s GROUP BY status" if has_assignment else
+                "SELECT status,COUNT(*) AS total FROM mutation_applications WHERE FALSE GROUP BY status",
+                (int(auth_user["id"]),) if has_assignment else (),
+            ).fetchall()
+        mutation_stats = {row["status"].lower().replace(" ", "_"): int(row["total"]) for row in mutations}
+        mutation_stats["total"] = sum(mutation_stats.values())
+        return {
+            "mutation_stats": mutation_stats,
+            "record_risk_stats": {"high": 0, "medium": 0, "low": 0},
+            "due_diligence_stats": {"total": 0, "high": 0},
+            "personal_stats": {"verifications": 0, "reports": 0},
+            "assignment_scope_configured": has_assignment,
+        }
     with engine.conn() as c:
         mutations = c.execute(
             "SELECT status, COUNT(*) AS total FROM mutation_applications WHERE user_id=%s GROUP BY status",
@@ -2803,7 +3713,12 @@ def get_dashboard_stats(authorization: Optional[str] = Header(None)):
 
 @app.get("/api/search/binary")
 
-def search_binary(q: str = "", category: str = "all", limit: int = 25):
+def search_binary(
+    q: str = "",
+    category: str = "all",
+    limit: int = 25,
+    authorization: Optional[str] = Header(None),
+):
 
     """
     Search land records through PostgreSQL queries and available indexes.
@@ -2811,7 +3726,13 @@ def search_binary(q: str = "", category: str = "all", limit: int = 25):
 
     """
 
-    return engine.binary_search_land_records(query=q, category=category, limit=limit)
+    auth_user = extract_user_from_auth_header(authorization)
+    return engine.binary_search_land_records(
+        query=q,
+        category=category,
+        limit=limit,
+        mutation_owner_id=int(auth_user["id"]) if auth_user else None,
+    )
 
 
 

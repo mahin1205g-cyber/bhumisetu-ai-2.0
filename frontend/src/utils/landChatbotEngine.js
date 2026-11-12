@@ -9,11 +9,11 @@
 export const INITIAL_GREETING = {
   bn: {
     title: "স্বাগতম! আমি ভূমিসেতু এআই সহকারী 🤖",
-    text: "আমি বাংলাদেশের ভূমি সেবা, নামজারি, দলিল, খতিয়ান ও জমি-সংক্রান্ত প্রশ্নে সহায়তা করি। আপনার প্রশ্ন বাংলা, বাংলিশ বা ইংরেজিতে লিখতে পারেন—নিচের যেকোনো বিষয় বেছে নিতে পারেন অথবা সরাসরি লিখুন।",
+    text: "আমি Bhumisetu-এর সেবা ও ব্যবহার বুঝতে, জমি-সংক্রান্ত সাধারণ প্রশ্নে এবং অন্যান্য সাধারণ বিষয়েও সাহায্য করি। বাংলা, বাংলিশ বা ইংরেজিতে লিখুন—অথবা সরাসরি প্রশ্ন করুন।",
   },
   en: {
     title: "Welcome! I am Bhumisetu AI Assistant 🤖",
-    text: "I can help with Bangladesh land services, mutation (e-Namjari), deeds, khatian and property questions. Write in Bengali, Banglish or English—pick a topic below or just ask.",
+    text: "I can explain Bhumisetu's services, answer general land questions, and help with other general topics. Write in Bengali, Banglish or English—pick a topic below or just ask.",
   }
 };
 
@@ -56,8 +56,8 @@ export const QUICK_PROMPTS = [
   {
     id: "fraud_prevention",
     icon: "⚠️",
-    labelBn: "এক জমি একাধিকবার বিক্রি রোধ",
-    labelEn: "Prevent duplicate parcel sale",
-    query: "একই জমি একাধিক ব্যক্তির কাছে বিক্রি প্রতিরোধে এই প্ল্যাটফর্ম কীভাবে কাজ করে?"
+    labelBn: "জমি কেনার আগে ঝুঁকি রিপোর্ট",
+    labelEn: "Pre-purchase risk screening",
+    query: "জমি কেনার আগে ভূমিসেতুর ঝুঁকি রিপোর্ট কী তথ্য দেখে, আর এটি কী নিশ্চিত করে না?"
   }
 ];

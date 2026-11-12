@@ -10,6 +10,7 @@ public/
 venv/
 __pycache__/
 .pytest_cache/
+backend/var/
 *.py[cod]
 *.db
 *.db-shm

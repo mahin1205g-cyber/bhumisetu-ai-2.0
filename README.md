@@ -88,12 +88,12 @@ pytest tests
 
 | Provider | Environment variables |
 | --- | --- |
-| Google Gemini (প্রস্তাবিত) | `GEMINI_API_KEY` (ঐচ্ছিক: `GEMINI_MODEL`, ডিফল্ট `gemini-2.5-flash`) |
+| Google Gemini (প্রস্তাবিত) | `GEMINI_API_KEY` (ঐচ্ছিক: `GEMINI_MODEL`, ডিফল্ট `gemini-3.8-flash`) |
 | OpenAI | `OPENAI_API_KEY` (ঐচ্ছিক: `OPENAI_MODEL`, ডিফল্ট `gpt-4o-mini`) |
 | OpenAI-compatible (Groq, DeepSeek, OpenRouter…) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL` |
 
 দুটি key একসাথে থাকলে `LLM_PROVIDER=gemini` বা `LLM_PROVIDER=openai` দিয়ে একটি বেছে নিন।
-অন্যান্য ঐচ্ছিক ভেরিয়েবল: `LLM_TIMEOUT_SECONDS` (ডিফল্ট ৩০), `LLM_MAX_OUTPUT_TOKENS` (ডিফল্ট ১০২৪)।
+অন্যান্য ঐচ্ছিক ভেরিয়েবল: `LLM_TIMEOUT_SECONDS` (ডিফল্ট ৯০ সেকেন্ড), `LLM_REQUEST_DEADLINE_SECONDS` (মোট request deadline, ডিফল্ট ৯০ সেকেন্ড), এবং `LLM_MAX_OUTPUT_TOKENS` (ডিফল্ট ১০২৪)।
 
 ### ২. লোকাল সেটআপ
 
@@ -149,7 +149,7 @@ cd backend && uvicorn main:app --reload --port 8000
 ```bash
 curl http://127.0.0.1:8000/api/chat/status
 ```
-`"ai_configured": true` এবং `"provider": "Google Gemini (gemini-2.5-flash)"` দেখালে
+`"ai_configured": true` এবং `"provider": "Google Gemini (gemini-3.8-flash)"` দেখালে
 লাইভ মডেল সক্রিয়। অথবা Swagger `/docs` → `POST /api/chat/message`-এ যেকোনো প্রশ্ন পাঠান।
 
 ### ৫. নিরাপত্তা ও আচরণ
@@ -210,6 +210,39 @@ python backend/bootstrap_user.py --role admin
 Development recovery checks the registered mobile number and NID, then returns a reset token directly to the caller. This is not an out-of-band identity check. Recovery endpoints are disabled when `APP_ENV=production` until a verified delivery provider is configured. Do not enable them for production by changing this guard alone.
 
 See [PRODUCTION_READINESS.md](PRODUCTION_READINESS.md) for secret configuration, upload limits, backup/restore steps, and the approval-gated migration procedure.
+
+## Deed digitization document storage
+
+The digitization scanner uses the existing Bengali/English OCR pipeline in
+`backend/ocr_service.py` (searchable PDF text extraction and Tesseract for scanned
+images/PDF pages). Uploaded originals are staged and then stored under
+`DEED_STORAGE_DIR`; when unset, the local default is `backend/var/deed-storage`.
+For deployments, point `DEED_STORAGE_DIR` at a persistent mounted volume with
+restricted access and backups. Ephemeral/serverless filesystems do not preserve
+original deed scans across redeploys or instance replacement.
+
+Applications, status history, and private document references use separate
+PostgreSQL workflow tables in `backend/migrations/20261112_deed_digitization_support.sql`.
+No application is written to `deeds` before an officer/admin approval transaction.
+Approval adds one canonical deed row and links it to its application metadata;
+the application ID uniqueness and row lock make approval retry-safe. Applicants
+can track status and download their own uploads; staff can review, request
+correction, approve, or reject. Approved copies receive a Bhumisetu digital ID
+and a random QR verification link that exposes only limited public metadata.
+
+The **Application History & Tracking** page combines existing Mutation records
+with deed-digitization applications without copying them into another table.
+`GET /api/applications/my` and `/my/history` return only records owned by the
+authenticated account; `GET /my/track/{tracking_id}` performs the same owner-scoped
+exact lookup. Staff use the separate role-checked `GET /api/applications/admin`
+search and the existing Mutation / Digitization review interfaces. Filters, sorting,
+counts, and pagination are backed by current PostgreSQL records.
+
+This migration is intentionally not applied automatically; follow the production
+backup, restore rehearsal, review, and approval procedure before applying it.
+The existing OCR extraction remains available without the schema; application
+submission and review require the migration. The current print/PDF action uses
+the browser print dialog (choose “Save as PDF” to download a PDF).
 
 ## Usernames and registration migration
 

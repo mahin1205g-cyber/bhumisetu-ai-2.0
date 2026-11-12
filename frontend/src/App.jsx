@@ -10,11 +10,15 @@ import { useAdaptivePerformance } from './hooks/useAdaptivePerformance';
 // Pages
 const LandingPage = lazy(() => import('./pages/LandingPage'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
+const OfficerDashboard = lazy(() => import('./pages/OfficerDashboard'));
 const DeedVerification = lazy(() => import('./pages/DeedVerification'));
+const DeedDigitization = lazy(() => import('./pages/DeedDigitization'));
+const DigitalDeedPublicVerify = lazy(() => import('./pages/DigitalDeedPublicVerify'));
 const DeedSearch = lazy(() => import('./pages/DeedSearch'));
 const VerificationResult = lazy(() => import('./pages/VerificationResult'));
 const SmartMutation = lazy(() => import('./pages/SmartMutation'));
 const ApplicationTracking = lazy(() => import('./pages/ApplicationTracking'));
+const UnifiedApplicationAdmin = lazy(() => import('./pages/UnifiedApplicationAdmin'));
 const OfficerReview = lazy(() => import('./pages/OfficerReview'));
 const DueDiligence = lazy(() => import('./pages/DueDiligence'));
 const DueDiligenceReport = lazy(() => import('./pages/DueDiligenceReport'));
@@ -78,7 +82,7 @@ function ScrollRevealContent({ children, pageKey, reducedMotion }) {
 }
 
 export default function App() {
-  const { user, lang } = useApp();
+  const { user, lang, authStatus, retrySessionRestore } = useApp();
   const adaptivePerformance = useAdaptivePerformance();
 
   useEffect(() => {
@@ -92,13 +96,14 @@ export default function App() {
   const getTabFromHash = () => {
     if (typeof window === 'undefined') return 'home';
     const hash = window.location.hash.replace(/^#\/?/, '').split('?')[0].trim();
+    const route = hash.split('/')[0];
     const validTabs = [
-      'home', 'dashboard', 'deed-verify', 'deed-search', 'verification-result', 'mutation',
-      'mutation-track', 'officer-review', 'due-diligence', 'due-diligence-report',
+      'home', 'dashboard', 'deed-digitization', 'deed-verify', 'deed-search', 'verification-result', 'verify-deed', 'mutation',
+      'mutation-track', 'application-admin', 'approved-applications', 'officer-review', 'due-diligence', 'due-diligence-report',
       'properties', 'audit-logs', 'notifications', 'profile', 'admin',
       'help', 'disclaimer', 'login', 'register'
     ];
-    return validTabs.includes(hash) ? hash : (hash ? '404' : 'home');
+    return validTabs.includes(route) ? route : (hash ? '404' : 'home');
   };
 
   const [activeTab, setActiveTabState] = useState(getTabFromHash);
@@ -108,6 +113,8 @@ export default function App() {
   const [deedSearchPrefill, setDeedSearchPrefill] = useState('');
   const [dueDiligenceResult, setDueDiligenceResult] = useState(null);
   const [selectedTracking, setSelectedTracking] = useState('');
+  const [selectedDigitalDeedId, setSelectedDigitalDeedId] = useState(null);
+  const [selectedDeedApplicationId, setSelectedDeedApplicationId] = useState(null);
 
   // In-memory history stack for safe back navigation
   const historyStackRef = useRef([getTabFromHash()]);
@@ -218,10 +225,21 @@ export default function App() {
 
   const renderContent = () => {
     const privateTabs = new Set([
-      'dashboard', 'deed-verify', 'deed-search', 'verification-result', 'mutation',
-      'mutation-track', 'officer-review', 'due-diligence', 'due-diligence-report',
+      'dashboard', 'deed-verify', 'deed-digitization', 'deed-search', 'verification-result', 'mutation',
+      'mutation-track', 'application-admin', 'approved-applications', 'officer-review', 'due-diligence', 'due-diligence-report',
       'properties', 'audit-logs', 'notifications', 'profile', 'admin'
     ]);
+    if (privateTabs.has(activeTab) && authStatus === 'loading') {
+      return <div className="gov-container py-20 text-center" role="status" aria-live="polite">{lang === 'bn' ? 'আপনার সেশন যাচাই হচ্ছে…' : 'Restoring your session…'}</div>;
+    }
+    if (privateTabs.has(activeTab) && authStatus === 'unavailable') {
+      return (
+        <div className="gov-container py-20 text-center space-y-4" role="alert">
+          <p>{lang === 'bn' ? 'সার্ভারের সাথে সংযোগ করা যাচ্ছে না। আপনার সেশন যাচাই হয়নি; আবার চেষ্টা করুন।' : 'The server is unavailable. Your session could not be checked; please retry.'}</p>
+          <Button className="gov-btn-primary" onClick={() => retrySessionRestore().catch(() => {})}>{lang === 'bn' ? 'আবার চেষ্টা করুন' : 'Retry'}</Button>
+        </div>
+      );
+    }
     if (privateTabs.has(activeTab) && !user) {
       return <div className="gov-container py-20 text-center space-y-4"><p>{lang === 'bn' ? 'এই সেবা ব্যবহার করতে লগইন করুন।' : 'Please sign in to use this service.'}</p><Button className="gov-btn-primary" onClick={() => navigate('login')}>{lang === 'bn' ? 'লগইন' : 'Sign in'}</Button></div>;
     }
@@ -235,6 +253,12 @@ export default function App() {
       case 'home':
         return <LandingPage setActiveTab={setActiveTab} navigate={navigate} />;
       case 'dashboard':
+        if (user?.role === 'admin') {
+          return <AdminDashboard setActiveTab={setActiveTab} navigate={navigate} navigateBack={navigateBack} onResetSuccess={() => navigate('dashboard')} />;
+        }
+        if (user?.role === 'officer') {
+          return <OfficerDashboard setActiveTab={setActiveTab} navigateBack={navigateBack} />;
+        }
         return (
           <Dashboard
             setActiveTab={setActiveTab}
@@ -264,6 +288,19 @@ export default function App() {
             onSelectDeed={selectDeedForVerification}
           />
         );
+      case 'deed-digitization':
+        return (
+          <DeedDigitization
+            setActiveTab={setActiveTab}
+            navigateBack={navigateBack}
+            initialDigitalDeedId={selectedDigitalDeedId}
+            onDigitalDeedOpened={() => setSelectedDigitalDeedId(null)}
+            initialApplicationId={selectedDeedApplicationId}
+            onApplicationOpened={() => setSelectedDeedApplicationId(null)}
+          />
+        );
+      case 'verify-deed':
+        return <DigitalDeedPublicVerify verificationToken={window.location.hash.replace(/^#\/?/, '').split('/')[1] || ''} />;
       case 'verification-result':
         return (
           <VerificationResult
@@ -290,8 +327,16 @@ export default function App() {
             setActiveTab={setActiveTab}
             navigate={navigate}
             navigateBack={navigateBack}
+            onOpenDigitalDeed={(deedId) => {
+              setSelectedDigitalDeedId(deedId);
+              setActiveTab('deed-digitization');
+            }}
           />
         );
+      case 'application-admin':
+        return <UnifiedApplicationAdmin view="review" setActiveTab={setActiveTab} setSelectedTracking={setSelectedTracking} navigateBack={navigateBack} onOpenDeedApplication={(applicationId) => { setSelectedDeedApplicationId(applicationId); setActiveTab('deed-digitization'); }} />;
+      case 'approved-applications':
+        return <UnifiedApplicationAdmin view="approved" setActiveTab={setActiveTab} setSelectedTracking={setSelectedTracking} navigateBack={navigateBack} onOpenDeedApplication={(applicationId) => { setSelectedDeedApplicationId(applicationId); setActiveTab('deed-digitization'); }} />;
       case 'officer-review':
         return (
           <OfficerReview
@@ -440,7 +485,7 @@ export default function App() {
       <Footer setActiveTab={setActiveTab} />
 
       {/* Floating Live Chat Assistant */}
-      <LiveChatWidget setActiveTab={setActiveTab} />
+      <LiveChatWidget setActiveTab={setActiveTab} currentPage={activeTab} />
     </div>
   );
 }
